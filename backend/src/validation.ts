@@ -1,6 +1,5 @@
 import {
   elementTypes,
-  layers,
   relationTypes,
   riskLevels,
   statuses,
@@ -8,6 +7,7 @@ import {
   type EamModel,
   type EamRelation
 } from "./types.js";
+import { describeRelationViolation, findRelationRule, layerByElementType } from "./metamodel.js";
 
 export interface ValidationResult {
   valid: boolean;
@@ -18,10 +18,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 export function layerForType(type: EamElement["type"]): EamElement["layer"] {
-  if (type === "Business Capability" || type === "Business Process") return "Business";
-  if (type === "Application Component") return "Application";
-  if (type === "Data Object") return "Data";
-  return "Technology";
+  return layerByElementType[type] ?? "Business";
 }
 
 export function normalizeElement(input: unknown): EamElement {
@@ -58,7 +55,9 @@ export function validateElement(element: EamElement, existingIds: Set<string> = 
   if (existingIds.has(element.id)) errors.push(`Element id '${element.id}' already exists.`);
   if (!element.name.trim()) errors.push("Element name is required.");
   if (!elementTypes.includes(element.type)) errors.push(`Element type '${element.type}' is not allowed.`);
-  if (!layers.includes(element.layer)) errors.push(`Layer '${element.layer}' is not allowed.`);
+  if (elementTypes.includes(element.type) && element.layer !== layerByElementType[element.type]) {
+    errors.push(`Element type '${element.type}' must be assigned to layer '${layerByElementType[element.type]}'.`);
+  }
   if (!riskLevels.includes(element.risk)) errors.push(`Risk '${element.risk}' is not allowed.`);
   if (!statuses.includes(element.status)) errors.push(`Status '${element.status}' is not allowed.`);
   if (!Number.isFinite(element.cost) || element.cost < 0) errors.push("Cost must be a non-negative number.");
@@ -92,6 +91,14 @@ export function validateRelation(relation: EamRelation, model: EamModel, existin
   if (!elementIds.has(relation.target)) errors.push(`Relation target '${relation.target}' does not exist.`);
   if (relation.source === relation.target) errors.push("Relation source and target must not be identical.");
   if (!relationTypes.includes(relation.type)) errors.push(`Relation type '${relation.type}' is not allowed.`);
+  const sourceElement = model.elements.find((element) => element.id === relation.source);
+  const targetElement = model.elements.find((element) => element.id === relation.target);
+  if (sourceElement && targetElement && relationTypes.includes(relation.type)) {
+    const rule = findRelationRule(sourceElement.type, relation.type, targetElement.type);
+    if (!rule) {
+      errors.push(describeRelationViolation(sourceElement.type, relation.type, targetElement.type));
+    }
+  }
 
   return { valid: errors.length === 0, errors };
 }

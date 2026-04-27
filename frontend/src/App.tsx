@@ -13,9 +13,15 @@ import ReactFlow, {
 import { Activity, Download, Flame, GitBranch, Plus, RefreshCw, Upload } from "lucide-react";
 import { api } from "./api";
 import {
+  analyzeImpact,
+  getAllowedRelationTypes,
+  layerByElementType,
+  type AnalysisStep,
+  type ImpactMode
+} from "./metamodel";
+import {
   elementTypes,
   layers,
-  relationTypes,
   riskLevels,
   statuses,
   type AuditLogEntry,
@@ -29,14 +35,6 @@ import {
 
 type View = "canvas" | "capability" | "roadmap" | "audit";
 type HeatmapMode = "none" | "risk" | "cost";
-
-const layerByType: Record<ElementType, Layer> = {
-  "Business Capability": "Business",
-  "Business Process": "Business",
-  "Application Component": "Application",
-  "Data Object": "Data",
-  "Technology Node": "Technology"
-};
 
 const layerColors: Record<Layer, string> = {
   Business: "#0f766e",
@@ -57,21 +55,28 @@ function costColor(cost: number): string {
   return "#15803d";
 }
 
-function nodeStyle(element: EamElement, heatmapMode: HeatmapMode, impacted: boolean): React.CSSProperties {
+function nodeStyle(element: EamElement, heatmapMode: HeatmapMode, impactDepth: number | null, selected: boolean): React.CSSProperties {
   const color = heatmapMode === "risk" ? riskColors[element.risk] : heatmapMode === "cost" ? costColor(element.cost) : layerColors[element.layer];
+  const isDirect = impactDepth === 1;
+  const isIndirect = impactDepth !== null && impactDepth > 1;
   return {
-    border: impacted ? "3px solid #facc15" : `2px solid ${color}`,
+    border: selected ? "3px solid #0f172a" : isDirect ? "3px solid #f97316" : isIndirect ? "3px solid #facc15" : `2px solid ${color}`,
     borderLeft: `8px solid ${color}`,
     borderRadius: 8,
     padding: 10,
     minWidth: 190,
     color: "#172033",
-    background: impacted ? "#fff8d6" : "#ffffff",
-    boxShadow: impacted ? "0 8px 18px rgba(250, 204, 21, 0.26)" : "0 8px 18px rgba(15, 23, 42, 0.08)"
+    background: selected ? "#eef2ff" : isDirect ? "#fff7ed" : isIndirect ? "#fff8d6" : "#ffffff",
+    boxShadow: selected
+      ? "0 8px 20px rgba(15, 23, 42, 0.18)"
+      : isDirect || isIndirect
+        ? "0 8px 18px rgba(250, 204, 21, 0.26)"
+        : "0 8px 18px rgba(15, 23, 42, 0.08)"
   };
 }
 
-function toNodes(model: EamModel, heatmapMode: HeatmapMode, impactedIds: Set<string>): Node[] {
+function toNodes(model: EamModel, heatmapMode: HeatmapMode, impactResults: AnalysisStep[], selectedId: string | null): Node[] {
+  const depthById = new Map(impactResults.map((result) => [result.elementId, result.depth]));
   return model.elements.map((element) => ({
     id: element.id,
     position: element.position,
@@ -80,22 +85,23 @@ function toNodes(model: EamModel, heatmapMode: HeatmapMode, impactedIds: Set<str
         <div className="eam-node">
           <strong>{element.name}</strong>
           <span>{element.type}</span>
-          <small>{element.risk} risk · {element.status}</small>
+          <small>{element.risk} risk - {element.status}</small>
         </div>
       )
     },
-    style: nodeStyle(element, heatmapMode, impactedIds.has(element.id))
+    style: nodeStyle(element, heatmapMode, depthById.get(element.id) ?? null, selectedId === element.id)
   }));
 }
 
-function toEdges(model: EamModel, impactedIds: Set<string>): Edge[] {
+function toEdges(model: EamModel, impactResults: AnalysisStep[]): Edge[] {
+  const highlightedRelations = new Set(impactResults.map((result) => result.relationId));
   return model.relations.map((relation) => ({
     id: relation.id,
     source: relation.source,
     target: relation.target,
     label: relation.type,
-    animated: impactedIds.has(relation.target),
-    style: { strokeWidth: impactedIds.has(relation.target) ? 3 : 2, stroke: impactedIds.has(relation.target) ? "#eab308" : "#64748b" }
+    animated: highlightedRelations.has(relation.id),
+    style: { strokeWidth: highlightedRelations.has(relation.id) ? 3 : 2, stroke: highlightedRelations.has(relation.id) ? "#eab308" : "#64748b" }
   }));
 }
 
@@ -115,26 +121,6 @@ function emptyElement(index: number): Partial<EamElement> {
   };
 }
 
-function impactFrom(elementId: string, relations: EamRelation[]): Set<string> {
-  const allowed = new Set(["uses", "depends_on"]);
-  const impacted = new Set<string>();
-  const queue = [elementId];
-
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (!current) continue;
-    for (const relation of relations) {
-      if (relation.source === current && allowed.has(relation.type) && !impacted.has(relation.target)) {
-        impacted.add(relation.target);
-        queue.push(relation.target);
-      }
-    }
-  }
-
-  impacted.delete(elementId);
-  return impacted;
-}
-
 export default function App() {
   const [model, setModel] = useState<EamModel>({ elements: [], relations: [] });
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -144,8 +130,9 @@ export default function App() {
   const [layerFilter, setLayerFilter] = useState<Layer | "all">("all");
   const [typeFilter, setTypeFilter] = useState<ElementType | "all">("all");
   const [heatmapMode, setHeatmapMode] = useState<HeatmapMode>("risk");
+  const [impactMode, setImpactMode] = useState<ImpactMode>("downstream");
   const [validationError, setValidationError] = useState("");
-  const [impactIds, setImpactIds] = useState<Set<string>>(new Set());
+  const [impactResults, setImpactResults] = useState<AnalysisStep[]>([]);
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [relationDraft, setRelationDraft] = useState<Partial<EamRelation>>({ type: "uses" });
 
@@ -174,9 +161,9 @@ export default function App() {
   }, [refresh]);
 
   useEffect(() => {
-    setNodes(toNodes(visibleModel, heatmapMode, impactIds));
-    setEdges(toEdges(visibleModel, impactIds));
-  }, [heatmapMode, impactIds, setEdges, setNodes, visibleModel]);
+    setNodes(toNodes(visibleModel, heatmapMode, impactResults, selectedId));
+    setEdges(toEdges(visibleModel, impactResults));
+  }, [heatmapMode, impactResults, selectedId, setEdges, setNodes, visibleModel]);
 
   async function createElement() {
     try {
@@ -192,7 +179,7 @@ export default function App() {
 
   async function patchElement(patch: Partial<EamElement>) {
     if (!selectedElement) return;
-    const nextPatch = patch.type ? { ...patch, layer: layerByType[patch.type] } : patch;
+    const nextPatch = patch.type ? { ...patch, layer: layerByElementType[patch.type] } : patch;
     const optimistic = model.elements.map((element) => (element.id === selectedElement.id ? { ...element, ...nextPatch } : element));
     setModel({ ...model, elements: optimistic });
     try {
@@ -230,9 +217,17 @@ export default function App() {
   const onConnect = useCallback(
     async (connection: Connection) => {
       if (!connection.source || !connection.target) return;
-      await createRelation(connection.source, connection.target, "uses", "Created from canvas connection.");
+      const source = model.elements.find((element) => element.id === connection.source);
+      const target = model.elements.find((element) => element.id === connection.target);
+      const allowedTypes = getAllowedRelationTypes(source?.type, target?.type);
+      const type = allowedTypes[0];
+      if (!type) {
+        setValidationError("No relation type is allowed for this source and target by the EAM metamodel.");
+        return;
+      }
+      await createRelation(connection.source, connection.target, type, "Created from canvas connection.");
     },
-    []
+    [model.elements]
   );
 
   const onNodeDragStop: NodeDragHandler = async (_event, node) => {
@@ -250,14 +245,22 @@ export default function App() {
       setValidationError("Select an element before running impact analysis.");
       return;
     }
-    const impacted = impactFrom(selectedElement.id, model.relations);
-    setImpactIds(impacted);
-    setValidationError(impacted.size ? "" : "No impacted elements found along uses or depends_on relations.");
+    const results = analyzeImpact(model, selectedElement.id, impactMode);
+    setImpactResults(results);
+    const label = impactMode === "downstream" ? "Downstream Business Impact" : "Upstream Dependencies";
+    setValidationError(results.length ? "" : `No results found for ${label}.`);
   }
 
   async function submitRelation() {
     if (!relationDraft.source || !relationDraft.target || !relationDraft.type) {
       setValidationError("Relation source, target and type are required.");
+      return;
+    }
+    const source = model.elements.find((element) => element.id === relationDraft.source);
+    const target = model.elements.find((element) => element.id === relationDraft.target);
+    const allowedTypes = getAllowedRelationTypes(source?.type, target?.type);
+    if (!allowedTypes.includes(relationDraft.type)) {
+      setValidationError("This relation is not allowed by the EAM metamodel.");
       return;
     }
     await createRelation(relationDraft.source, relationDraft.target, relationDraft.type, relationDraft.description ?? "");
@@ -282,15 +285,13 @@ export default function App() {
       const nextModel = await api.importModel(imported);
       setModel(nextModel);
       setSelectedId(null);
-      setImpactIds(new Set());
+      setImpactResults([]);
       setValidationError("");
       setAuditLog(await api.getAuditLog());
     } catch (error) {
       setValidationError(error instanceof Error ? error.message : "Import failed.");
     }
   }
-
-  const impactedElements = model.elements.filter((element) => impactIds.has(element.id));
 
   return (
     <div className="app-shell">
@@ -312,7 +313,7 @@ export default function App() {
           <div className="toolbar">
             <button onClick={createElement} title="Add element"><Plus size={18} /> Element</button>
             <button onClick={runImpactAnalysis} title="Run impact analysis"><Activity size={18} /> Impact</button>
-            <button onClick={() => setImpactIds(new Set())} title="Clear impact highlight"><RefreshCw size={18} /></button>
+            <button onClick={() => setImpactResults([])} title="Clear impact highlight"><RefreshCw size={18} /></button>
             <button onClick={exportJson} title="Export model as JSON"><Download size={18} /></button>
             <label className="file-button" title="Import JSON model">
               <Upload size={18} />
@@ -330,6 +331,10 @@ export default function App() {
               <option value="none">Layer colors</option>
               <option value="risk">Risk heatmap</option>
               <option value="cost">Cost heatmap</option>
+            </select>
+            <select value={impactMode} onChange={(event) => setImpactMode(event.target.value as ImpactMode)} aria-label="Impact analysis mode">
+              <option value="downstream">Downstream Business Impact</option>
+              <option value="upstream">Upstream Dependencies</option>
             </select>
           </div>
 
@@ -372,7 +377,7 @@ export default function App() {
             onChange={setRelationDraft}
             onSubmit={submitRelation}
           />
-          <ImpactList elements={impactedElements} />
+          <ImpactList model={model} results={impactResults} mode={impactMode} />
         </aside>
       </main>
     </div>
@@ -480,6 +485,20 @@ function RelationForm({
   onChange: (draft: Partial<EamRelation>) => void;
   onSubmit: () => void;
 }) {
+  const source = model.elements.find((element) => element.id === draft.source);
+  const target = model.elements.find((element) => element.id === draft.target);
+  const allowedTypes = getAllowedRelationTypes(source?.type, target?.type);
+  const typeOptions = allowedTypes.length > 0 ? allowedTypes : [];
+
+  function updateEndpoint(patch: Partial<EamRelation>) {
+    const nextDraft = { ...draft, ...patch };
+    const nextSource = model.elements.find((element) => element.id === nextDraft.source);
+    const nextTarget = model.elements.find((element) => element.id === nextDraft.target);
+    const nextAllowedTypes = getAllowedRelationTypes(nextSource?.type, nextTarget?.type);
+    const currentTypeAllowed = nextDraft.type && nextAllowedTypes.includes(nextDraft.type);
+    onChange({ ...nextDraft, type: currentTypeAllowed ? nextDraft.type : nextAllowedTypes[0] });
+  }
+
   return (
     <section className="panel">
       <div className="panel-heading">
@@ -487,35 +506,59 @@ function RelationForm({
         <GitBranch size={17} />
       </div>
       <label>Source
-        <select value={draft.source ?? ""} onChange={(event) => onChange({ ...draft, source: event.target.value })}>
+        <select value={draft.source ?? ""} onChange={(event) => updateEndpoint({ source: event.target.value })}>
           <option value="">Select source</option>
           {model.elements.map((element) => <option key={element.id} value={element.id}>{element.name}</option>)}
         </select>
       </label>
       <label>Target
-        <select value={draft.target ?? ""} onChange={(event) => onChange({ ...draft, target: event.target.value })}>
+        <select value={draft.target ?? ""} onChange={(event) => updateEndpoint({ target: event.target.value })}>
           <option value="">Select target</option>
           {model.elements.map((element) => <option key={element.id} value={element.id}>{element.name}</option>)}
         </select>
       </label>
       <label>Type
-        <select value={draft.type ?? "uses"} onChange={(event) => onChange({ ...draft, type: event.target.value as RelationType })}>
-          {relationTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+        <select
+          value={draft.type ?? ""}
+          disabled={!draft.source || !draft.target || typeOptions.length === 0}
+          onChange={(event) => onChange({ ...draft, type: event.target.value as RelationType })}
+        >
+          <option value="">{draft.source && draft.target ? "No allowed type" : "Select endpoints"}</option>
+          {typeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
         </select>
       </label>
+      {source && target && typeOptions.length === 0 && (
+        <p className="muted">No relation type is allowed for {source.type} to {target.type}.</p>
+      )}
       <label>Description<input value={draft.description ?? ""} onChange={(event) => onChange({ ...draft, description: event.target.value })} /></label>
-      <button onClick={onSubmit}>Create Relation</button>
+      <button onClick={onSubmit} disabled={!draft.source || !draft.target || !draft.type || typeOptions.length === 0}>Create Relation</button>
     </section>
   );
 }
 
-function ImpactList({ elements }: { elements: EamElement[] }) {
+function ImpactList({ model, results, mode }: { model: EamModel; results: AnalysisStep[]; mode: ImpactMode }) {
+  const elementById = new Map(model.elements.map((element) => [element.id, element]));
+  const label = mode === "downstream" ? "Downstream Business Impact" : "Upstream Dependencies";
+
   return (
     <section className="panel">
-      <h2>Impact Result</h2>
-      {elements.length === 0 ? <p className="muted">No highlighted dependencies.</p> : (
-        <ul className="compact-list">
-          {elements.map((element) => <li key={element.id}><Flame size={15} /> {element.name} <span>{element.type}</span></li>)}
+      <h2>{label}</h2>
+      {results.length === 0 ? <p className="muted">No results for {label}.</p> : (
+        <ul className="impact-list">
+          {results.map((result) => {
+            const element = elementById.get(result.elementId);
+            const path = result.path.map((id) => elementById.get(id)?.name ?? id).join(" -> ");
+            return (
+              <li key={`${result.relationId}-${result.elementId}`}>
+                <Flame size={15} />
+                <div>
+                  <strong>{element?.name ?? result.elementId}</strong>
+                  <span>{element?.type ?? "Unknown"} - {element?.layer ?? "Unknown"} - {result.relationType} - level {result.depth}</span>
+                  <small>{path}</small>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
@@ -549,7 +592,7 @@ function CapabilityMap({ model, heatmapMode }: { model: EamModel; heatmapMode: H
           <span className={`badge ${capability.risk}`}>{capability.risk} risk</span>
           <h3>Applications</h3>
           <ul>
-            {(appsByCapability.get(capability.id) ?? []).map((app) => <li key={app.id}>{app.name} · {app.status}</li>)}
+            {(appsByCapability.get(capability.id) ?? []).map((app) => <li key={app.id}>{app.name} - {app.status}</li>)}
           </ul>
         </article>
       ))}

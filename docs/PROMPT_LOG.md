@@ -14,3 +14,14 @@ Der Startprompt fordert einen autonomen Senior-Fullstack-Entwicklungsagenten auf
 - Kosten-Heatmap nutzt einfache Schwellenwerte unter 100000, ab 100000 und ab 180000.
 - Audit Log speichert kurze Ereignisbeschreibungen statt vollstaendiger Change-Diffs.
 - `npm run typecheck`, `npm run build`, Backend-Smoke-Test auf `GET /api/model` und Frontend-Smoke-Test auf `http://localhost:5173` wurden erfolgreich ausgefuehrt.
+
+## Zweiter Entwicklungszyklus
+
+Der zweite Prompt fordert keine neuen UI-Flaechen, sondern bessere EAM-Fachqualitaet. Umgesetzt wurde ein kleines explizites Metamodell mit erlaubten Element-Layer-Zuordnungen und Source/Relation/Target-Regeln. Die Backend-Validierung nutzt dieses Metamodell beim Erstellen und Importieren von Relationen. Das Frontend bietet im Relationsformular nur noch erlaubte Relationstypen an, sobald Source und Target bekannt sind.
+
+Die Impact-Analyse wurde fachlich in zwei Modi aufgeteilt:
+
+- Downstream Business Impact
+- Upstream Dependencies
+
+Die Analyse laeuft rekursiv, verhindert Zyklen und zeigt Relationstyp, Level und Pfad. Minimale Vitest-Tests wurden fuer Metamodell, Validierung und Impact-Analyse ergaenzt.

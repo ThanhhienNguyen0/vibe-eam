@@ -261,6 +261,37 @@ button:hover {
   font-size: 12px;
 }
 
+.impact-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.impact-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.impact-list strong,
+.impact-list span,
+.impact-list small {
+  display: block;
+}
+
+.impact-list span {
+  color: #475569;
+  font-size: 12px;
+}
+
+.impact-list small {
+  color: #64748b;
+  overflow-wrap: anywhere;
+}
+
 .capability-grid {
   padding: 18px;
   display: grid;

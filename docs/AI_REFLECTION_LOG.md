@@ -10,7 +10,9 @@
 - Eigenschaftenpanel fuer Elementattribute ist implementiert.
 - Relationserstellung ueber Formular und Canvas-Verbindung ist implementiert.
 - Validierung fuer Relationen, Elemente und Importstruktur ist implementiert.
-- Impact-Analyse traversiert tatsaechlich entlang ausgehender `uses` und `depends_on`.
+- Ein explizites EAM-Metamodell ist implementiert.
+- Relationen werden semantisch nach Source Type, Relation Type und Target Type validiert.
+- Impact-Analyse unterstuetzt Downstream Business Impact und Upstream Dependencies.
 - Filter nach Layer und Elementtyp sowie Risiko-/Kosten-Heatmap sind implementiert.
 - Capability Map wird dynamisch aus Modelldaten und Relationen abgeleitet.
 - Lifecycle Roadmap wird aus echten Modelldaten erzeugt.
@@ -31,12 +33,13 @@
 - Audit Log schrieb Eintraege fuer Create, Update, Delete und Import.
 - Ungueltige Selbstrelation wird abgelehnt.
 - Ungueltiger Import ohne `elements`/`relations` wird mit HTTP 400 abgelehnt.
+- Unit Tests pruefen erlaubte Relation, ungueltige Relation, beide Impact-Modi und Zyklusvermeidung.
 
 ## Teilweise Erfuellte Anforderungen
 
 - Canvas und Eigenschaftenpanel sind implementiert, aber nicht mit einem automatisierten Browser-E2E-Test geprueft.
 - Heatmap und Filter sind im Code unabhaengig verdrahtet, aber die visuelle Darstellung wurde nicht automatisiert pixel- oder DOM-basiert validiert.
-- Capability Map ist dynamisch, aber heuristisch: Applications werden ueber `serves` zu Prozessen und ueber `realizes` zu Capabilities zugeordnet.
+- Capability Map ist dynamisch und profitiert von validierten Relationen, bleibt aber fachlich heuristisch: Applications werden ueber `serves` zu Prozessen und ueber `realizes` zu Capabilities zugeordnet.
 - Lifecycle Roadmap ist eine Tabelle, keine vollwertige interaktive Timeline.
 - Audit Log speichert Ereignisse, aber keine detaillierten Before/After-Diffs.
 - JSON-Dateipersistenz ist fuer das Forschungsartefakt ausreichend, aber nicht transaktionssicher.
@@ -46,14 +49,15 @@
 - Kein echtes Auth-System.
 - Kein produktionsreifes Deployment.
 - Keine kollaborative Bearbeitung.
-- Keine automatisierte Unit-, Integration- oder E2E-Test-Suite.
+- Keine automatisierte Integration- oder E2E-Test-Suite.
 - Keine vollstaendige ArchiMate-, TOGAF- oder BPMN-Konformitaet.
-- Keine semantische Validierung von Layer-Kombinationen, Lifecycle-Datumslogik oder fachlich erlaubten Relationstypen pro Elementtyp.
+- Keine semantische Validierung von Lifecycle-Datumslogik, Ownership, Capability-Hierarchie oder Governance-Workflows.
 
 ## Gefundene Und Behobene Kleine Fehler
 
 - Importvalidierung konnte bei fehlenden `elements` oder `relations` als Serverfehler enden. Behoben: strukturell ungueltige Imports liefern jetzt HTTP 400 mit Validierungsfehlern.
 - Canvas-Verbindung wurde optimistisch als Edge eingefuegt, bevor die API die Relation validiert hatte. Behoben: Edge erscheint nun erst ueber das aktualisierte Modell nach erfolgreicher API-Erstellung.
+- Zweiter Zyklus: Fachliches Metamodell eingefuehrt, semantische Relationvalidierung ergaenzt, Relationserstellung im UI eingeschraenkt und Impact-Analyse in zwei fachlich benannte Modi aufgeteilt.
 
 ## Annahmen
 
@@ -62,7 +66,7 @@
 - Die REST API darf bei Import das gesamte Modell ersetzen.
 - Kosten sind einfache numerische Werte ohne Waehrungs- oder Periodenmodell.
 - Lifecycle-Daten werden als ISO-Datumstrings gepflegt.
-- Impact bedeutet im MVP: ausgehend von einem Element werden nur Zielknoten entlang `uses` und `depends_on` betrachtet.
+- Impact bedeutet im zweiten MVP-Zyklus: Downstream Business Impact und Upstream Dependencies folgen den in `docs/IMPACT_ANALYSIS.md` dokumentierten Traversierungsregeln.
 
 ## Technische Abkuerzungen
 
@@ -71,11 +75,11 @@
 - Keine Debounce-Strategie fuer haeufige UI-Updates im Eigenschaftenpanel.
 - Keine Konfliktbehandlung fuer parallele Bearbeitung.
 - Keine API-Paginierung.
-- Keine robuste Schema-Library wie Zod oder Ajv.
+- Keine robuste Schema-Library wie Zod oder Ajv; das Metamodell ist eine kleine TypeScript-Regelbasis.
 
 ## Menschliche Review Noetig
 
-- Fachliche Semantik der Impact-Analyse: Richtung, Relationstypen und Erwartung an indirekte Abhaengigkeiten.
+- Fachliche Semantik der Impact-Analyse: die neuen Regeln sind explizit, sollten aber fachlich reviewt werden.
 - Fachliche Korrektheit der Capability-zu-Application-Zuordnung.
 - Sinnhaftigkeit der Kosten-Heatmap-Schwellen.
 - Ob JSON-Persistenz fuer die geplante Demonstration reicht.
@@ -85,5 +89,5 @@
 ## Moegliche Halluzinationen Oder Unsichere Designentscheidungen
 
 - Seed-Daten sind fiktiv und nicht aus einer realen Unternehmensarchitektur abgeleitet.
-- EAM-Begriffe orientieren sich an typischen Konzepten, aber nicht an einem verbindlichen Metamodell.
+- EAM-Begriffe sind jetzt in einem kleinen lokalen Metamodell verankert, aber nicht in einem verbindlichen Standard wie ArchiMate.
 - Die Evaluation Matrix ist eine technische Selbsteinschaetzung nach Smoke-Tests und Codepruefung, keine unabhaengige Qualitaetssicherung.
