@@ -12,6 +12,7 @@
 - Validierung fuer Relationen, Elemente und Importstruktur ist implementiert.
 - Ein explizites EAM-Metamodell ist implementiert.
 - Relationen werden semantisch nach Source Type, Relation Type und Target Type validiert.
+- Das Metamodell erlaubt nur die sieben im zweiten Zyklus definierten Relationstyp-Kombinationen; direkte Application-to-Capability-Realization ist bewusst nicht erlaubt.
 - Impact-Analyse unterstuetzt Downstream Business Impact und Upstream Dependencies.
 - Filter nach Layer und Elementtyp sowie Risiko-/Kosten-Heatmap sind implementiert.
 - Capability Map wird dynamisch aus Modelldaten und Relationen abgeleitet.
@@ -52,12 +53,14 @@
 - Keine automatisierte Integration- oder E2E-Test-Suite.
 - Keine vollstaendige ArchiMate-, TOGAF- oder BPMN-Konformitaet.
 - Keine semantische Validierung von Lifecycle-Datumslogik, Ownership, Capability-Hierarchie oder Governance-Workflows.
+- Keine direkte Relation von Application Component zu Business Capability; Application-Coverage laeuft im MVP ueber Business Processes.
 
 ## Gefundene Und Behobene Kleine Fehler
 
 - Importvalidierung konnte bei fehlenden `elements` oder `relations` als Serverfehler enden. Behoben: strukturell ungueltige Imports liefern jetzt HTTP 400 mit Validierungsfehlern.
 - Canvas-Verbindung wurde optimistisch als Edge eingefuegt, bevor die API die Relation validiert hatte. Behoben: Edge erscheint nun erst ueber das aktualisierte Modell nach erfolgreicher API-Erstellung.
 - Zweiter Zyklus: Fachliches Metamodell eingefuehrt, semantische Relationvalidierung ergaenzt, Relationserstellung im UI eingeschraenkt und Impact-Analyse in zwei fachlich benannte Modi aufgeteilt.
+- Nachschaerfung: Eine vorher dokumentierte optionale Shortcut-Relation `Application Component realizes Business Capability` wurde entfernt, um der strengeren Aufgabenliste zu entsprechen.
 
 ## Annahmen
 

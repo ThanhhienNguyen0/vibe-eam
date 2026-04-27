@@ -27,7 +27,6 @@ Ein Elementtyp darf nur dem definierten Layer zugeordnet werden. Beispiel: `Appl
 | Application Component | depends_on | Application Component | Eine Anwendung ist von einer anderen Anwendung abhaengig. |
 | Data Object | depends_on | Technology Node | Ein Datenobjekt ist von der speichernden oder bereitstellenden Technologie abhaengig. |
 | Technology Node | depends_on | Technology Node | Eine Technologiekomponente ist von einer anderen Technologiekomponente abhaengig. |
-| Application Component | realizes | Business Capability | MVP-Abkuerzung, wenn Prozessmodellierung ausgelassen wird. |
 
 ## Nicht Erlaubte Beispiele
 
@@ -68,4 +67,4 @@ Frage: Wovon haengt das ausgewaehlte Element selbst ab?
 - Keine CRUD-Semantik fuer Data Objects.
 - Keine expliziten Schnittstellen oder Integrationsobjekte.
 - Keine Governance-Regeln fuer Owner, Review oder Approval.
-- Die direkte Relation `Application Component realizes Business Capability` ist eine dokumentierte MVP-Abkuerzung.
+- Keine direkte Shortcut-Relation `Application Component realizes Business Capability`; Applications muessen Capabilities ueber Business Processes oder spaetere Metamodellerweiterungen abbilden.

@@ -18,12 +18,12 @@ Status:
 | Anforderung | Bewertung | Status | Kritische Begruendung |
 | --- | ---: | --- | --- |
 | Projektstruktur | 3 | Tatsaechlich funktional | Geforderte Ordner und Root-Dateien existieren. |
-| npm install | 3 | Tatsaechlich funktional | `npm install` erfolgreich, aber 2 moderate npm vulnerabilities bleiben. |
-| TypeScript/Build | 3 | Tatsaechlich funktional | `npm run typecheck` und `npm run build` erfolgreich. Keine Test-Suite. |
+| npm install | 3 | Tatsaechlich funktional | `npm install` erfolgreich, aber nach Phase 2 bleiben 4 moderate npm vulnerabilities. |
+| TypeScript/Build | 3 | Tatsaechlich funktional | `npm run typecheck` und `npm run build` erfolgreich. Minimale Backend-Unit-Tests existieren. |
 | Backend Start | 3 | Tatsaechlich funktional | Backend antwortet auf `GET /api/model` mit Seed-Modell. |
 | Frontend Start | 3 | Tatsaechlich funktional | Vite-Frontend antwortet mit HTTP 200. Keine automatisierte UI-E2E-Pruefung. |
 | EAM-Elemente | 3 | Tatsaechlich funktional | Alle Typen und Attribute vorhanden; Element Create/Patch/Delete API-getestet. |
-| Metamodell | 3 | Tatsaechlich funktional | Element-Layer-Zuordnung und erlaubte Source/Relation/Target-Kombinationen sind zentral definiert und getestet. |
+| Metamodell | 3 | Tatsaechlich funktional | Element-Layer-Zuordnung und die sieben erlaubten Source/Relation/Target-Kombinationen sind zentral definiert und getestet. |
 | Relationen | 3 | Tatsaechlich funktional | Relation Create/Delete API-getestet; Relationstypen werden jetzt semantisch gegen das EAM-Metamodell validiert. |
 | Canvas | 2 | Teilweise funktional | React Flow ist implementiert; Sichtbarkeit/Interaktion wurde nicht per Browser-E2E automatisiert geprueft. |
 | Eigenschaftenpanel | 2 | Teilweise funktional | Codepfad fuer Bearbeitung vorhanden; API-Patch getestet, aber keine automatisierte UI-Bedienpruefung. |
@@ -32,7 +32,7 @@ Status:
 | Heatmap und Filter | 2 | Teilweise funktional | Code zeigt unabhaengige Filter- und Heatmap-State-Pfade; nicht per visueller E2E-Pruefung validiert. |
 | Capability Map | 2 | Teilweise funktional | Dynamisch aus semantisch validierten Relationen berechnet, aber weiterhin ohne Hierarchie und Portfolio-Kennzahlen. |
 | Lifecycle Roadmap | 3 | Tatsaechlich funktional | Wird aus echten Modelldaten sortiert und gerendert; einfache Tabelle statt echter Timeline. |
-| Import/Export | 3 | Tatsaechlich funktional | Export/Import Roundtrip war modellgleich. Nur JSON-Strukturvalidierung, keine Semantikvalidierung. |
+| Import/Export | 3 | Tatsaechlich funktional | Export/Import Roundtrip war modellgleich. Import validiert Struktur und semantische Relationen, aber keine Schema-Versionierung. |
 | Audit Log | 3 | Tatsaechlich funktional | Create, Update, Delete und Import erzeugten Eintraege. Keine Before/After-Diffs. |
 | REST API | 3 | Tatsaechlich funktional | Alle geforderten Endpunkte wurden mindestens einmal technisch angesprochen. |
 | Seed-Daten | 3 | Tatsaechlich funktional | 12 Elemente und 12 Relationen vorhanden. |

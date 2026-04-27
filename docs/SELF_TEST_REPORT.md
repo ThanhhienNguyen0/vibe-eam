@@ -6,10 +6,11 @@ Datum: 2026-04-27
 
 | Befehl | Ergebnis |
 | --- | --- |
-| `npm install` | Erfolgreich. 248 Packages auditiert. 2 moderate vulnerabilities gemeldet. |
-| `npm run typecheck` | Erfolgreich nach kleinem Fix an der Importvalidierung. Backend und Frontend TypeScript ohne Fehler. |
-| `npm run build` | Erfolgreich nach kleinem Fix. Backend TypeScript build und Frontend Vite build erfolgreich. |
-| `Invoke-RestMethod http://localhost:4000/api/model` | Erfolgreich. 12 Elemente und 12 Relationen geliefert. |
+| `npm install` | Phase 1 erfolgreich mit 2 moderate vulnerabilities. Nach Vitest-Ergaenzung in Phase 2 erfolgreich mit 4 moderate vulnerabilities. |
+| `npm test` | Phase 2 erfolgreich. 5 Vitest-Tests bestanden. |
+| `npm run typecheck` | Erfolgreich. Backend und Frontend TypeScript ohne Fehler. |
+| `npm run build` | Erfolgreich. Backend TypeScript build und Frontend Vite build erfolgreich. |
+| `Invoke-RestMethod http://localhost:4000/api/model` | Erfolgreich. Seed-Modell erreichbar. |
 | `Invoke-WebRequest http://localhost:5173` | Erfolgreich. HTTP 200. |
 
 ## REST-Endpunkte
@@ -20,13 +21,13 @@ Datum: 2026-04-27
 | `POST /api/model/elements` | Temporaeres Element erstellt | Erfolgreich, ID wurde erzeugt. |
 | `PATCH /api/model/elements/:id` | Name, Risiko und Kosten geaendert | Erfolgreich, Patch wurde zurueckgegeben. |
 | `DELETE /api/model/elements/:id` | Temporaeres Element geloescht | Erfolgreich, HTTP 204. |
-| `POST /api/model/relations` | Temporaere `depends_on` Relation erstellt | Erfolgreich, ID wurde erzeugt. |
+| `POST /api/model/relations` | Temporaere gueltige Relation erstellt | Erfolgreich, ID wurde erzeugt. |
 | `DELETE /api/model/relations/:id` | Temporaere Relation geloescht | Erfolgreich, HTTP 204. |
 | `POST /api/model/import` | Originalmodell wieder importiert | Erfolgreich, 12 Elemente wiederhergestellt. |
 | `GET /api/model/export` | Modell exportiert | Erfolgreich. |
 | `GET /api/audit-log` | Audit Log gelesen | Erfolgreich. |
 
-## Getestete Funktionen
+## Phase-1-Tests
 
 ### Import/Export Roundtrip
 
@@ -46,31 +47,53 @@ Gepruefte Aktionen:
 - `delete`
 - `import`
 
-### Validierung
+### Strukturelle Validierung
 
 - Selbstrelation mit gleicher Source und Target wurde abgelehnt.
-- Import von `{}` wurde nach Fix mit HTTP 400 abgelehnt:
+- Import von `{}` wurde mit HTTP 400 abgelehnt:
   - `Imported model must contain an elements array.`
   - `Imported model must contain a relations array.`
 
-### Impact-Analyse
+## Phase-2-Tests
 
-Die Traversal-Logik wurde anhand des Seed-Graphen nachgebildet und geprueft.
+### Unit Tests
 
-Ausgehend von `app-billing-service` wurden gefunden:
+`npm test` fuehrt Vitest im Backend aus.
 
-- `app-erp-system`
-- `data-invoice-data`
-- `tech-database-cluster`
+Getestet:
 
-Ausgehend von `app-crm-system` wurden gefunden:
+- gueltige Relation wird vom Metamodell erlaubt
+- ungueltige Relation wird semantisch abgelehnt
+- Downstream Business Impact wird rekursiv berechnet
+- Upstream Dependencies werden rekursiv berechnet
+- Zyklen im Graph werden nicht endlos traversiert
 
-- `data-customer-data`
-- `tech-cloud-runtime`
+Ergebnis:
 
-`realizes` wurde korrekt ignoriert.
+- 1 Testdatei bestanden
+- 5 Tests bestanden
 
-### Heatmap Und Filter
+### Semantische Relationvalidierung
+
+API-Smoke-Test:
+
+- `Application Component realizes Business Capability` wurde nach der Phase-2-Nachschaerfung mit HTTP 400 abgelehnt.
+- Fehlermeldung: `Relation 'realizes' from Application Component to Business Capability is not allowed by the EAM metamodel.`
+
+Damit ist die Import- und Create-Validierung fachlich enger als in Phase 1.
+
+### Impact- Und Dependency-Analyse
+
+Phase 1 pruefte nur einfache Traversierung entlang `uses` und `depends_on`; damals wurde `realizes` korrekt ignoriert. Diese Aussage gilt nur fuer Phase 1.
+
+Phase 2 ersetzt diese Logik durch zwei Modi:
+
+- Downstream Business Impact
+- Upstream Dependencies
+
+Die neue Analyse nutzt `uses`, `depends_on`, `serves` und `realizes` gemaess `docs/IMPACT_ANALYSIS.md`. Ergebnisse enthalten Pfad, Level, Relationstyp, Elementtyp und Layer.
+
+## Heatmap Und Filter
 
 Codepruefung:
 
@@ -82,19 +105,20 @@ Einschraenkung:
 
 - Keine automatisierte visuelle Browserpruefung fuer Farbdarstellung, Dropdown-Bedienung oder Canvas-Neurendering.
 
-### Capability Map
+## Capability Map
 
 Codepruefung:
 
 - Business Capabilities werden aus `model.elements` gefiltert.
 - Prozesse werden ueber `realizes` einer Capability zugeordnet.
 - Applications werden ueber `serves` den Prozessen und damit indirekt den Capabilities zugeordnet.
+- Phase 2 macht diese Zuordnung belastbarer, weil Relationen semantisch validiert werden.
 
 Bewertung:
 
-- Mehr als statische Anzeige, aber fachlich heuristisch und read-only.
+- Mehr als statische Anzeige, aber weiterhin fachlich heuristisch und read-only.
 
-### Lifecycle Roadmap
+## Lifecycle Roadmap
 
 Codepruefung:
 
@@ -106,15 +130,16 @@ Bewertung:
 
 - Funktional im MVP, aber nur tabellarisch.
 
-## Gefundene Fehler
+## Gefundene Fehler Und Grenzen
 
-| Fehler | Schwere | Status |
-| --- | --- | --- |
-| Import ohne `elements`/`relations` konnte als 500 enden | Mittel | Behoben |
-| Fehlgeschlagene Canvas-Verbindung konnte optimistisch als Edge sichtbar bleiben | Niedrig | Behoben |
-| npm meldet 2 moderate vulnerabilities | Mittel | Nicht behoben, da `npm audit fix --force` Breaking Changes ausloesen kann |
-| Keine automatisierte UI-E2E-Pruefung | Mittel | Nicht behoben |
-| Audit Log enthaelt keine Before/After-Diffs | Niedrig/Mittel | MVP-Grenze |
+| Thema | Status |
+| --- | --- |
+| Import ohne `elements`/`relations` konnte als 500 enden | Behoben |
+| Fehlgeschlagene Canvas-Verbindung konnte optimistisch als Edge sichtbar bleiben | Behoben |
+| npm meldet moderate vulnerabilities | Nicht behoben, da `npm audit fix --force` Breaking Changes ausloesen kann |
+| Keine automatisierte UI-E2E-Pruefung | Nicht behoben |
+| Audit Log enthaelt keine Before/After-Diffs | MVP-Grenze |
+| Metamodell ist klein und nicht ArchiMate-vollstaendig | MVP-Grenze |
 
 ## Nicht Getestete Bereiche
 
@@ -130,10 +155,9 @@ Bewertung:
 
 ## Empfehlung Fuer Den Naechsten Entwicklungszyklus
 
-1. Playwright- oder Vitest-Testsetup einfuehren.
-2. API-Integrationstests fuer Validierung, Import/Export und Audit Log schreiben.
-3. Browser-E2E-Test fuer Canvas-Sichtbarkeit, Auswahl, Eigenschaftenpanel, Filter, Heatmap und Import/Export.
-4. Schema-Validierung mit Zod oder Ajv einfuehren.
-5. Audit Log um Before/After-Diffs erweitern.
-6. Fachliche Review der EAM-Semantik und der Impact-Richtung durch das Team.
-7. Entscheidung treffen, ob JSON-Datei reicht oder SQLite eingefuehrt werden soll.
+1. API-Integrationstests fuer Import, Export, Audit Log und semantische Validierung schreiben.
+2. Browser-E2E-Test fuer Canvas-Sichtbarkeit, Auswahl, Eigenschaftenpanel, Filter, Heatmap und Import/Export.
+3. Schema-Validierung mit Zod oder Ajv einfuehren.
+4. Audit Log um Before/After-Diffs erweitern.
+5. Fachliche Review der Relationsemantik und Impact-Richtung durch EAM-Fachexperten.
+6. Naechsten fachlichen MVP-Schnitt waehlen: Application Portfolio Management oder Capability-Hierarchie.

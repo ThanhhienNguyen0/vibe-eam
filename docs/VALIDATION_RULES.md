@@ -48,9 +48,6 @@ Relations must match the EAM metamodel:
 | Application Component | depends_on | Application Component |
 | Data Object | depends_on | Technology Node |
 | Technology Node | depends_on | Technology Node |
-| Application Component | realizes | Business Capability |
-
-The last rule is a documented MVP shortcut for cases where process modelling is skipped.
 
 Example validation error:
 

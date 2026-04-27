@@ -7,7 +7,6 @@ export interface RelationRule {
   relationType: RelationType;
   targetType: ElementType;
   description: string;
-  mvpShortcut?: boolean;
 }
 
 export interface AnalysisStep {
@@ -68,13 +67,6 @@ export const relationRules: RelationRule[] = [
     relationType: "depends_on",
     targetType: "Technology Node",
     description: "A technology node depends on another technology node."
-  },
-  {
-    sourceType: "Application Component",
-    relationType: "realizes",
-    targetType: "Business Capability",
-    description: "MVP shortcut: an application component directly realizes a capability when process modelling is skipped.",
-    mvpShortcut: true
   }
 ];
 
