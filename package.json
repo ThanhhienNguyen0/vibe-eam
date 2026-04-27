@@ -1,0 +1,32 @@
+{
+  "name": "vibe-eam",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Prototype EAM web application (React + NestJS + Postgres).",
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "npm run dev -w @vibe-eam/api",
+    "dev:web": "npm run dev -w @vibe-eam/web",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ThanhhienNguyen0/vibe-eam.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ThanhhienNguyen0/vibe-eam/issues"
+  },
+  "homepage": "https://github.com/ThanhhienNguyen0/vibe-eam#readme",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
