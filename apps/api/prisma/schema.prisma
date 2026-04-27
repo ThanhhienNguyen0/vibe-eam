@@ -1,0 +1,197 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MODELER
+  VIEWER
+}
+
+enum BranchStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  MERGE
+}
+
+model User {
+  id          String   @id @default(uuid()) @db.Uuid
+  email       String   @unique
+  displayName String
+  role        UserRole @default(MODELER)
+  createdAt   DateTime @default(now())
+
+  branchesCreated Branch[]     @relation("BranchCreatedBy")
+  auditEvents     AuditEvent[]
+}
+
+model Branch {
+  id            String       @id @default(uuid()) @db.Uuid
+  name          String
+  status        BranchStatus @default(ACTIVE)
+  createdAt     DateTime     @default(now())
+  forkedAt      DateTime     @default(now())
+  baseBranchId  String?      @db.Uuid
+  baseBranch    Branch?      @relation("BranchBase", fields: [baseBranchId], references: [id])
+  children      Branch[]     @relation("BranchBase")
+
+  createdById   String       @db.Uuid
+  createdBy     User         @relation("BranchCreatedBy", fields: [createdById], references: [id])
+
+  elements      Element[]
+  relations     Relation[]
+  diagrams      Diagram[]
+  auditEvents   AuditEvent[]
+
+  @@unique([name])
+  @@index([baseBranchId])
+}
+
+model Diagram {
+  id        String   @id @default(uuid()) @db.Uuid
+  branchId  String   @db.Uuid
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Legacy: diagram-scoped elements/relations (kept for non-destructive migration)
+  elements  Element[]
+  relations Relation[]
+
+  // New: diagram placements and diagram edges
+  nodes     DiagramNode[]
+  edges     DiagramEdge[]
+
+  @@unique([branchId, name])
+  @@index([branchId])
+}
+
+model DiagramNode {
+  id        String   @id @default(uuid()) @db.Uuid
+  diagramId String   @db.Uuid
+  diagram   Diagram  @relation(fields: [diagramId], references: [id], onDelete: Cascade)
+
+  elementKey String  @db.Uuid
+  x          Float   @default(0)
+  y          Float   @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([diagramId, elementKey])
+  @@index([diagramId])
+  @@index([elementKey])
+}
+
+model DiagramEdge {
+  id         String   @id @default(uuid()) @db.Uuid
+  diagramId  String   @db.Uuid
+  diagram    Diagram  @relation(fields: [diagramId], references: [id], onDelete: Cascade)
+
+  type       String
+  sourceKey  String   @db.Uuid
+  targetKey  String   @db.Uuid
+  attributes Json     @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([diagramId])
+  @@index([sourceKey])
+  @@index([targetKey])
+  @@index([type])
+}
+
+model Element {
+  id          String   @id @default(uuid()) @db.Uuid
+  /// Stable identifier across branches/merges (Git-like "same logical object")
+  key         String   @default(uuid()) @db.Uuid
+  branchId    String   @db.Uuid
+  branch      Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  // Legacy: diagram-scoped element (kept; new approach uses DiagramNode)
+  diagramId   String?  @db.Uuid
+  diagram     Diagram? @relation(fields: [diagramId], references: [id], onDelete: SetNull)
+
+  name        String
+  archiType   String   // e.g. ArchiMate element type (FA-01)
+  layer       String   // Business | Application | Information | Technology (FA-01)
+
+  documentation String?
+  attributes  Json     @default("{}")
+
+  x           Float    @default(0)
+  y           Float    @default(0)
+
+  startDate   DateTime?
+  endOfLife   DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([branchId, key])
+  @@index([branchId])
+  @@index([diagramId])
+  @@index([key])
+  @@index([layer])
+  @@index([archiType])
+}
+
+model Relation {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @default(uuid()) @db.Uuid
+  branchId  String   @db.Uuid
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  // Legacy: diagram-scoped relation (kept; new approach uses DiagramEdge)
+  diagramId String?  @db.Uuid
+  diagram   Diagram? @relation(fields: [diagramId], references: [id], onDelete: SetNull)
+
+  type      String   // e.g. ArchiMate relationship type (FA-01)
+  sourceKey String   @db.Uuid
+  targetKey String   @db.Uuid
+
+  attributes Json    @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([branchId, key])
+  @@index([branchId])
+  @@index([diagramId])
+  @@index([sourceKey])
+  @@index([targetKey])
+  @@index([type])
+}
+
+model AuditEvent {
+  id          String      @id @default(uuid()) @db.Uuid
+  branchId    String      @db.Uuid
+  branch      Branch      @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  actorUserId String      @db.Uuid
+  actorUser   User        @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  action      AuditAction
+  entityType  String      // "element" | "relation" | "branch" | ...
+  entityKey   String?     @db.Uuid
+  before      Json?
+  after       Json?
+
+  createdAt   DateTime    @default(now())
+
+  @@index([branchId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([entityType, createdAt])
+}

@@ -1,0 +1,15 @@
+:root {
+  --border: rgba(148, 163, 184, 0.25);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}

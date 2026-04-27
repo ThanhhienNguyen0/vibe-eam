@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    container_name: vibe-eam-db
+    environment:
+      POSTGRES_USER: vibe
+      POSTGRES_PASSWORD: vibe
+      POSTGRES_DB: vibe_eam
+    ports:
+      - "5432:5432"
+    volumes:
+      - vibe_eam_pgdata:/var/lib/postgresql/data
+
+volumes:
+  vibe_eam_pgdata:
