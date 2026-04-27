@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-[#05060B] text-slate-100 antialiased;
+    background-image: 
+      radial-gradient(at 0% 0%, hsla(253, 16%, 7%, 1) 0, transparent 50%), 
+      radial-gradient(at 50% 0%, hsla(225, 39%, 30%, 0.1) 0, transparent 50%),
+      radial-gradient(at 100% 0%, hsla(339, 49%, 30%, 0.1) 0, transparent 50%);
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  .glass {
+    background-color: var(--color-white / 3%);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--color-white / 10%);
+  }
+  
+  .glass-card {
+    background-color: var(--color-white / 2%);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--color-white / 8%);
+    @apply rounded-2xl overflow-hidden transition-all duration-300;
+  }
+
+  .glass-card:hover {
+    border-color: var(--color-white / 15%);
+    background-color: var(--color-white / 4%);
+  }
+
+  .glass-input {
+    @apply bg-white/5 border border-white/10 rounded-full px-4 py-2 transition-all text-sm;
+  }
+
+  .glass-input:focus {
+    @apply outline-none ring-1 ring-blue-500/50 border-blue-500/50;
+  }
+
+  /* Custom scrollbar for high-density UI */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-white/10 rounded-full hover:bg-white/20;
+  }
+}
