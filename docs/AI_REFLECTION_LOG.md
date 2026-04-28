@@ -14,6 +14,8 @@
 - Relationen werden semantisch nach Source Type, Relation Type und Target Type validiert.
 - Das Metamodell erlaubt nur die sieben im zweiten Zyklus definierten Relationstyp-Kombinationen; direkte Application-to-Capability-Realization ist bewusst nicht erlaubt.
 - Impact-Analyse unterstuetzt Downstream Business Impact und Upstream Dependencies.
+- Risk-Cost Portfolio Ansicht mit berechnetem Impact Score, Impact Level, Portfolio-Kategorie und praesentationsfaehiger 2x2-X/Y-Bubble-Matrix ist implementiert.
+- Canvas-Edges zeigen sichtbare Pfeile und Relationstyp-Labels.
 - Filter nach Layer und Elementtyp sowie Risiko-/Kosten-Heatmap sind implementiert.
 - Capability Map wird dynamisch aus Modelldaten und Relationen abgeleitet.
 - Lifecycle Roadmap wird aus echten Modelldaten erzeugt.
@@ -35,12 +37,14 @@
 - Ungueltige Selbstrelation wird abgelehnt.
 - Ungueltiger Import ohne `elements`/`relations` wird mit HTTP 400 abgelehnt.
 - Unit Tests pruefen erlaubte Relation, ungueltige Relation, beide Impact-Modi und Zyklusvermeidung.
+- Unit Tests pruefen zusaetzlich Impact Score, Impact Level, Portfolio-Kategorie, Deduplizierung mehrfach erreichter Impact-Elemente, Normalisierung und Risiko-Bubble-Groessen.
 
 ## Teilweise Erfuellte Anforderungen
 
 - Canvas und Eigenschaftenpanel sind implementiert, aber nicht mit einem automatisierten Browser-E2E-Test geprueft.
 - Heatmap und Filter sind im Code unabhaengig verdrahtet, aber die visuelle Darstellung wurde nicht automatisiert pixel- oder DOM-basiert validiert.
 - Capability Map ist dynamisch und profitiert von validierten Relationen, bleibt aber fachlich heuristisch: Applications werden ueber `serves` zu Prozessen und ueber `realizes` zu Capabilities zugeordnet.
+- Risk-Cost Portfolio ist visuell und interaktiv verbessert, inklusive Management-Matrix, Detailkarte und einklappbarer Tabelle, bleibt aber eine MVP-Heuristik ohne validiertes Scoring-Modell fuer Business Criticality, Technical Fit oder Functional Fit.
 - Lifecycle Roadmap ist eine Tabelle, keine vollwertige interaktive Timeline.
 - Audit Log speichert Ereignisse, aber keine detaillierten Before/After-Diffs.
 - JSON-Dateipersistenz ist fuer das Forschungsartefakt ausreichend, aber nicht transaktionssicher.
@@ -54,6 +58,7 @@
 - Keine vollstaendige ArchiMate-, TOGAF- oder BPMN-Konformitaet.
 - Keine semantische Validierung von Lifecycle-Datumslogik, Ownership, Capability-Hierarchie oder Governance-Workflows.
 - Keine direkte Relation von Application Component zu Business Capability; Application-Coverage laeuft im MVP ueber Business Processes.
+- Keine echte Application-Portfolio-Methodik; die Portfolio-Kategorien sind einfache Regeln.
 
 ## Gefundene Und Behobene Kleine Fehler
 
@@ -61,6 +66,8 @@
 - Canvas-Verbindung wurde optimistisch als Edge eingefuegt, bevor die API die Relation validiert hatte. Behoben: Edge erscheint nun erst ueber das aktualisierte Modell nach erfolgreicher API-Erstellung.
 - Zweiter Zyklus: Fachliches Metamodell eingefuehrt, semantische Relationvalidierung ergaenzt, Relationserstellung im UI eingeschraenkt und Impact-Analyse in zwei fachlich benannte Modi aufgeteilt.
 - Nachschaerfung: Eine vorher dokumentierte optionale Shortcut-Relation `Application Component realizes Business Capability` wurde entfernt, um der strengeren Aufgabenliste zu entsprechen.
+- Phase 3: Risk-Cost Portfolio, Impact Score, verbesserte Pfeildarstellung im Canvas und Demo-Hilfetexte ergaenzt.
+- Portfolio-Ansicht nachgeschaerft: 2x2-Management-Matrix, horizontale Achsenlabels, Layer-Farben, Hover-Tooltip, Bubble-Auswahl, Detailkarte und einklappbare kompakte Tabelle.
 
 ## Annahmen
 
@@ -68,6 +75,7 @@
 - Node-Positionen duerfen als technisches UI-Feld im Element gespeichert werden.
 - Die REST API darf bei Import das gesamte Modell ersetzen.
 - Kosten sind einfache numerische Werte ohne Waehrungs- oder Periodenmodell.
+- Portfolio-Kategorien basieren auf einfachen Schwellwerten fuer Kosten, Risiko und Impact.
 - Lifecycle-Daten werden als ISO-Datumstrings gepflegt.
 - Impact bedeutet im zweiten MVP-Zyklus: Downstream Business Impact und Upstream Dependencies folgen den in `docs/IMPACT_ANALYSIS.md` dokumentierten Traversierungsregeln.
 
@@ -84,6 +92,7 @@
 
 - Fachliche Semantik der Impact-Analyse: die neuen Regeln sind explizit, sollten aber fachlich reviewt werden.
 - Fachliche Korrektheit der Capability-zu-Application-Zuordnung.
+- Fachliche Belastbarkeit der Portfolio-Scoring-Formel und der Kategorien.
 - Sinnhaftigkeit der Kosten-Heatmap-Schwellen.
 - Ob JSON-Persistenz fuer die geplante Demonstration reicht.
 - UI-Usability im echten Browser, inklusive Canvas Drag & Drop, Panel-Bearbeitung, Import-Dialog und Relationserstellung per Maus.

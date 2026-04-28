@@ -51,6 +51,20 @@ Im Canvas werden unterschieden:
 - direkte Ergebnisse: orange Markierung
 - indirekte Ergebnisse: gelbe Markierung
 
+Die Canvas-Edges zeigen sichtbare Pfeilrichtungen und Relationstyp-Labels. Dadurch ist nachvollziehbarer, ob eine Relation z. B. `depends_on`, `uses`, `serves` oder `realizes` bedeutet.
+
+## Impact Score Fuer Portfolio View
+
+Die Risk-Cost Portfolio Ansicht nutzt Downstream Business Impact als Grundlage fuer einen berechneten Impact Score. Betroffene Elemente werden nach Typ gewichtet:
+
+- Business Capability: 5
+- Business Process: 4
+- Application Component: 3
+- Data Object: 2
+- Technology Node: 1
+
+Jedes betroffene Element wird nur einmal gezaehlt. Das Startobjekt selbst wird nicht mitgezaehlt.
+
 ## Zyklusbehandlung
 
 Die Analyse fuehrt eine `visited`-Menge. Bereits besuchte Elemente werden nicht erneut expandiert. Dadurch terminieren auch zyklische Graphen.
@@ -58,6 +72,7 @@ Die Analyse fuehrt eine `visited`-Menge. Bereits besuchte Elemente werden nicht 
 ## Grenzen
 
 - Es gibt keine Gewichtung nach Risiko, Kritikalitaet oder Kosten.
+- Die Portfolio View nutzt zwar Typgewichte, aber keine fachlich validierte Kritikalitaets- oder Risikomethodik.
 - Es gibt keine konfigurierbaren Analyseprofile.
 - Es werden nur Elementpfade angezeigt, keine vollstaendige Pfadmenge, falls mehrere Wege zum selben Element existieren.
 - Die Semantik ist ein pragmatisches MVP-Regelwerk und kein vollstaendiger EAM-Standard.

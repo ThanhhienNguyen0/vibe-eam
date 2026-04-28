@@ -29,7 +29,9 @@ Status:
 | Eigenschaftenpanel | 2 | Teilweise funktional | Codepfad fuer Bearbeitung vorhanden; API-Patch getestet, aber keine automatisierte UI-Bedienpruefung. |
 | Validierung | 3 | Tatsaechlich funktional | Selbstrelation, fehlende Importarrays und fachlich ungueltige Relationen werden abgelehnt. Keine vollstaendige ArchiMate-Semantik. |
 | Impact-Analyse | 3 | Tatsaechlich funktional | Zwei Modi: Downstream Business Impact und Upstream Dependencies, rekursiv, mit Pfad, Level und Zyklusvermeidung. |
+| Impact Score | 3 | Tatsaechlich funktional | Downstream Impact wird je Element berechnet, nach Elementtyp gewichtet und dedupliziert getestet. |
 | Heatmap und Filter | 2 | Teilweise funktional | Code zeigt unabhaengige Filter- und Heatmap-State-Pfade; nicht per visueller E2E-Pruefung validiert. |
+| Risk-Cost Portfolio | 3 | Tatsaechlich funktional | Praesentationsfaehige 2x2-X/Y-Bubble-Matrix mit Cost-Achse, Impact-Achse, Risiko-Groesse, Layer-Farbe, Tooltip, Detailkarte, Filtern und einklappbarer kompakter Tabelle. |
 | Capability Map | 2 | Teilweise funktional | Dynamisch aus semantisch validierten Relationen berechnet, aber weiterhin ohne Hierarchie und Portfolio-Kennzahlen. |
 | Lifecycle Roadmap | 3 | Tatsaechlich funktional | Wird aus echten Modelldaten sortiert und gerendert; einfache Tabelle statt echter Timeline. |
 | Import/Export | 3 | Tatsaechlich funktional | Export/Import Roundtrip war modellgleich. Import validiert Struktur und semantische Relationen, aber keine Schema-Versionierung. |
@@ -38,5 +40,5 @@ Status:
 | Seed-Daten | 3 | Tatsaechlich funktional | 12 Elemente und 12 Relationen vorhanden. |
 | Dokumentation | 3 | Tatsaechlich funktional | Metamodell, Impact-Analyse, Validierung und Reflexion dokumentiert. |
 | Auth/Deployment | 0 | Nicht umgesetzt | Bewusst ausserhalb des MVP. |
-| Automatisierte Tests | 2 | Teilweise funktional | Minimale Vitest-Unit-Tests fuer Metamodell, Validierung, Impact-Modi und Zyklusvermeidung. Keine UI-E2E-Tests. |
+| Automatisierte Tests | 2 | Teilweise funktional | Minimale Vitest-Unit-Tests fuer Metamodell, Validierung, Impact-Modi, Zyklusvermeidung, Portfolio-Scoring, Normalisierung und Bubble-Groessen. Keine UI-E2E-Tests. |
 | Forschungsbezug | 3 | Tatsaechlich funktional | Prompt, Annahmen, Grenzen und Bewertung dokumentiert. |

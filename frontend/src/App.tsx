@@ -3,6 +3,7 @@ import ReactFlow, {
   Background,
   Controls,
   MiniMap,
+  MarkerType,
   type Connection,
   type Edge,
   type Node,
@@ -32,9 +33,17 @@ import {
   type Layer,
   type RelationType
 } from "./types";
+import {
+  buildPortfolio,
+  getRiskBubbleSize,
+  normalizePortfolioPoint,
+  type PortfolioCategory,
+  type PortfolioEntry
+} from "./portfolio";
 
-type View = "canvas" | "capability" | "roadmap" | "audit";
+type View = "canvas" | "capability" | "roadmap" | "portfolio" | "audit";
 type HeatmapMode = "none" | "risk" | "cost";
+type PortfolioSortKey = "impactScore" | "cost";
 
 const layerColors: Record<Layer, string> = {
   Business: "#0f766e",
@@ -47,6 +56,13 @@ const riskColors = {
   low: "#16a34a",
   medium: "#f59e0b",
   high: "#dc2626"
+};
+
+const relationStyles: Record<RelationType, { stroke: string; strokeDasharray?: string }> = {
+  uses: { stroke: "#7c3aed", strokeDasharray: "4 4" },
+  depends_on: { stroke: "#dc2626" },
+  serves: { stroke: "#2563eb", strokeDasharray: "8 4" },
+  realizes: { stroke: "#0f766e" }
 };
 
 function costColor(cost: number): string {
@@ -100,8 +116,20 @@ function toEdges(model: EamModel, impactResults: AnalysisStep[]): Edge[] {
     source: relation.source,
     target: relation.target,
     label: relation.type,
+    labelBgPadding: [6, 3],
+    labelBgBorderRadius: 4,
+    labelStyle: { fill: "#172033", fontWeight: 700, fontSize: 11 },
+    labelBgStyle: { fill: "#ffffff", fillOpacity: 0.88 },
     animated: highlightedRelations.has(relation.id),
-    style: { strokeWidth: highlightedRelations.has(relation.id) ? 3 : 2, stroke: highlightedRelations.has(relation.id) ? "#eab308" : "#64748b" }
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      color: highlightedRelations.has(relation.id) ? "#eab308" : relationStyles[relation.type].stroke
+    },
+    style: {
+      strokeWidth: highlightedRelations.has(relation.id) ? 3 : 2,
+      stroke: highlightedRelations.has(relation.id) ? "#eab308" : relationStyles[relation.type].stroke,
+      strokeDasharray: relationStyles[relation.type].strokeDasharray
+    }
   }));
 }
 
@@ -131,12 +159,18 @@ export default function App() {
   const [typeFilter, setTypeFilter] = useState<ElementType | "all">("all");
   const [heatmapMode, setHeatmapMode] = useState<HeatmapMode>("risk");
   const [impactMode, setImpactMode] = useState<ImpactMode>("downstream");
+  const [portfolioLayerFilter, setPortfolioLayerFilter] = useState<Layer | "all">("all");
+  const [portfolioRiskFilter, setPortfolioRiskFilter] = useState<EamElement["risk"] | "all">("all");
+  const [portfolioCategoryFilter, setPortfolioCategoryFilter] = useState<PortfolioCategory | "all">("all");
+  const [portfolioSortKey, setPortfolioSortKey] = useState<PortfolioSortKey>("impactScore");
+  const [portfolioSortDirection, setPortfolioSortDirection] = useState<"asc" | "desc">("desc");
   const [validationError, setValidationError] = useState("");
   const [impactResults, setImpactResults] = useState<AnalysisStep[]>([]);
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [relationDraft, setRelationDraft] = useState<Partial<EamRelation>>({ type: "uses" });
 
   const selectedElement = model.elements.find((element) => element.id === selectedId) ?? null;
+  const portfolioEntries = useMemo(() => buildPortfolio(model), [model]);
 
   const visibleModel = useMemo(() => {
     const elements = model.elements.filter((element) => {
@@ -247,8 +281,13 @@ export default function App() {
     }
     const results = analyzeImpact(model, selectedElement.id, impactMode);
     setImpactResults(results);
-    const label = impactMode === "downstream" ? "Downstream Business Impact" : "Upstream Dependencies";
-    setValidationError(results.length ? "" : `No results found for ${label}.`);
+    setValidationError(
+      results.length
+        ? ""
+        : impactMode === "downstream"
+          ? "No downstream impact found based on the current metamodel relations."
+          : "No upstream dependencies found based on the current metamodel relations."
+    );
   }
 
   async function submitRelation() {
@@ -303,7 +342,8 @@ export default function App() {
         <nav className="tabs" aria-label="Views">
           <button className={view === "canvas" ? "active" : ""} onClick={() => setView("canvas")}>Canvas</button>
           <button className={view === "capability" ? "active" : ""} onClick={() => setView("capability")}>Capability Map</button>
-          <button className={view === "roadmap" ? "active" : ""} onClick={() => setView("roadmap")}>Roadmap</button>
+          <button className={view === "roadmap" ? "active" : ""} onClick={() => setView("roadmap")}>Lifecycle Roadmap</button>
+          <button className={view === "portfolio" ? "active" : ""} onClick={() => setView("portfolio")}>Risk-Cost Portfolio</button>
           <button className={view === "audit" ? "active" : ""} onClick={() => setView("audit")}>Audit Log</button>
         </nav>
       </header>
@@ -339,6 +379,7 @@ export default function App() {
           </div>
 
           {validationError && <div className="error-banner">{validationError}</div>}
+          <ViewHelp view={view} />
 
           {view === "canvas" && (
             <div className="canvas">
@@ -361,6 +402,27 @@ export default function App() {
 
           {view === "capability" && <CapabilityMap model={model} heatmapMode={heatmapMode} />}
           {view === "roadmap" && <Roadmap model={model} />}
+          {view === "portfolio" && (
+            <RiskCostPortfolio
+              entries={portfolioEntries}
+              layerFilter={portfolioLayerFilter}
+              riskFilter={portfolioRiskFilter}
+              categoryFilter={portfolioCategoryFilter}
+              sortKey={portfolioSortKey}
+              sortDirection={portfolioSortDirection}
+              onLayerFilterChange={setPortfolioLayerFilter}
+              onRiskFilterChange={setPortfolioRiskFilter}
+              onCategoryFilterChange={setPortfolioCategoryFilter}
+              onSortChange={(sortKey) => {
+                if (portfolioSortKey === sortKey) {
+                  setPortfolioSortDirection((current) => (current === "desc" ? "asc" : "desc"));
+                } else {
+                  setPortfolioSortKey(sortKey);
+                  setPortfolioSortDirection("desc");
+                }
+              }}
+            />
+          )}
           {view === "audit" && <AuditLog entries={auditLog} />}
         </section>
 
@@ -380,6 +442,38 @@ export default function App() {
           <ImpactList model={model} results={impactResults} mode={impactMode} />
         </aside>
       </main>
+    </div>
+  );
+}
+
+function ViewHelp({ view }: { view: View }) {
+  const content: Record<View, { title: string; text: string }> = {
+    canvas: {
+      title: "Architecture Canvas",
+      text: "Models EAM elements and directed relations. It answers: how are business, application, data and technology elements connected?"
+    },
+    capability: {
+      title: "Capability Map",
+      text: "Shows business capabilities and supporting applications. It answers: which applications support which business capabilities?"
+    },
+    roadmap: {
+      title: "Lifecycle Roadmap",
+      text: "Lists start, status and end-of-life data. It answers: which architecture elements need lifecycle attention?"
+    },
+    portfolio: {
+      title: "Risk-Cost Portfolio",
+      text: "Ranks elements by risk, cost and calculated downstream impact. It answers: where should architecture attention go first?"
+    },
+    audit: {
+      title: "Audit Log",
+      text: "Shows model changes. It answers: what has changed in this prototype model?"
+    }
+  };
+
+  return (
+    <div className="view-help">
+      <strong>{content[view].title}</strong>
+      <span>{content[view].text}</span>
     </div>
   );
 }
@@ -528,7 +622,7 @@ function RelationForm({
         </select>
       </label>
       {source && target && typeOptions.length === 0 && (
-        <p className="muted">No relation type is allowed for {source.type} to {target.type}.</p>
+        <p className="muted">No relation type is allowed for {source.type} to {target.type} by the current EAM metamodel.</p>
       )}
       <label>Description<input value={draft.description ?? ""} onChange={(event) => onChange({ ...draft, description: event.target.value })} /></label>
       <button onClick={onSubmit} disabled={!draft.source || !draft.target || !draft.type || typeOptions.length === 0}>Create Relation</button>
@@ -539,11 +633,17 @@ function RelationForm({
 function ImpactList({ model, results, mode }: { model: EamModel; results: AnalysisStep[]; mode: ImpactMode }) {
   const elementById = new Map(model.elements.map((element) => [element.id, element]));
   const label = mode === "downstream" ? "Downstream Business Impact" : "Upstream Dependencies";
+  const question = mode === "downstream" ? "What is affected?" : "What does it depend on?";
+  const emptyMessage =
+    mode === "downstream"
+      ? "No downstream impact found based on the current metamodel relations."
+      : "No upstream dependencies found based on the current metamodel relations.";
 
   return (
     <section className="panel">
       <h2>{label}</h2>
-      {results.length === 0 ? <p className="muted">No results for {label}.</p> : (
+      <p className="muted">{question}</p>
+      {results.length === 0 ? <p className="muted">{emptyMessage}</p> : (
         <ul className="impact-list">
           {results.map((result) => {
             const element = elementById.get(result.elementId);
@@ -563,6 +663,291 @@ function ImpactList({ model, results, mode }: { model: EamModel; results: Analys
       )}
     </section>
   );
+}
+
+function RiskCostPortfolio({
+  entries,
+  layerFilter,
+  riskFilter,
+  categoryFilter,
+  sortKey,
+  sortDirection,
+  onLayerFilterChange,
+  onRiskFilterChange,
+  onCategoryFilterChange,
+  onSortChange
+}: {
+  entries: PortfolioEntry[];
+  layerFilter: Layer | "all";
+  riskFilter: EamElement["risk"] | "all";
+  categoryFilter: PortfolioCategory | "all";
+  sortKey: PortfolioSortKey;
+  sortDirection: "asc" | "desc";
+  onLayerFilterChange: (layer: Layer | "all") => void;
+  onRiskFilterChange: (risk: EamElement["risk"] | "all") => void;
+  onCategoryFilterChange: (category: PortfolioCategory | "all") => void;
+  onSortChange: (sortKey: PortfolioSortKey) => void;
+}) {
+  const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+  const [hoveredElementId, setHoveredElementId] = useState<string | null>(null);
+  const [showDetailsTable, setShowDetailsTable] = useState(false);
+  const filteredEntries = entries
+    .filter((entry) => layerFilter === "all" || entry.element.layer === layerFilter)
+    .filter((entry) => riskFilter === "all" || entry.element.risk === riskFilter)
+    .filter((entry) => categoryFilter === "all" || entry.category === categoryFilter)
+    .sort((a, b) => {
+      const aValue = sortKey === "cost" ? a.element.cost : a.impactScore;
+      const bValue = sortKey === "cost" ? b.element.cost : b.impactScore;
+      return sortDirection === "desc" ? bValue - aValue : aValue - bValue;
+    });
+
+  const selectedEntry = filteredEntries.find((entry) => entry.element.id === selectedElementId) ?? null;
+  const elementById = new Map(entries.map((entry) => [entry.element.id, entry.element]));
+  const totalCost = filteredEntries.reduce((sum, entry) => sum + entry.element.cost, 0);
+  const averageCost = filteredEntries.length ? Math.round(totalCost / filteredEntries.length) : 0;
+  const highRiskCount = filteredEntries.filter((entry) => entry.element.risk === "high").length;
+  const highImpactCount = filteredEntries.filter((entry) => entry.impactLevel === "high").length;
+  const highestImpact = filteredEntries.reduce((max, entry) => Math.max(max, entry.impactScore), 0);
+  const maxCost = Math.max(...filteredEntries.map((entry) => entry.element.cost), 1);
+  const maxImpact = Math.max(...filteredEntries.map((entry) => entry.impactScore), 1);
+  const tableEntries = [...filteredEntries].sort((a, b) => b.impactScore - a.impactScore);
+  const categoryOptions = Array.from(new Set(entries.map((entry) => entry.category)));
+
+  return (
+    <div className="portfolio-view">
+      <div className="portfolio-hero">
+        <div>
+          <h2>Risk-Cost Portfolio</h2>
+          <p>Prioritizes architecture elements by cost, calculated downstream impact and risk.</p>
+        </div>
+        <span>This view helps identify architecture elements that combine high downstream impact, high cost and high risk.</span>
+      </div>
+
+      <div className="summary-grid">
+        <SummaryTile label="Elements" value={filteredEntries.length.toString()} />
+        <SummaryTile label="Average Cost" value={averageCost.toLocaleString()} />
+        <SummaryTile label="High Risk" value={highRiskCount.toString()} />
+        <SummaryTile label="High Impact" value={highImpactCount.toString()} />
+        <SummaryTile label="Highest Impact" value={highestImpact.toString()} />
+      </div>
+
+      <div className="portfolio-controls">
+        <label>Layer
+          <select value={layerFilter} onChange={(event) => onLayerFilterChange(event.target.value as Layer | "all")}>
+            <option value="all">All layers</option>
+            {layers.map((layer) => <option key={layer} value={layer}>{layer}</option>)}
+          </select>
+        </label>
+        <label>Risk
+          <select value={riskFilter} onChange={(event) => onRiskFilterChange(event.target.value as EamElement["risk"] | "all")}>
+            <option value="all">All risks</option>
+            {riskLevels.map((risk) => <option key={risk} value={risk}>{risk}</option>)}
+          </select>
+        </label>
+        <label>Portfolio Category
+          <select value={categoryFilter} onChange={(event) => onCategoryFilterChange(event.target.value as PortfolioCategory | "all")}>
+            <option value="all">All categories</option>
+            {categoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+          </select>
+        </label>
+      </div>
+
+      <div className="portfolio-main-grid">
+        <div className="portfolio-chart-card">
+          <div className="portfolio-chart-header">
+            <div>
+              <h3>Management portfolio matrix</h3>
+              <p>Cost increases to the right. Calculated downstream impact increases upward.</p>
+            </div>
+          </div>
+          <div className="portfolio-chart" aria-label="Risk-cost portfolio coordinate system">
+            <span className="quadrant-label top-left">High impact / efficient</span>
+            <span className="quadrant-label top-right">Critical attention</span>
+            <span className="quadrant-label bottom-left">Monitor</span>
+            <span className="quadrant-label bottom-right">Cost optimization</span>
+            <span className="axis-label y-axis-label">Calculated downstream impact</span>
+            <span className="axis-label x-axis-label">Cost</span>
+            <span className="axis-end-label cost-low">Low cost</span>
+            <span className="axis-end-label cost-high">High cost</span>
+            <span className="axis-end-label impact-low">Low impact</span>
+            <span className="axis-end-label impact-high">High impact</span>
+            <span className="axis-line y-axis-line" />
+            <span className="axis-line x-axis-line" />
+
+            {filteredEntries.map((entry, index) => {
+              const point = normalizePortfolioPoint(entry.element.cost, entry.impactScore, maxCost, maxImpact, 11);
+              const size = getRiskBubbleSize(entry.element.risk);
+              const jitterX = ((index % 4) - 1.5) * 1.05;
+              const jitterY = ((Math.floor(index / 4) % 4) - 1.5) * 0.95;
+              const left = Math.min(90, Math.max(11, point.xPercent + jitterX));
+              const bottom = Math.min(88, Math.max(13, point.yPercent + jitterY));
+              const selected = selectedEntry?.element.id === entry.element.id;
+              const hovered = hoveredElementId === entry.element.id;
+
+              return (
+                <button
+                  key={entry.element.id}
+                  className={`portfolio-bubble layer-${entry.element.layer.toLowerCase()} risk-${entry.element.risk} ${selected ? "selected" : ""}`}
+                  style={{ left: `${left}%`, bottom: `${bottom}%`, width: size, height: size }}
+                  onMouseEnter={() => setHoveredElementId(entry.element.id)}
+                  onMouseLeave={() => setHoveredElementId(null)}
+                  onFocus={() => setHoveredElementId(entry.element.id)}
+                  onBlur={() => setHoveredElementId(null)}
+                  onClick={() => setSelectedElementId(entry.element.id)}
+                  aria-label={`${entry.element.name}, ${entry.category}`}
+                >
+                  <span>{elementAbbreviation(entry.element.type)}</span>
+                  {hovered && <PortfolioTooltip entry={entry} />}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="portfolio-legend">
+            <div><strong>X-axis</strong><span>Cost</span></div>
+            <div><strong>Y-axis</strong><span>Calculated downstream impact</span></div>
+            <div className="risk-legend">
+              <strong>Bubble size = Risk</strong>
+              <span className="risk-size low">low</span>
+              <span className="risk-size medium">medium</span>
+              <span className="risk-size high">high</span>
+            </div>
+            <div className="layer-legend">
+              <strong>Color = Layer</strong>
+              {layers.map((layer) => <span key={layer}><i className={`layer-swatch layer-${layer.toLowerCase()}`} />{layer}</span>)}
+            </div>
+          </div>
+        </div>
+
+        <PortfolioDetailCard entry={selectedEntry} elementById={elementById} />
+      </div>
+
+      <div className="portfolio-table-section">
+        <button className="details-toggle" onClick={() => setShowDetailsTable((current) => !current)}>
+          {showDetailsTable ? "Hide details table" : "Show details table"}
+        </button>
+        {showDetailsTable && (
+          <div className="table-wrap portfolio-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Layer</th>
+                  <th>Risk</th>
+                  <th>Cost</th>
+                  <th>Status</th>
+                  <th>Impact</th>
+                  <th>Category</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tableEntries.map((entry) => (
+                  <tr
+                    key={entry.element.id}
+                    className={selectedEntry?.element.id === entry.element.id ? "selected-row" : ""}
+                    onClick={() => setSelectedElementId(entry.element.id)}
+                  >
+                    <td>{entry.element.name}</td>
+                    <td>{entry.element.type}</td>
+                    <td>{entry.element.layer}</td>
+                    <td><span className={`badge ${entry.element.risk}`}>{entry.element.risk}</span></td>
+                    <td>{entry.element.cost.toLocaleString()}</td>
+                    <td>{entry.element.status}</td>
+                    <td><strong>{entry.impactScore}</strong> <span className={`impact-level ${entry.impactLevel}`}>{entry.impactLevel}</span></td>
+                    <td>{entry.category}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SummaryTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="summary-tile">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function PortfolioTooltip({ entry }: { entry: PortfolioEntry }) {
+  return (
+    <span className="portfolio-tooltip" role="tooltip">
+      <strong>{entry.element.name}</strong>
+      <span>Type: {entry.element.type}</span>
+      <span>Risk: {entry.element.risk}</span>
+      <span>Cost: {entry.element.cost.toLocaleString()}</span>
+      <span>Impact Score: {entry.impactScore}</span>
+      <span>{entry.category}</span>
+    </span>
+  );
+}
+
+function PortfolioDetailCard({ entry, elementById }: { entry: PortfolioEntry | null; elementById: Map<string, EamElement> }) {
+  if (!entry) {
+    return (
+      <aside className="portfolio-detail-card empty">
+        <span className="eyebrow">Selected element</span>
+        <h3>Select a bubble to inspect details.</h3>
+        <p className="muted">The detail card shows risk, cost, impact and downstream dependencies for the selected architecture element.</p>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="portfolio-detail-card">
+      <span className="eyebrow">Selected element</span>
+      <h3>{entry.element.name}</h3>
+      <p>{entry.element.type}</p>
+      <div className="detail-badges">
+        <span className={`badge ${entry.element.risk}`}>{entry.element.risk} risk</span>
+        <span className={`impact-level ${entry.impactLevel}`}>{entry.impactLevel} impact</span>
+      </div>
+      <div className="detail-metrics">
+        <div>
+          <span>Cost</span>
+          <strong>{entry.element.cost.toLocaleString()}</strong>
+        </div>
+        <div>
+          <span>Impact Score</span>
+          <strong>{entry.impactScore}</strong>
+        </div>
+      </div>
+      <dl>
+        <div><dt>Layer</dt><dd>{entry.element.layer}</dd></div>
+        <div><dt>Status</dt><dd>{entry.element.status}</dd></div>
+        <div><dt>Category</dt><dd>{entry.category}</dd></div>
+      </dl>
+      <p className="detail-rationale">{entry.rationale}</p>
+      <div className="impacted-elements">
+        <strong>Downstream impacted elements</strong>
+        {entry.impactedElementIds.length === 0 ? (
+          <p className="muted">No downstream impacted elements in the current model.</p>
+        ) : (
+          <ul>
+            {entry.impactedElementIds.map((id) => {
+              const element = elementById.get(id);
+              return <li key={id}>{element ? `${element.name} - ${element.type}` : id}</li>;
+            })}
+          </ul>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function elementAbbreviation(type: ElementType): string {
+  if (type === "Business Capability") return "CAP";
+  if (type === "Business Process") return "PROC";
+  if (type === "Application Component") return "APP";
+  if (type === "Data Object") return "DATA";
+  return "TECH";
 }
 
 function CapabilityMap({ model, heatmapMode }: { model: EamModel; heatmapMode: HeatmapMode }) {

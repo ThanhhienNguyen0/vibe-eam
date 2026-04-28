@@ -27,3 +27,22 @@ Die Impact-Analyse wurde fachlich in zwei Modi aufgeteilt:
 Die Analyse laeuft rekursiv, verhindert Zyklen und zeigt Relationstyp, Level und Pfad. Minimale Vitest-Tests wurden fuer Metamodell, Validierung und Impact-Analyse ergaenzt.
 
 Nachschaerfung: Die zunaechst dokumentierte optionale Shortcut-Relation `Application Component realizes Business Capability` wurde entfernt. Der zweite Zyklus folgt damit nur den explizit geforderten erlaubten Relationen.
+
+## Dritter Entwicklungszyklus
+
+Der dritte Prompt fordert bessere Entscheidungs- und Praesentationsfaehigkeit ohne grosse Architekturkonzepte. Umgesetzt wurde eine Risk-Cost Portfolio Ansicht mit berechnetem Impact Score.
+
+Wichtige Entscheidungen:
+
+- Impact Score basiert auf Downstream Business Impact.
+- Betroffene Elemente werden nach Typ gewichtet:
+  - Business Capability: 5
+  - Business Process: 4
+  - Application Component: 3
+  - Data Object: 2
+  - Technology Node: 1
+- Mehrfach erreichbare Elemente werden nur einmal gezaehlt.
+- Portfolio-Kategorien bleiben einfache MVP-Heuristiken.
+- Canvas-Edges wurden mit Pfeilrichtung, Relationstyp-Labels und einfachen Relationstyp-Stilen verbessert.
+- Es wurden keine neuen externen Chart-Libraries oder State-Management-Abhaengigkeiten eingefuehrt.
+- Unit Tests wurden fuer Portfolio-Scoring, Impact Level, Kategorie und Deduplizierung ergaenzt.
