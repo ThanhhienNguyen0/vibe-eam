@@ -1,7 +1,8 @@
 import React, { useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { X, Upload, FileText, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { X, Upload, FileText, AlertCircle, CheckCircle2, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import * as XLSX from 'xlsx';
 
 interface UploadModalProps {
   isOpen: boolean;
@@ -46,9 +47,25 @@ export function UploadModal({ isOpen, onClose, onUploadSuccess }: UploadModalPro
     }
   }, [onClose, onUploadSuccess]);
 
+  const handleDownloadTemplate = () => {
+    const template = [
+      { ID: 'BIZ-01', Name: 'Sample Process', Type: 'Process', Layer: 'Business', Risk: 'Low', Cost: 5000, Status: 'Production', Description: 'Core business activity', Dependencies: '' },
+      { ID: 'APP-01', Name: 'Sample App', Type: 'Application', Layer: 'Application', Risk: 'Medium', Cost: 12000, Status: 'Production', Description: 'Customer facing portal', Dependencies: 'DB-01' },
+      { ID: 'DB-01', Name: 'Sample DB', Type: 'Database', Layer: 'Technology', Risk: 'Low', Cost: 800, Status: 'Production', Description: 'Primary storage', Dependencies: '' }
+    ];
+    const ws = XLSX.utils.json_to_sheet(template);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Template");
+    XLSX.writeFile(wb, "EAM_Inventory_Template.xlsx");
+  };
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'text/csv': ['.csv'] },
+    accept: { 
+      'text/csv': ['.csv'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-excel': ['.xls']
+    },
     multiple: false
   } as any);
 
@@ -93,8 +110,21 @@ export function UploadModal({ isOpen, onClose, onUploadSuccess }: UploadModalPro
               <FileText className={isDragActive ? "text-blue-400" : "text-slate-400"} size={32} />
             </div>
             <div className="text-center">
-              <p className="text-sm font-medium">Click or drag CSV file to sync</p>
-              <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-mono">Format: ID, Name, Type, Description, ...</p>
+              <p className="text-sm font-medium">Click or drag CSV or Excel file to sync</p>
+              <p className="text-[10px] text-slate-500 mt-2 uppercase tracking-widest font-mono leading-relaxed">
+                Supported: .CSV, .XLSX, .XLS<br/>
+                Header mapping: ID, Name, Type, Layer, Risk, Cost...
+              </p>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDownloadTemplate();
+                }}
+                className="mt-6 px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:bg-white/10 hover:text-white transition-all inline-flex items-center gap-3"
+              >
+                <Download size={12} />
+                Download Bulk Template
+              </button>
             </div>
           </div>
 
@@ -102,7 +132,7 @@ export function UploadModal({ isOpen, onClose, onUploadSuccess }: UploadModalPro
             {isUploading && (
               <div className="flex items-center gap-3 text-sm text-blue-400 animate-pulse">
                 <Upload size={16} className="animate-spin" />
-                Processing CSV records...
+                Processing file records...
               </div>
             )}
             {error && (

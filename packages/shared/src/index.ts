@@ -2,11 +2,23 @@
  * Shared types for Enterprise Architecture Management
  */
 
+export type ArchiMateLayer = 'Business' | 'Application' | 'Technology' | 'Implementation';
+
+export interface Lifecycle {
+  startDate: string;
+  endOfLife?: string;
+  status: 'Development' | 'Production' | 'Retired';
+}
+
 export interface EAMAsset {
   id: string;
   name: string;
-  type: 'Application' | 'Server' | 'Database';
+  type: string;
   description?: string;
+  layer: ArchiMateLayer;
+  lifecycle?: Lifecycle;
+  risk?: 'Low' | 'Medium' | 'High';
+  cost?: number;
 }
 
 export interface Application extends EAMAsset {
@@ -30,7 +42,5 @@ export interface Database extends EAMAsset {
 }
 
 export type EAMData = {
-  applications: Application[];
-  servers: Server[];
-  databases: Database[];
+  assets: EAMAsset[];
 };

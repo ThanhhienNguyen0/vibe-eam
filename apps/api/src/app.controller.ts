@@ -1,4 +1,4 @@
-import { Controller, Get, Post, UploadedFile, UseInterceptors, InternalServerErrorException, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Body, UploadedFile, UseInterceptors, InternalServerErrorException, Inject } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AppService } from './app.service';
 import * as fs from 'fs';
@@ -15,6 +15,11 @@ export class AppController {
     return this.appService.getInventory();
   }
 
+  @Post('assets')
+  async addAsset(@Body() asset: any) {
+    return this.appService.addAsset(asset);
+  }
+
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
   async uploadFile(@UploadedFile() file: any) {
@@ -25,7 +30,7 @@ export class AppController {
       if (!file) {
         throw new Error("No file uploaded");
       }
-      const count = this.appService.processCsv(file.path);
+      const count = this.appService.processFile(file.path, file.originalname);
       // Clean up
       if (fs.existsSync(file.path)) {
         fs.unlinkSync(file.path);
@@ -33,7 +38,7 @@ export class AppController {
       return { message: "Successfully sync'd inventory", count };
     } catch (error: any) {
       console.error("Upload error:", error);
-      throw new InternalServerErrorException("Failed to parse CSV: " + error.message);
+      throw new InternalServerErrorException("Failed to process file: " + error.message);
     }
   }
 }
