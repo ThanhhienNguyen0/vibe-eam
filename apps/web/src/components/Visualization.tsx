@@ -54,9 +54,9 @@ export function Visualization({ data }: VisualizationProps) {
     const initialEdges: Edge[] = [];
 
     const allAssets = [
-      ...data.applications,
-      ...data.servers,
-      ...data.databases,
+      ...(data?.applications || []),
+      ...(data?.servers || []),
+      ...(data?.databases || []),
     ];
 
     allAssets.forEach((asset, index) => {

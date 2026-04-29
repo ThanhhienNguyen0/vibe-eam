@@ -20,6 +20,7 @@ export class AppService {
     const records = parse(content, {
       columns: true,
       skip_empty_lines: true,
+      relax_column_count: true
     });
 
     this.eamData = {

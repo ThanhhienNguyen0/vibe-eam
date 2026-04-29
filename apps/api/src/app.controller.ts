@@ -1,14 +1,17 @@
-import { Controller, Get, Post, UploadedFile, UseInterceptors, InternalServerErrorException } from '@nestjs/common';
+import { Controller, Get, Post, UploadedFile, UseInterceptors, InternalServerErrorException, Inject } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AppService } from './app.service';
 import * as fs from 'fs';
 
 @Controller('api')
 export class AppController {
-  constructor(private readonly appService: AppService) {}
+  constructor(@Inject('APP_SERVICE') private readonly appService: AppService) {}
 
   @Get('inventory')
   getInventory() {
+    if (!this.appService) {
+      throw new InternalServerErrorException("AppService not injected correctly");
+    }
     return this.appService.getInventory();
   }
 
@@ -16,12 +19,17 @@ export class AppController {
   @UseInterceptors(FileInterceptor('file'))
   async uploadFile(@UploadedFile() file: any) {
     try {
+      if (!this.appService) {
+        throw new Error("AppService not injected correctly");
+      }
       if (!file) {
         throw new Error("No file uploaded");
       }
       const count = this.appService.processCsv(file.path);
       // Clean up
-      fs.unlinkSync(file.path);
+      if (fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
+      }
       return { message: "Successfully sync'd inventory", count };
     } catch (error: any) {
       console.error("Upload error:", error);

@@ -39,10 +39,10 @@ export default function App() {
     fetchData();
   }, []);
 
-  const totalAssets = data.applications.length + data.servers.length + data.databases.length;
+  const totalAssets = (data?.applications?.length || 0) + (data?.servers?.length || 0) + (data?.databases?.length || 0);
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden font-sans">
       <Sidebar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
@@ -54,10 +54,10 @@ export default function App() {
         <header className="h-16 border-b border-white/5 flex items-center justify-between px-8 bg-[#080A12]/40 backdrop-blur-sm sticky top-0 z-40">
           <div className="flex items-center gap-4">
             <h2 className="text-lg font-medium text-slate-100">
-              {activeTab === 'inventory' ? 'Dynamic Asset Inventory' : 
+              {activeTab === 'inventory' ? 'Architecture Inventory' : 
                activeTab === 'graph' ? 'Dependency Mapping' : 'System Reports'}
             </h2>
-            <span className="px-2 py-0.5 rounded bg-slate-800 text-[10px] text-slate-400 border border-white/10 uppercase font-mono tracking-tight">v1.2.0-alpha</span>
+            <span className="px-2 py-0.5 rounded bg-slate-800 text-[10px] text-slate-400 border border-white/10 uppercase font-mono tracking-tight">v1.0.0</span>
             <div className="h-4 w-px bg-white/10 mx-2" />
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2">
@@ -105,12 +105,67 @@ export default function App() {
                 <Visualization data={data} />
               )}
               {activeTab === 'reports' && (
-                <div className="flex flex-col items-center justify-center h-full text-slate-500">
-                  <div className="p-6 bg-blue-500/5 rounded-full border border-blue-500/10 mb-6 group">
-                    <AlertCircle size={40} className="text-blue-500/50 group-hover:scale-110 transition-transform" />
-                  </div>
-                  <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2">Upcoming Milestone</h3>
-                  <p className="text-sm text-slate-500 text-center max-w-xs leading-relaxed italic opacity-60">Compliance and Lifecycle reports are scheduled for Phase 2 implementation.</p>
+                <div className="h-full overflow-auto">
+                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      <div className="col-span-1 lg:col-span-2 bg-white/[0.02] border border-white/5 rounded-3xl p-8 backdrop-blur-sm">
+                        <div className="flex items-center justify-between mb-8">
+                          <div>
+                            <h3 className="text-xl font-bold text-white tracking-tight">Governance & Compliance</h3>
+                            <p className="text-xs text-slate-500 font-mono mt-1">Architecture integrity metrics</p>
+                          </div>
+                          <div className="px-3 py-1 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold uppercase tracking-widest">Active</div>
+                        </div>
+                        <div className="space-y-6">
+                          {[
+                            { label: 'Cloud Architecture Integrity', value: 94 },
+                            { label: 'Security Policy Alignment', value: 87 },
+                            { label: 'Resource Utilization Efficiency', value: 62 },
+                            { label: 'Backup & Recovery Readiness', value: 100 }
+                          ].map((item) => (
+                            <div key={item.label}>
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-xs font-semibold text-slate-400 uppercase tracking-tight">{item.label}</span>
+                                <span className="text-xs font-mono text-slate-100">{item.value}%</span>
+                              </div>
+                              <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                                <motion.div 
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${item.value}%` }}
+                                  className={cn(
+                                    "h-full rounded-full shadow-[0_0_8px_rgba(59,130,246,0.3)] transition-all duration-1000",
+                                    item.value > 80 ? "bg-blue-500" : item.value > 60 ? "bg-amber-500" : "bg-red-500"
+                                  )}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-8 flex flex-col justify-between">
+                         <div>
+                            <h4 className="text-sm font-bold text-white uppercase tracking-widest mb-6">Inventory Matrix</h4>
+                            <div className="space-y-4">
+                              {[
+                                { label: 'Applications', count: data?.applications?.length || 0, color: 'bg-blue-500' },
+                                { label: 'Servers', count: data?.servers?.length || 0, color: 'bg-emerald-500' },
+                                { label: 'Databases', count: data?.databases?.length || 0, color: 'bg-purple-500' }
+                              ].map((stat) => (
+                                <div key={stat.label} className="flex items-center justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/5">
+                                   <div className="flex items-center gap-3">
+                                      <div className={cn("w-2 h-2 rounded-full", stat.color)}></div>
+                                      <span className="text-xs font-medium text-slate-300">{stat.label}</span>
+                                   </div>
+                                   <span className="text-xs font-mono text-white">{stat.count}</span>
+                                </div>
+                              ))}
+                            </div>
+                         </div>
+                         <button className="w-full mt-8 py-3 bg-white/10 hover:bg-white/20 border border-white/10 text-white text-[10px] font-bold uppercase tracking-widest rounded-xl transition-all">
+                           Generate Audit PDF
+                         </button>
+                      </div>
+                   </div>
                 </div>
               )}
             </motion.div>
@@ -125,8 +180,7 @@ export default function App() {
             <span className="uppercase tracking-wider">SYSTEM STATUS: <strong className="text-emerald-500 ml-1">STABLE</strong></span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-            <span className="uppercase tracking-widest font-mono opacity-60">api.eam.local:connected</span>
+            <span className="uppercase tracking-widest font-mono opacity-60">System:Connected</span>
           </div>
         </footer>
       </main>

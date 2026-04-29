@@ -57,11 +57,11 @@ export function InventoryTable({ data, isLoading }: InventoryTableProps) {
           ))}
         </div>
         <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
           <input 
             type="text" 
             placeholder="Search assets..."
-            className="glass-input pl-9 text-sm w-64"
+            className="bg-white/[0.03] border border-white/5 rounded pl-10 pr-4 py-1.5 text-xs text-slate-100 w-64 focus:outline-none focus:border-white/20 transition-colors"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -71,25 +71,25 @@ export function InventoryTable({ data, isLoading }: InventoryTableProps) {
       {/* Main Table */}
       <div className="flex-1 bg-white/[0.03] border border-white/10 rounded-2xl overflow-hidden backdrop-blur-md">
         <table className="w-full text-left border-collapse table-fixed">
-          <thead className="bg-white/[0.02] border-b border-white/5 text-slate-400">
+          <thead className="bg-white/[0.02] border-b border-white/5 text-slate-500">
             <tr>
               <th className="w-24 px-4 py-3 text-[10px] font-semibold uppercase tracking-widest">Type</th>
               <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-widest">Asset Name</th>
-              <th className="w-40 px-4 py-3 text-[10px] font-semibold uppercase tracking-widest">Details</th>
-              <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-right">Health</th>
+              <th className="w-40 px-4 py-3 text-[10px] font-semibold uppercase tracking-widest">Technical Detail</th>
+              <th className="w-24 px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-right">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/[0.03]">
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="animate-pulse">
-                  <td colSpan={4} className="px-4 py-4 h-12 bg-white/[0.01]"></td>
+                   <td colSpan={4} className="px-4 py-4 h-12 bg-white/[0.01]"></td>
                 </tr>
               ))
             ) : filteredAssets.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-20 text-center text-slate-500 text-xs italic tracking-wide">
-                  No assets found. Synchronize your catalog to populate.
+                <td colSpan={4} className="px-4 py-20 text-center text-slate-500 text-xs italic">
+                  No assets found in the inventory.
                 </td>
               </tr>
             ) : (
@@ -99,7 +99,7 @@ export function InventoryTable({ data, isLoading }: InventoryTableProps) {
                     <div className="flex items-center gap-2">
                        {getIcon(asset.type)}
                        <span className={cn(
-                         "text-[10px] font-mono px-1.5 py-0.5 rounded border leading-none",
+                         "text-[9px] font-mono px-1.5 py-0.5 rounded border leading-none font-bold",
                          asset.type === 'Application' ? "bg-blue-500/10 border-blue-500/20 text-blue-400" :
                          asset.type === 'Server' ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" :
                          "bg-purple-500/10 border-purple-500/20 text-purple-400"
@@ -110,8 +110,11 @@ export function InventoryTable({ data, isLoading }: InventoryTableProps) {
                   </td>
                   <td className="px-4 py-4">
                     <div className="flex flex-col">
-                      <span className="text-xs font-semibold text-slate-200 group-hover:text-blue-400 transition-colors uppercase tracking-tight">{asset.name}</span>
-                      <span className="text-[10px] text-slate-500 font-mono mt-0.5">{asset.id}</span>
+                      <span className="text-xs font-semibold text-slate-200 group-hover:text-white transition-colors">{asset.name}</span>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className="text-[9px] text-slate-500 font-mono tracking-tighter opacity-50 uppercase">ID:</span>
+                        <span className="text-[9px] text-slate-400 font-mono">{asset.id}</span>
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-4">

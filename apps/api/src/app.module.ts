@@ -10,6 +10,11 @@ import { MulterModule } from '@nestjs/platform-express';
     }),
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    {
+      provide: 'APP_SERVICE',
+      useClass: AppService,
+    },
+  ],
 })
 export class AppModule {}

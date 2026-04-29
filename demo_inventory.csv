@@ -1,0 +1,7 @@
+ID,Type,Name,Description,Technology,Owner,Dependencies,OS,Location,IP,DBType,Version
+APP-001,Application,Order Management,Main customer order portal,React / Node.js,Sales Team,"SRV-001,DB-001",,,,,
+APP-002,Application,Payment Gateway,Secure payment processing API,Go / gRPC,Finance Team,SRV-002,,,,,
+SRV-001,Server,Web Cluster 01,Primary front-end server pool,,IT Operations,,Ubuntu 22.04,US-East-1,10.0.0.5,,
+SRV-002,Server,Auth Server,Identity management server,,Security Team,,RHEL 8,US-West-2,10.0.0.12,,
+DB-001,Database,Product DB,Main product catalog database,,,IT Operations,,,PostgreSQL,15.2
+DB-002,Database,Audit Log,Transactions audit logs,,,Compliance,,,MongoDB,6.0

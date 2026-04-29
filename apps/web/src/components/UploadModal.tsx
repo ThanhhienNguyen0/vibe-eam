@@ -50,7 +50,7 @@ export function UploadModal({ isOpen, onClose, onUploadSuccess }: UploadModalPro
     onDrop,
     accept: { 'text/csv': ['.csv'] },
     multiple: false
-  });
+  } as any);
 
   if (!isOpen) return null;
 
