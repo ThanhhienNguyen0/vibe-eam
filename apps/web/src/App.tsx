@@ -88,7 +88,7 @@ export default function App() {
         </header>
 
         {/* Dynamic Content Area */}
-        <div className="flex-1 p-6 overflow-hidden relative">
+        <div className="flex-1 p-6 min-h-0 relative flex flex-col">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
@@ -96,7 +96,7 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
-              className="h-full flex flex-col"
+              className="flex-1 flex flex-col min-h-0"
             >
               {activeTab === 'inventory' && (
                 <InventoryTable data={data} isLoading={isLoading} />
@@ -105,7 +105,7 @@ export default function App() {
                 <Visualization data={data} />
               )}
               {activeTab === 'reports' && (
-                <div className="h-full overflow-auto">
+                <div className="flex-1 overflow-auto min-h-0">
                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       <div className="col-span-1 lg:col-span-2 bg-white/[0.02] border border-white/5 rounded-3xl p-8 backdrop-blur-sm">
                         <div className="flex items-center justify-between mb-8">

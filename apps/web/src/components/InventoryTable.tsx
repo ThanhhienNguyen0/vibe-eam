@@ -38,7 +38,7 @@ export function InventoryTable({ data, isLoading }: InventoryTableProps) {
   };
 
   return (
-    <div className="flex flex-col h-full gap-4">
+    <div className="flex flex-col flex-1 min-h-0 gap-4">
       {/* Table Header Controls */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
@@ -69,9 +69,9 @@ export function InventoryTable({ data, isLoading }: InventoryTableProps) {
       </div>
 
       {/* Main Table */}
-      <div className="flex-1 bg-white/[0.03] border border-white/10 rounded-2xl overflow-hidden backdrop-blur-md">
+      <div className="flex-1 bg-white/[0.03] border border-white/10 rounded-2xl overflow-auto backdrop-blur-md">
         <table className="w-full text-left border-collapse table-fixed">
-          <thead className="bg-white/[0.02] border-b border-white/5 text-slate-500">
+          <thead className="bg-[#0A0C16] border-b border-white/5 text-slate-500 sticky top-0 z-10">
             <tr>
               <th className="w-24 px-4 py-3 text-[10px] font-semibold uppercase tracking-widest">Type</th>
               <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-widest">Asset Name</th>
