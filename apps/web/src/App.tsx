@@ -18,10 +18,18 @@ export default function App() {
     setIsLoading(true);
     try {
       const response = await fetch('/api/inventory');
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}`);
+      }
       const json = await response.json();
-      setData(json);
+      if (json && json.applications) {
+        setData(json);
+      } else {
+        throw new Error("Invalid data format received");
+      }
     } catch (error) {
       console.error('Error fetching inventory:', error);
+      // Keep existing data or handle error state
     } finally {
       setIsLoading(false);
     }

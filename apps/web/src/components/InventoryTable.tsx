@@ -13,14 +13,17 @@ export function InventoryTable({ data, isLoading }: InventoryTableProps) {
   const [activeFilter, setActiveFilter] = React.useState<string>('All');
 
   const allAssets = [
-    ...data.applications,
-    ...data.servers,
-    ...data.databases,
+    ...(data?.applications || []),
+    ...(data?.servers || []),
+    ...(data?.databases || []),
   ];
 
   const filteredAssets = allAssets.filter(asset => {
-    const matchesSearch = asset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         asset.description?.toLowerCase().includes(searchTerm.toLowerCase());
+    if (!asset) return false;
+    const name = asset.name || "";
+    const description = asset.description || "";
+    const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = activeFilter === 'All' || asset.type === activeFilter;
     return matchesSearch && matchesFilter;
   });
