@@ -8,5 +8,5 @@ https://drive.google.com/drive/folders/10orvVkPYZh6HlOfKTpdk3FgJpIZlQ_Tu?usp=dri
 
 To start localhost:3000 
 
->>> Type in your Terminal
->>> pnpm dev
+###Type in your Terminal
+- pnpm dev
