@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UploadedFile, UseInterceptors, InternalServerErrorException, Inject } from '@nestjs/common';
+import { Controller, Get, Post, Body, UploadedFile, UseInterceptors, InternalServerErrorException, Inject, Delete, Param, Query } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AppService } from './app.service';
 import * as fs from 'fs';
@@ -18,6 +18,11 @@ export class AppController {
   @Post('assets')
   async addAsset(@Body() asset: any) {
     return this.appService.addAsset(asset);
+  }
+
+  @Delete('assets/:id')
+  async deleteAsset(@Param('id') id: string, @Query('force') force: string) {
+    return this.appService.deleteAsset(id, force === 'true');
   }
 
   @Post('upload')

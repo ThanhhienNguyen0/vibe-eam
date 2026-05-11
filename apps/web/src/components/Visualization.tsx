@@ -15,9 +15,10 @@ import ReactFlow, {
 } from 'reactflow';
 import dagre from 'dagre';
 import 'reactflow/dist/style.css';
-import { EAMData, EAMAsset } from '@shared/index';
-import { Monitor, Cpu, Database as DbIcon, Zap, Activity, Info } from 'lucide-react';
+import { EAMData, EAMAsset, RelationshipType } from '@shared/index';
+import { Monitor, Cpu, Database as DbIcon, Zap, Activity, Info, X, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { motion, AnimatePresence } from 'motion/react';
 
 // DAGRE LAYOUT ENGINE
 const dagreGraph = new dagre.graphlib.Graph();
@@ -95,9 +96,9 @@ const CustomNode = ({ data, selected }: any) => {
            <div className="flex items-center gap-1.5">
               <div className={cn(
                 "w-1 h-1 rounded-full",
-                data.asset.risk === 'High' ? 'bg-rose-500' : data.asset.risk === 'Medium' ? 'bg-amber-500' : 'bg-emerald-500'
+                data.asset.criticality === 'Mission Critical' || data.asset.criticality === 'High' ? 'bg-rose-500' : data.asset.criticality === 'Medium' ? 'bg-amber-500' : 'bg-emerald-500'
               )} />
-              <span className="text-[8px] text-slate-500 font-bold uppercase font-mono">Risk: {data.asset.risk || 'Low'}</span>
+              <span className="text-[8px] text-slate-500 font-bold uppercase font-mono">Crit: {data.asset.criticality}</span>
            </div>
            <Info size={10} className="text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
@@ -108,19 +109,19 @@ const CustomNode = ({ data, selected }: any) => {
   );
 };
 
-const nodeTypesRaw = {
-  custom: CustomNode,
-};
+const REL_TYPES: RelationshipType[] = ['Serving/Usage', 'Composition', 'Flow', 'Realization', 'Influence'];
 
 interface VisualizationProps {
   data: EAMData;
   onNodeClick?: (id: string) => void;
+  onRelationshipChange?: (sourceId: string, rel: { targetId: string, type: RelationshipType, delete?: boolean }) => void;
 }
 
-export function Visualization({ data, onNodeClick }: VisualizationProps) {
+export function Visualization({ data, onNodeClick, onRelationshipChange }: VisualizationProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [pendingConnection, setPendingConnection] = useState<Connection | null>(null);
 
   const performImpactAnalysis = useCallback((nodeId: string | null) => {
     setSelectedNodeId(nodeId);
@@ -164,7 +165,7 @@ export function Visualization({ data, onNodeClick }: VisualizationProps) {
           : { stroke: 'rgba(255, 255, 255, 0.05)', strokeWidth: 1, opacity: 0.3 }
       };
     }));
-  }, [edges, setNodes, setEdges]);
+  }, [edges, setNodes, setEdges, onNodeClick]);
 
   useEffect(() => {
     if (!data?.assets) return;
@@ -180,17 +181,28 @@ export function Visualization({ data, onNodeClick }: VisualizationProps) {
         position: { x: 0, y: 0 },
       });
 
-      if ((asset as any).dependencies) {
-        (asset as any).dependencies.forEach((depId: string) => {
+      if (asset.relationships) {
+        asset.relationships.forEach((rel) => {
+          const isFlow = rel.type === 'Flow';
+          const isInfluence = rel.type === 'Influence';
+          const isRealization = rel.type === 'Realization';
+          const isComposition = rel.type === 'Composition';
+
           initialEdges.push({
-            id: `e-${asset.id}-${depId}`,
+            id: `e-${asset.id}-${rel.targetId}-${rel.type}`,
             source: asset.id,
-            target: depId,
-            animated: true,
-            style: { stroke: 'rgba(255, 255, 255, 0.1)', strokeWidth: 1.5 },
+            target: rel.targetId,
+            animated: isFlow,
+            label: rel.type.split('/')[0],
+            labelStyle: { fontSize: 8, fill: 'rgba(255, 255, 255, 0.4)', fontWeight: 'bold' },
+            style: { 
+              stroke: isFlow ? '#10b981' : isComposition ? '#ffffff' : isRealization ? '#f59e0b' : 'rgba(255, 255, 255, 0.1)', 
+              strokeWidth: isComposition ? 3 : 1.5,
+              strokeDasharray: (isFlow || isRealization) ? '5 5' : isInfluence ? '2 3' : undefined,
+            },
             markerEnd: {
               type: MarkerType.ArrowClosed,
-              color: 'rgba(255, 255, 255, 0.2)',
+              color: isFlow ? '#10b981' : isRealization ? '#f59e0b' : 'rgba(255, 255, 255, 0.2)',
             },
           });
         });
@@ -203,20 +215,66 @@ export function Visualization({ data, onNodeClick }: VisualizationProps) {
   }, [data, setNodes, setEdges]);
 
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge({ 
-      ...params, 
-      animated: true, 
-      style: { stroke: 'rgba(255, 255, 255, 0.2)', strokeWidth: 1.5 } 
-    }, eds)),
-    [setEdges]
+    (params: Connection) => {
+      setPendingConnection(params);
+    },
+    []
   );
+
+  const confirmConnection = (type: RelationshipType) => {
+    if (!pendingConnection || !pendingConnection.source || !pendingConnection.target) return;
+    
+    if (onRelationshipChange) {
+      onRelationshipChange(pendingConnection.source, { targetId: pendingConnection.target, type });
+    }
+    setPendingConnection(null);
+  };
 
   const nodeTypes = useMemo(() => ({
     custom: CustomNode,
   }), []);
 
+  const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
+    const confirm = window.confirm(`Remove dependency: ${edge.source} ➔ ${edge.target}?`);
+    if (confirm && onRelationshipChange) {
+      // Find the relationship object to get its type if needed, but here we just need IDs
+      onRelationshipChange(edge.source, { targetId: edge.target, type: 'Serving/Usage', delete: true });
+    }
+  }, [onRelationshipChange]);
+
   return (
     <div className="flex-1 bg-[#05060B] border border-white/5 rounded-2xl relative overflow-hidden flex flex-col">
+      {/* Pending Connection UI */}
+      <AnimatePresence>
+        {pendingConnection && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="absolute top-20 left-1/2 -translate-x-1/2 z-[100] bg-[#0A0C16] border border-blue-500/50 p-4 rounded-2xl shadow-2xl flex flex-col items-center gap-4 min-w-[300px]"
+          >
+            <div className="text-[10px] font-black uppercase tracking-widest text-blue-500">Select Relationship Class</div>
+            <div className="flex flex-wrap justify-center gap-2">
+              {REL_TYPES.map(type => (
+                <button 
+                  key={type}
+                  onClick={() => confirmConnection(type)}
+                  className="px-3 py-1.5 bg-blue-600/10 border border-blue-500/20 rounded-lg text-[9px] font-bold text-blue-400 hover:bg-blue-600 hover:text-white transition-all uppercase tracking-tighter"
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+            <button 
+              onClick={() => setPendingConnection(null)}
+              className="mt-2 text-[8px] font-bold text-slate-500 uppercase hover:text-white"
+            >
+              Cancel Link
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* HUD Header */}
       <div className="absolute top-4 left-4 z-10 flex items-center gap-3">
         <div className="flex flex-col gap-1">
@@ -248,6 +306,7 @@ export function Visualization({ data, onNodeClick }: VisualizationProps) {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeClick={(_, node) => performImpactAnalysis(node.id)}
+          onEdgeClick={onEdgeClick}
           onPaneClick={() => performImpactAnalysis(null)}
           nodeTypes={nodeTypes}
           fitView
@@ -272,13 +331,16 @@ export function Visualization({ data, onNodeClick }: VisualizationProps) {
       
       {/* Legend Overlay */}
       <div className="absolute top-4 right-4 bg-[#0A0C16]/80 backdrop-blur-md border border-white/10 p-4 rounded-xl text-[9px] space-y-2 z-10 shadow-2xl">
-        <div className="font-black uppercase tracking-[0.2em] text-slate-500 border-b border-white/5 pb-1 mb-2">Layers</div>
+        <div className="font-black uppercase tracking-[0.2em] text-slate-500 border-b border-white/5 pb-1 mb-2">Architectural Legend</div>
         <div className="flex items-center gap-3"><div className="w-2.5 h-2.5 rounded bg-amber-500/20 border border-amber-500/50" /> <span className="text-slate-300 font-bold uppercase tracking-widest">Business</span></div>
         <div className="flex items-center gap-3"><div className="w-2.5 h-2.5 rounded bg-blue-500/20 border border-blue-500/50" /> <span className="text-slate-300 font-bold uppercase tracking-widest">Application</span></div>
         <div className="flex items-center gap-3"><div className="w-2.5 h-2.5 rounded bg-emerald-500/20 border border-emerald-500/50" /> <span className="text-slate-100 font-bold uppercase tracking-widest">Technology</span></div>
-        <div className="mt-4 pt-2 border-t border-white/5 opacity-50 flex items-center gap-2">
-           <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-           <span className="text-slate-400 font-medium">Arrow Direction = Source ➔ Dependency</span>
+        <div className="mt-4 pt-2 border-t border-white/5 opacity-50 space-y-2">
+           <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+              <span className="text-slate-400 font-medium">Arrow Direction = Usage Path</span>
+           </div>
+           <div className="text-[7px] text-slate-600 uppercase font-bold tracking-widest">Tip: Click edge to remove | Drag handles to connect</div>
         </div>
       </div>
     </div>

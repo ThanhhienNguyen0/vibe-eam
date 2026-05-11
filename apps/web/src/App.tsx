@@ -122,6 +122,34 @@ export default function App() {
                 <Visualization 
                   data={data} 
                   onNodeClick={(id) => setSelectedAssetId(id)}
+                  onRelationshipChange={async (sourceId, rel) => {
+                    const sourceAsset = data.assets.find(a => a.id === sourceId);
+                    if (!sourceAsset) return;
+
+                    let updatedRelationships = [...(sourceAsset.relationships || [])];
+                    if (rel.delete) {
+                      updatedRelationships = updatedRelationships.filter(r => r.targetId !== rel.targetId);
+                    } else {
+                      // Remove existing if same target, then add new
+                      updatedRelationships = updatedRelationships.filter(r => r.targetId !== rel.targetId);
+                      updatedRelationships.push({ targetId: rel.targetId, type: rel.type });
+                    }
+
+                    const updatedAsset = { ...sourceAsset, relationships: updatedRelationships };
+                    
+                    try {
+                      const res = await fetch('/api/assets', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(updatedAsset)
+                      });
+                      if (res.ok) {
+                        fetchData();
+                      }
+                    } catch (err) {
+                      console.error("Failed to update relationship:", err);
+                    }
+                  }}
                 />
               )}
               {activeTab === 'reports' && (
@@ -264,6 +292,7 @@ export default function App() {
         isOpen={isAddOpen}
         onClose={() => setIsAddOpen(false)}
         onSuccess={fetchData}
+        allAssets={data.assets}
       />
 
       <AnimatePresence>
@@ -292,53 +321,107 @@ export default function App() {
                     </button>
                   </div>
                   <div className="flex-1 p-8 space-y-8 overflow-auto custom-scrollbar">
+                    {/* 1. Header Meta */}
                     <section>
-                      <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3">System Identity</h4>
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3">Operational State</h4>
                       <div className="grid grid-cols-2 gap-4">
-                        <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
-                          <div className="text-[9px] font-bold text-slate-600 uppercase mb-1">ID</div>
-                          <div className="text-xs font-mono text-white">{asset.id}</div>
-                        </div>
-                        <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
-                          <div className="text-[9px] font-bold text-slate-600 uppercase mb-1">Type</div>
-                          <div className="text-xs font-mono text-white">{asset.type}</div>
-                        </div>
-                      </div>
-                    </section>
-                    <section>
-                      <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3">Operational Meta</h4>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl">
-                          <div className="text-[9px] font-bold text-emerald-500/60 uppercase mb-1">Status</div>
-                          <div className="text-xs font-bold text-emerald-500">{asset.lifecycle?.status || 'UNKNOWN'}</div>
+                        <div className={cn(
+                          "p-4 border rounded-2xl",
+                          asset.lifecycle?.status === 'Active' ? "bg-emerald-500/5 border-emerald-500/10 text-emerald-500" : "bg-slate-500/5 border-slate-500/10 text-slate-400"
+                        )}>
+                          <div className="text-[9px] font-bold text-slate-600 uppercase mb-1">Status</div>
+                          <div className="text-xs font-bold uppercase">{asset.lifecycle?.status || 'UNKNOWN'}</div>
                         </div>
                         <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl">
-                          <div className="text-[9px] font-bold text-amber-500/60 uppercase mb-1">Risk Profile</div>
-                          <div className="text-xs font-bold text-amber-500">{asset.risk}</div>
+                          <div className="text-[9px] font-bold text-amber-500/60 uppercase mb-1">Criticality</div>
+                          <div className="text-xs font-bold text-amber-500">{asset.criticality}</div>
                         </div>
                       </div>
                     </section>
+
+                    {/* 2. Governance */}
                     <section>
-                      <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3">Description</h4>
-                      <p className="text-sm text-slate-400 leading-relaxed font-medium">{asset.description || 'No blueprint description provided for this architectural node.'}</p>
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3">Governance</h4>
+                      <div className="space-y-3">
+                        <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
+                          <div className="text-[9px] font-bold text-slate-600 uppercase mb-1">Business Owner</div>
+                          <div className="text-xs font-medium text-white">{asset.businessOwner || 'Not Assigned'}</div>
+                        </div>
+                        <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
+                          <div className="text-[9px] font-bold text-slate-600 uppercase mb-1">IT Owner</div>
+                          <div className="text-xs font-medium text-white">{asset.itOwner || 'Not Assigned'}</div>
+                        </div>
+                      </div>
                     </section>
-                    {asset.dependencies && asset.dependencies.length > 0 && (
+
+                    {/* 3. Tech Stack */}
+                    <section>
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3">Technical Stack</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
+                          <div className="text-[9px] font-bold text-slate-600 uppercase mb-1">Hosting</div>
+                          <div className="text-xs font-bold text-white">{asset.hostType}</div>
+                        </div>
+                        <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
+                          <div className="text-[9px] font-bold text-slate-600 uppercase mb-1">Version</div>
+                          <div className="text-xs font-mono text-white">{asset.version || 'v1.0'}</div>
+                        </div>
+                        <div className="col-span-2 p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
+                          <div className="text-[9px] font-bold text-slate-600 uppercase mb-1">Technology Stack</div>
+                          <div className="text-xs text-white">{asset.type}</div>
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* 4. Dependencies */}
+                    {asset.relationships && asset.relationships.length > 0 && (
                       <section>
-                        <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3">Upstream Dependencies</h4>
+                        <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3">Outbound Dependencies</h4>
                         <div className="space-y-2">
-                          {asset.dependencies.map(dep => (
-                            <div key={dep} className="px-4 py-3 bg-white/[0.02] border border-white/5 rounded-xl text-xs font-mono text-slate-400 flex items-center justify-between hover:border-white/20 transition-all cursor-pointer">
-                              {dep}
-                              <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse"></div>
+                          {asset.relationships.map((rel, idx) => (
+                            <div key={idx} className="px-4 py-3 bg-white/[0.02] border border-white/5 rounded-xl flex items-center justify-between hover:border-blue-500/30 transition-all cursor-pointer group">
+                              <div>
+                                <div className="text-[8px] font-black uppercase text-blue-500 tracking-tighter mb-0.5">{rel.type}</div>
+                                <div className="text-xs font-mono text-slate-300 group-hover:text-white">{rel.targetId}</div>
+                              </div>
+                              <div className="w-1.5 h-1.5 rounded-full bg-blue-500/40" />
                             </div>
                           ))}
                         </div>
                       </section>
                     )}
                   </div>
-                  <div className="p-8 border-t border-white/5 bg-white/[0.01]">
-                    <button className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-[.3em] hover:bg-white/10 transition-all">
-                      Open in Archimate Editor
+
+                  <div className="p-6 border-t border-white/5 bg-white/[0.01] space-y-3">
+                    <button 
+                      onClick={async () => {
+                        const confirm = window.confirm("Attempting Architectural Deletion. Analysis will be performed. Proceed?");
+                        if (!confirm) return;
+
+                        const checkRes = await fetch(`/api/assets/${asset.id}`, { method: 'DELETE' });
+                        const result = await checkRes.json();
+
+                        if (!result.success && result.impacts) {
+                          const force = window.confirm(
+                            `CRITICAL IMPACT WARNING:\n\n${result.message}\n\nAffected Systems:\n- ${result.impacts.join('\n- ')}\n\nForce deletion and break architectural integrity?`
+                          );
+                          if (force) {
+                            await fetch(`/api/assets/${asset.id}?force=true`, { method: 'DELETE' });
+                            setSelectedAssetId(null);
+                            fetchData();
+                          }
+                        } else if (result.success) {
+                          alert("Asset successfully purged from repository.");
+                          setSelectedAssetId(null);
+                          fetchData();
+                        }
+                      }}
+                      className="w-full py-4 bg-rose-900/10 border border-rose-500/20 text-rose-500/80 rounded-2xl text-[10px] font-black uppercase tracking-[.3em] hover:bg-rose-500 hover:text-white transition-all shadow-lg shadow-rose-900/10"
+                    >
+                      Delete with Impact Analysis
+                    </button>
+                    <button className="w-full py-3 bg-white/5 border border-white/10 rounded-2xl text-[9px] font-black uppercase tracking-[.3em] hover:bg-white/10 transition-all text-slate-500">
+                      View Audit Log
                     </button>
                   </div>
                 </div>

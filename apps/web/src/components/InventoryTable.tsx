@@ -85,7 +85,7 @@ export function InventoryTable({ data, isLoading, onAddClick, onAssetClick }: In
               <th className="w-32 px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-center">Layer</th>
               <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-widest">Architectural Fragment</th>
               <th className="w-40 px-4 py-3 text-[10px] font-semibold uppercase tracking-widest">Classification</th>
-              <th className="w-32 px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-center">Risk Level</th>
+              <th className="w-32 px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-center">Criticality</th>
               <th className="w-24 px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-center">Status</th>
             </tr>
           </thead>
@@ -138,12 +138,16 @@ export function InventoryTable({ data, isLoading, onAddClick, onAssetClick }: In
                   </td>
                   <td className="px-4 py-4">
                     <div className="flex items-center justify-center gap-2">
-                       {asset.risk === 'High' ? (
+                       {asset.criticality === 'Mission Critical' ? (
                          <div className="flex items-center gap-2 text-rose-500 px-2 py-0.5 bg-rose-500/5 border border-rose-500/10 rounded">
                            <ShieldAlert size={10} />
-                           <span className="text-[9px] font-bold uppercase tracking-wider">Critical</span>
+                           <span className="text-[9px] font-bold uppercase tracking-wider">Mission Crit.</span>
                          </div>
-                       ) : asset.risk === 'Medium' ? (
+                       ) : asset.criticality === 'High' ? (
+                        <div className="flex items-center gap-2 text-rose-400 px-2 py-0.5 bg-rose-500/5 border border-rose-400/10 rounded">
+                          <span className="text-[9px] font-bold uppercase tracking-wider">High</span>
+                        </div>
+                       ) : asset.criticality === 'Medium' ? (
                         <div className="flex items-center gap-2 text-amber-500 px-2 py-0.5 bg-amber-500/5 border border-amber-500/10 rounded">
                           <TrendingDown size={10} />
                           <span className="text-[9px] font-bold uppercase tracking-wider">Moderate</span>
@@ -158,7 +162,8 @@ export function InventoryTable({ data, isLoading, onAddClick, onAssetClick }: In
                   <td className="px-4 py-4 text-center">
                     <span className={cn(
                       "text-[9px] font-bold tracking-widest uppercase",
-                      asset.lifecycle?.status === 'Production' ? "text-emerald-500" : "text-slate-600"
+                      asset.lifecycle?.status === 'Active' ? "text-emerald-500" : 
+                      asset.lifecycle?.status === 'Planning' ? "text-blue-500" : "text-slate-600"
                     )}>
                       {asset.lifecycle?.status || 'Unknown'}
                     </span>

@@ -19,11 +19,19 @@ export function ExportModal({ isOpen, onClose, data }: ExportModalProps) {
       Type: asset.type,
       Layer: asset.layer,
       Description: asset.description || '',
+      Criticality: asset.criticality,
       Risk: asset.risk || 'Low',
       Cost: asset.cost || 0,
+      BusinessOwner: asset.businessOwner || '',
+      ITOwner: asset.itOwner || '',
+      BusinessCapability: asset.businessCapability || '',
+      Process: asset.process || '',
+      HostType: asset.hostType,
+      Version: asset.version || '',
       Status: asset.lifecycle?.status || '',
       StartDate: asset.lifecycle?.startDate || '',
-      Dependencies: (asset as any).dependencies?.join(',') || ''
+      EndOfSupport: asset.lifecycle?.endOfSupport || '',
+      Relationships: asset.relationships?.map(r => `${r.targetId}(${r.type})`).join(',') || ''
     })));
 
     const workbook = XLSX.utils.book_new();

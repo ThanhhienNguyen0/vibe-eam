@@ -4,10 +4,21 @@
 
 export type ArchiMateLayer = 'Business' | 'Application' | 'Technology' | 'Implementation';
 
+export type RelationshipType = 'Serving/Usage' | 'Composition' | 'Flow' | 'Realization' | 'Influence';
+export type Criticality = 'Low' | 'Medium' | 'High' | 'Mission Critical';
+export type HostType = 'SaaS' | 'On-Premise' | 'Cloud/PaaS';
+
+export interface EAMRelationship {
+  targetId: string;
+  type: RelationshipType;
+  description?: string;
+}
+
 export interface Lifecycle {
   startDate: string;
   endOfLife?: string;
-  status: 'Development' | 'Production' | 'Retired';
+  endOfSupport?: string;
+  status: 'Planning' | 'Active' | 'Retired';
 }
 
 export interface EAMAsset {
@@ -16,29 +27,25 @@ export interface EAMAsset {
   type: string;
   description?: string;
   layer: ArchiMateLayer;
-  lifecycle?: Lifecycle;
-  risk?: 'Low' | 'Medium' | 'High';
-  cost?: number;
-}
+  lifecycle: Lifecycle;
+  risk: 'Low' | 'Medium' | 'High';
+  cost: number;
+  
+  // New Ownership fields
+  businessOwner?: string;
+  itOwner?: string;
 
-export interface Application extends EAMAsset {
-  type: 'Application';
-  technology?: string;
-  owner?: string;
-  dependencies: string[]; // IDs of other assets
-}
+  // Business Context
+  businessCapability?: string;
+  process?: string;
+  criticality: Criticality;
 
-export interface Server extends EAMAsset {
-  type: 'Server';
-  os?: string;
-  location?: string;
-  ipAddress?: string;
-}
-
-export interface Database extends EAMAsset {
-  type: 'Database';
-  dbType?: string;
+  // Technical Stack
+  hostType: HostType;
   version?: string;
+
+  // Modernized Relationships
+  relationships: EAMRelationship[];
 }
 
 export type EAMData = {

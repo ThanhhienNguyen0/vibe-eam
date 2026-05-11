@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { EAMData, EAMAsset, ArchiMateLayer } from '@shared/index';
+import { EAMData, EAMAsset, ArchiMateLayer, Criticality, HostType, RelationshipType } from '@shared/index';
 import * as fs from 'fs';
 import * as path from 'path';
 import { parse } from 'csv-parse/sync';
@@ -17,39 +17,53 @@ export class AppService {
         description: 'Primary customer fulfillment process',
         risk: 'Medium',
         cost: 12000,
-        lifecycle: { startDate: '2020-01-01', status: 'Production' }
-      } as EAMAsset,
+        criticality: 'High',
+        hostType: 'SaaS',
+        relationships: [],
+        lifecycle: { startDate: '2020-01-01', status: 'Active' }
+      },
       {
         id: 'APP-01',
         name: 'Order Manager',
-        type: 'Application',
+        type: 'SaaS',
         layer: 'Application',
         description: 'Core ordering platform',
         risk: 'Low',
         cost: 45000,
-        lifecycle: { startDate: '2022-06-15', status: 'Production' },
-        dependencies: ['SRV-01', 'DB-01']
-      } as any,
+        criticality: 'Mission Critical',
+        hostType: 'SaaS',
+        lifecycle: { startDate: '2022-06-15', status: 'Active' },
+        relationships: [
+          { targetId: 'SRV-01', type: 'Serving/Usage' },
+          { targetId: 'DB-01', type: 'Serving/Usage' }
+        ]
+      },
       {
         id: 'SRV-01',
         name: 'Production Node 01',
-        type: 'Server',
+        type: 'Server 2022',
         layer: 'Technology',
         description: 'Cloud computing instance',
         risk: 'High',
         cost: 800,
-        lifecycle: { startDate: '2023-01-01', status: 'Production' }
-      } as any,
+        criticality: 'Medium',
+        hostType: 'Cloud/PaaS',
+        relationships: [],
+        lifecycle: { startDate: '2023-01-01', status: 'Active' }
+      },
       {
         id: 'DB-01',
         name: 'Inventory DB',
-        type: 'Database',
+        type: 'PostgreSQL',
         layer: 'Technology',
         description: 'PostgreSQL storage Cluster',
         risk: 'Low',
         cost: 5000,
-        lifecycle: { startDate: '2022-01-01', status: 'Production' }
-      } as any
+        criticality: 'High',
+        hostType: 'On-Premise',
+        relationships: [],
+        lifecycle: { startDate: '2022-01-01', status: 'Active' }
+      }
     ]
   };
 
@@ -65,6 +79,27 @@ export class AppService {
       this.eamData.assets.push(asset);
     }
     return asset;
+  }
+
+  deleteAsset(id: string, force = false): { success: boolean; message: string; impacts?: string[] } {
+    // Find all assets that target this asset
+    const impacts = this.eamData.assets
+      .filter(a => a.relationships?.some(r => r.targetId === id))
+      .map(a => `${a.name} (${a.id})`);
+
+    if (impacts.length > 0 && !force) {
+      return {
+        success: false,
+        message: `Deletion Halte: This asset is required by ${impacts.length} other components.`,
+        impacts
+      };
+    }
+
+    const index = this.eamData.assets.findIndex(a => a.id === id);
+    if (index === -1) return { success: false, message: "Asset not found" };
+
+    this.eamData.assets.splice(index, 1);
+    return { success: true, message: "Asset removed from repository" };
   }
 
   processFile(filePath: string, originalName: string): number {
@@ -110,11 +145,23 @@ export class AppService {
       description: record.description || '',
       risk: record.risk || 'Low',
       cost: Number(record.cost) || 0,
-      dependencies: record.dependencies ? String(record.dependencies).split(',').map((s: string) => s.trim()) : [],
+      businessOwner: record.businessowner || '',
+      itOwner: record.itowner || '',
+      businessCapability: record.capability || '',
+      process: record.process || '',
+      criticality: (record.criticality || 'Medium') as Criticality,
+      hostType: (record.hosttype || 'On-Premise') as HostType,
+      version: record.version || '',
+      relationships: record.dependencies ? 
+        String(record.dependencies).split(',').map((s: string) => ({
+          targetId: s.trim(),
+          type: 'Serving/Usage' as RelationshipType
+        })) : [],
       lifecycle: {
         startDate: record.startdate || new Date().toISOString().split('T')[0],
         endOfLife: record.eol || undefined,
-        status: record.status || 'Production'
+        endOfSupport: record.eos || undefined,
+        status: (record.status || 'Active') as any
       }
     }));
 
