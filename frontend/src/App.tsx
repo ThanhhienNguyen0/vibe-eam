@@ -40,8 +40,13 @@ import {
   type PortfolioCategory,
   type PortfolioEntry
 } from "./portfolio";
+import Sidebar, { type SidebarSelection } from "./Sidebar/Sidebar";
+import SidebarPanels from "./Sidebar/SidebarPanels";
+import DiagramEditor from "./DiagramEditor";
+import { sidebarApi } from "./Sidebar/sidebarApi";
+import type { Diagram, SidebarState } from "./Sidebar/sidebarTypes";
 
-type View = "canvas" | "capability" | "roadmap" | "portfolio" | "audit";
+type View = "canvas" | "capability" | "roadmap" | "portfolio" | "audit" | "diagram";
 type HeatmapMode = "none" | "risk" | "cost";
 type PortfolioSortKey = "impactScore" | "cost";
 
@@ -150,6 +155,22 @@ function emptyElement(index: number): Partial<EamElement> {
 }
 
 export default function App() {
+  const [sidebarState, setSidebarState] = useState<SidebarState>({
+    componentTypes: [],
+    connectionTypes: [],
+    components: [],
+    connections: [],
+    diagrams: []
+  });
+  const [sidebarSelection, setSidebarSelection] = useState<SidebarSelection | null>(null);
+  const [activeDiagramId, setActiveDiagramId] = useState<string | null>(null);
+
+  const activeDiagram = sidebarState.diagrams.find((d) => d.id === activeDiagramId) ?? null;
+
+  useEffect(() => {
+    sidebarApi.getAll().then(setSidebarState).catch(console.error);
+  }, []);
+
   const [model, setModel] = useState<EamModel>({ elements: [], relations: [] });
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -345,11 +366,66 @@ export default function App() {
           <button className={view === "roadmap" ? "active" : ""} onClick={() => setView("roadmap")}>Lifecycle Roadmap</button>
           <button className={view === "portfolio" ? "active" : ""} onClick={() => setView("portfolio")}>Risk-Cost Portfolio</button>
           <button className={view === "audit" ? "active" : ""} onClick={() => setView("audit")}>Audit Log</button>
+          {activeDiagram && (
+            <button
+              className={`tabs-diagram-tab${view === "diagram" ? " active" : ""}`}
+              onClick={() => setView("diagram")}
+            >
+              {activeDiagram.name}
+              <span
+                className="tabs-diagram-close"
+                role="button"
+                title="Diagramm schließen"
+                onClick={(e) => { e.stopPropagation(); setActiveDiagramId(null); setView("canvas"); }}
+              >×</span>
+            </button>
+          )}
         </nav>
       </header>
 
-      <main className="workspace">
-        <section className="tool-area">
+      <div className="app-body">
+        <Sidebar
+          selection={sidebarSelection}
+          onSelect={(next) => setSidebarSelection((prev) => {
+            if (!next || !prev) return next;
+            if (prev.kind !== next.kind) return next;
+            if ('id' in prev && 'id' in next) return prev.id === next.id ? null : next;
+            return null;
+          })}
+          sidebarState={sidebarState}
+          onStateChange={setSidebarState}
+        />
+
+        {sidebarSelection && (
+          <div className="sidebar-detail-area">
+            <SidebarPanels
+              selection={sidebarSelection}
+              sidebarState={sidebarState}
+              onStateChange={setSidebarState}
+              onOpenDiagram={(id) => { setActiveDiagramId(id); setView("diagram"); setSidebarSelection(null); }}
+              onClose={() => setSidebarSelection(null)}
+            />
+          </div>
+        )}
+
+      <main className={`workspace${view === "diagram" ? " workspace--full" : ""}`}>
+        {view === "diagram" && activeDiagram && (
+          <DiagramEditor
+            diagram={activeDiagram}
+            componentTypes={sidebarState.componentTypes}
+            connectionTypes={sidebarState.connectionTypes}
+            components={sidebarState.components}
+            connections={sidebarState.connections}
+            onDiagramChange={(updated) =>
+              setSidebarState((s) => ({ ...s, diagrams: s.diagrams.map((d) => (d.id === updated.id ? updated : d)) }))
+            }
+            onConnectionCreated={(conn) =>
+              setSidebarState((s) => ({ ...s, connections: [...s.connections, conn] }))
+            }
+            onClose={() => { setActiveDiagramId(null); setView("canvas"); }}
+          />
+        )}
+        <section className="tool-area" style={view === "diagram" ? { display: "none" } : undefined}>
           <div className="toolbar">
             <button onClick={createElement} title="Add element"><Plus size={18} /> Element</button>
             <button onClick={runImpactAnalysis} title="Run impact analysis"><Activity size={18} /> Impact</button>
@@ -426,7 +502,7 @@ export default function App() {
           {view === "audit" && <AuditLog entries={auditLog} />}
         </section>
 
-        <aside className="side-panel">
+        <aside className="side-panel" style={view === "diagram" ? { display: "none" } : undefined}>
           <PropertyPanel
             element={selectedElement}
             onPatch={patchElement}
@@ -442,12 +518,13 @@ export default function App() {
           <ImpactList model={model} results={impactResults} mode={impactMode} />
         </aside>
       </main>
+      </div>
     </div>
   );
 }
 
 function ViewHelp({ view }: { view: View }) {
-  const content: Record<View, { title: string; text: string }> = {
+  const content: Partial<Record<View, { title: string; text: string }>> = {
     canvas: {
       title: "Architecture Canvas",
       text: "Models EAM elements and directed relations. It answers: how are business, application, data and technology elements connected?"
@@ -470,10 +547,13 @@ function ViewHelp({ view }: { view: View }) {
     }
   };
 
+  const entry = content[view];
+  if (!entry) return null;
+
   return (
     <div className="view-help">
-      <strong>{content[view].title}</strong>
-      <span>{content[view].text}</span>
+      <strong>{entry.title}</strong>
+      <span>{entry.text}</span>
     </div>
   );
 }

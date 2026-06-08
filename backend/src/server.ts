@@ -1,5 +1,6 @@
 import cors from "cors";
 import express from "express";
+import sidebarRouter from "./Sidebar/sidebarRoutes.js";
 import {
   addElement,
   addRelation,
@@ -25,6 +26,8 @@ const port = Number(process.env.PORT ?? 4000);
 
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
+
+app.use("/api/sidebar", sidebarRouter);
 
 app.get("/api/model", async (_req, res, next) => {
   try {
