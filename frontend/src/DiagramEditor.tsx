@@ -5,14 +5,12 @@ import ReactFlow, {
   Handle,
   MarkerType,
   MiniMap,
-  NodeResizer,
   Position,
   ReactFlowProvider,
   useReactFlow,
   type Connection,
   type Edge,
   type Node,
-  type NodeDragHandler,
   type NodeProps,
   useEdgesState,
   useNodesState
@@ -72,7 +70,50 @@ const lineStyleDash: Record<string, string | undefined> = {
 
 /* ── Custom Node: rendert Komponenten je nach Form (BPMN-angelehnt) ─────────── */
 
-const POOL_DEFAULT = { width: 480, height: 260 };
+const SHAPE_DEFAULTS: Record<ComponentShape, { width: number; height: number }> = {
+  box: { width: 160, height: 72 },
+  process: { width: 160, height: 72 },
+  datastore: { width: 140, height: 80 },
+  event: { width: 110, height: 110 },
+  "event-start": { width: 110, height: 110 },
+  "event-end": { width: 110, height: 110 },
+  gateway: { width: 120, height: 100 },
+  "gateway-xor": { width: 120, height: 100 },
+  "gateway-and": { width: 120, height: 100 },
+  "gateway-or": { width: 120, height: 100 },
+  pool: { width: 480, height: 260 }
+};
+
+const SHAPE_MIN_SIZES: Record<ComponentShape, { width: number; height: number }> = {
+  box: { width: 80, height: 48 },
+  process: { width: 80, height: 48 },
+  datastore: { width: 90, height: 56 },
+  event: { width: 64, height: 64 },
+  "event-start": { width: 64, height: 64 },
+  "event-end": { width: 64, height: 64 },
+  gateway: { width: 72, height: 72 },
+  "gateway-xor": { width: 72, height: 72 },
+  "gateway-and": { width: 72, height: 72 },
+  "gateway-or": { width: 72, height: 72 },
+  pool: { width: 240, height: 140 }
+};
+
+function shapeDefaultSize(shape: ComponentShape) {
+  return SHAPE_DEFAULTS[shape] ?? SHAPE_DEFAULTS.box;
+}
+
+type ResizeDirection = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+
+const RESIZE_HANDLES: { dir: ResizeDirection; className: string }[] = [
+  { dir: "nw", className: "node-resize-corner node-resize-nw" },
+  { dir: "n", className: "node-resize-edge node-resize-n" },
+  { dir: "ne", className: "node-resize-corner node-resize-ne" },
+  { dir: "e", className: "node-resize-edge node-resize-e" },
+  { dir: "se", className: "node-resize-corner node-resize-se" },
+  { dir: "s", className: "node-resize-edge node-resize-s" },
+  { dir: "sw", className: "node-resize-corner node-resize-sw" },
+  { dir: "w", className: "node-resize-edge node-resize-w" }
+];
 
 interface ShapedNodeData {
   name: string;
@@ -80,11 +121,223 @@ interface ShapedNodeData {
   color: string;
   shape: ComponentShape;
   isSource: boolean;
-  onResizeEnd?: (nodeId: string, pos: { x: number; y: number; width: number; height: number }) => void;
+  showInteraction: boolean;
+  onInteractionStart?: (nodeId: string) => void;
+  onTransformEnd?: (nodeId: string, pos: { x: number; y: number; width: number; height: number }) => void;
+}
+
+type NodeTransform = { x: number; y: number; width: number; height: number };
+
+/**
+ * Interaktions-Overlay mit strikt getrennten Zonen:
+ * - Mitte (node-move-zone): NUR verschieben
+ * - Kanten: NUR in einer Richtung skalieren
+ * - Ecken: NUR in zwei Richtungen skalieren
+ * Resize-Zonen liegen über der Move-Zone (z-index), damit keine Konflikte entstehen.
+ */
+function NodeInteractionOverlay({
+  nodeId,
+  shape,
+  visible,
+  onInteractionStart,
+  onTransformEnd
+}: {
+  nodeId: string;
+  shape: ComponentShape;
+  visible: boolean;
+  onInteractionStart?: ShapedNodeData["onInteractionStart"];
+  onTransformEnd?: ShapedNodeData["onTransformEnd"];
+}) {
+  const { getNode, setNodes, getZoom } = useReactFlow();
+  const mins = SHAPE_MIN_SIZES[shape] ?? SHAPE_MIN_SIZES.box;
+  const resizeSessionRef = useRef<{
+    dir: ResizeDirection;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    px: number;
+    py: number;
+  } | null>(null);
+  const moveSessionRef = useRef<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    px: number;
+    py: number;
+  } | null>(null);
+
+  if (!visible) return null;
+
+  function applyTransform(transform: NodeTransform) {
+    setNodes((nodes) =>
+      nodes.map((n) =>
+        n.id === nodeId
+          ? {
+              ...n,
+              width: transform.width,
+              height: transform.height,
+              position: { x: transform.x, y: transform.y },
+              style: { ...n.style, width: transform.width, height: transform.height }
+            }
+          : n
+      )
+    );
+  }
+
+  function computeResize(dir: ResizeDirection, clientX: number, clientY: number) {
+    const start = resizeSessionRef.current;
+    if (!start) return null;
+    const zoom = getZoom();
+    const dx = (clientX - start.px) / zoom;
+    const dy = (clientY - start.py) / zoom;
+
+    let { x, y, width, height } = start;
+
+    if (dir.includes("e")) width = Math.max(mins.width, start.width + dx);
+    if (dir.includes("w")) {
+      const nextW = Math.max(mins.width, start.width - dx);
+      x = start.x + (start.width - nextW);
+      width = nextW;
+    }
+    if (dir.includes("s")) height = Math.max(mins.height, start.height + dy);
+    if (dir.includes("n")) {
+      const nextH = Math.max(mins.height, start.height - dy);
+      y = start.y + (start.height - nextH);
+      height = nextH;
+    }
+
+    return { x, y, width, height };
+  }
+
+  function computeMove(clientX: number, clientY: number) {
+    const start = moveSessionRef.current;
+    if (!start) return null;
+    const zoom = getZoom();
+    const dx = (clientX - start.px) / zoom;
+    const dy = (clientY - start.py) / zoom;
+    return { x: start.x + dx, y: start.y + dy, width: start.width, height: start.height };
+  }
+
+  function bindPointerSession(
+    target: HTMLElement,
+    e: React.PointerEvent,
+    onMove: (ev: PointerEvent) => void,
+    onFinish: (ev: PointerEvent) => void
+  ) {
+    target.setPointerCapture(e.pointerId);
+    const onUp = (ev: PointerEvent) => {
+      target.releasePointerCapture(ev.pointerId);
+      target.removeEventListener("pointermove", onMove);
+      target.removeEventListener("pointerup", onUp);
+      target.removeEventListener("pointercancel", onUp);
+      onFinish(ev);
+    };
+    target.addEventListener("pointermove", onMove);
+    target.addEventListener("pointerup", onUp);
+    target.addEventListener("pointercancel", onUp);
+  }
+
+  function onResizePointerDown(dir: ResizeDirection) {
+    return (e: React.PointerEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const node = getNode(nodeId);
+      if (!node?.width || !node?.height) return;
+
+      onInteractionStart?.(nodeId);
+      resizeSessionRef.current = {
+        dir,
+        x: node.position.x,
+        y: node.position.y,
+        width: node.width,
+        height: node.height,
+        px: e.clientX,
+        py: e.clientY
+      };
+
+      const target = e.currentTarget as HTMLElement;
+      bindPointerSession(
+        target,
+        e,
+        (ev) => {
+          const transform = computeResize(dir, ev.clientX, ev.clientY);
+          if (transform) applyTransform(transform);
+        },
+        (ev) => {
+          const transform = computeResize(dir, ev.clientX, ev.clientY);
+          resizeSessionRef.current = null;
+          if (transform) onTransformEnd?.(nodeId, transform);
+        }
+      );
+    };
+  }
+
+  function onMovePointerDown(e: React.PointerEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+    const node = getNode(nodeId);
+    if (!node?.width || !node?.height) return;
+
+    onInteractionStart?.(nodeId);
+    moveSessionRef.current = {
+      x: node.position.x,
+      y: node.position.y,
+      width: node.width,
+      height: node.height,
+      px: e.clientX,
+      py: e.clientY
+    };
+
+    const target = e.currentTarget as HTMLElement;
+    bindPointerSession(
+      target,
+      e,
+      (ev) => {
+        const transform = computeMove(ev.clientX, ev.clientY);
+        if (transform) applyTransform(transform);
+      },
+      (ev) => {
+        const transform = computeMove(ev.clientX, ev.clientY);
+        moveSessionRef.current = null;
+        if (transform) onTransformEnd?.(nodeId, transform);
+      }
+    );
+  }
+
+  return (
+    <div className="node-interaction-overlay nodrag nopan nowheel">
+      <div
+        className="node-move-zone nodrag nopan nowheel"
+        onPointerDown={onMovePointerDown}
+      />
+      {RESIZE_HANDLES.map(({ dir, className }) => (
+        <div
+          key={dir}
+          className={`node-resize-zone nodrag nopan nowheel ${className}`}
+          onPointerDown={onResizePointerDown(dir)}
+        />
+      ))}
+    </div>
+  );
 }
 
 function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
   const { name, typeName, color, shape, isSource } = data;
+  const showOverlay = !!(selected || data.showInteraction);
+  const shellClass = (base: string) =>
+    `${base}${isSource ? " is-source" : ""}${selected ? " is-node-selected" : ""}${showOverlay ? " is-interaction-visible" : ""}`;
+
+  const interactionOverlay = (
+    <NodeInteractionOverlay
+      nodeId={id}
+      shape={shape}
+      visible={showOverlay}
+      onInteractionStart={data.onInteractionStart}
+      onTransformEnd={data.onTransformEnd}
+    />
+  );
 
   const handles = (
     <>
@@ -95,17 +348,8 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
 
   if (shape === "pool") {
     return (
-      <div className={`shaped-node shape-pool${isSource ? " is-source" : ""}`} style={{ borderColor: color }}>
-        <NodeResizer
-          isVisible={selected}
-          minWidth={240}
-          minHeight={140}
-          lineClassName="shape-pool-resize-line"
-          handleClassName="shape-pool-resize-handle"
-          onResizeEnd={(_e, params) =>
-            data.onResizeEnd?.(id, { x: params.x, y: params.y, width: params.width, height: params.height })
-          }
-        />
+      <div className={shellClass("shaped-node shape-pool")} style={{ borderColor: color }}>
+        {interactionOverlay}
         <div className="shape-pool-band" style={{ background: color }}>
           <span>{name}</span>
         </div>
@@ -120,7 +364,8 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
   if (shape === "event" || shape === "event-start" || shape === "event-end") {
     const variant = shape === "event-start" ? "start" : shape === "event-end" ? "end" : "intermediate";
     return (
-      <div className={`shaped-node shape-event${isSource ? " is-source" : ""}`}>
+      <div className={shellClass("shaped-node shape-event")}>
+        {interactionOverlay}
         <div className={`shape-event-circle shape-event-circle--${variant}`} style={{ borderColor: color }}>
           {variant === "intermediate" && <div className="shape-event-inner" style={{ borderColor: color }} />}
           <strong>{name}</strong>
@@ -134,7 +379,8 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
   if (shape === "gateway" || shape === "gateway-xor" || shape === "gateway-and" || shape === "gateway-or") {
     const marker = shape === "gateway-xor" ? "✕" : shape === "gateway-and" ? "+" : shape === "gateway-or" ? "○" : null;
     return (
-      <div className={`shaped-node shape-gateway${isSource ? " is-source" : ""}`}>
+      <div className={shellClass("shaped-node shape-gateway")}>
+        {interactionOverlay}
         <div className="shape-gateway-diamond" style={{ borderColor: color }}>
           {marker && <span className="shape-gateway-marker" style={{ color }}>{marker}</span>}
         </div>
@@ -149,7 +395,8 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
 
   if (shape === "datastore") {
     return (
-      <div className={`shaped-node shape-datastore${isSource ? " is-source" : ""}`} style={{ borderColor: color }}>
+      <div className={shellClass("shaped-node shape-datastore")} style={{ borderColor: color }}>
+        {interactionOverlay}
         <div className="shape-datastore-top" style={{ borderColor: color }} />
         <strong>{name}</strong>
         <span>{typeName}</span>
@@ -160,7 +407,8 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
 
   if (shape === "process") {
     return (
-      <div className={`shaped-node shape-process${isSource ? " is-source" : ""}`} style={{ borderColor: color }}>
+      <div className={shellClass("shaped-node shape-process")} style={{ borderColor: color }}>
+        {interactionOverlay}
         <strong>{name}</strong>
         <span>{typeName}</span>
         {handles}
@@ -170,9 +418,10 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
 
   return (
     <div
-      className={`shaped-node shape-box${isSource ? " is-source" : ""}`}
+      className={shellClass("shaped-node shape-box")}
       style={{ borderColor: color, borderLeftColor: color }}
     >
+      {interactionOverlay}
       <strong>{name}</strong>
       <span>{typeName}</span>
       {handles}
@@ -187,7 +436,10 @@ function buildNodes(
   components: ComponentInstance[],
   componentTypes: ComponentType[],
   connectingFrom: string | null,
-  onResizeEnd: ShapedNodeData["onResizeEnd"]
+  hoveredNodeId: string | null,
+  activeNodeId: string | null,
+  onInteractionStart: ShapedNodeData["onInteractionStart"],
+  onTransformEnd: ShapedNodeData["onTransformEnd"]
 ): Node[] {
   return diagram.componentIds.flatMap((id) => {
     const comp = components.find((c) => c.id === id);
@@ -196,28 +448,28 @@ function buildNodes(
     const shape = type?.shape ?? "box";
     const pos = diagram.positions[id] ?? { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 };
     const isPool = shape === "pool";
+    const defaults = shapeDefaultSize(shape);
+    const width = pos.width ?? defaults.width;
+    const height = pos.height ?? defaults.height;
     const node: Node = {
       id: comp.id,
       type: "shaped",
       position: { x: pos.x, y: pos.y },
+      width,
+      height,
       data: {
         name: comp.name,
         typeName: type?.name ?? "?",
         color: type?.color ?? "#cbd5e1",
         shape,
         isSource: connectingFrom === id,
-        onResizeEnd
+        showInteraction: id === hoveredNodeId || id === activeNodeId,
+        onInteractionStart,
+        onTransformEnd
       } satisfies ShapedNodeData,
-      // Pools liegen hinter den anderen Knoten, damit man Elemente darauf platzieren kann
-      ...(isPool
-        ? {
-            zIndex: -1,
-            style: {
-              width: pos.width ?? POOL_DEFAULT.width,
-              height: pos.height ?? POOL_DEFAULT.height
-            }
-          }
-        : {})
+      style: { width, height },
+      draggable: false,
+      ...(isPool ? { zIndex: -1 } : {})
     };
     return [node];
   });
@@ -426,12 +678,24 @@ function DiagramEditorInner({
   onSelectConnection,
   onClose
 }: Props) {
-  // Pool-Größe nach Skalieren persistieren (inkl. Position, falls oben/links gezogen wurde)
+  // Knotengröße nach Skalieren persistieren (inkl. Position, falls oben/links gezogen wurde)
   const diagramRef = useRef(diagram);
   diagramRef.current = diagram;
+  const hoverLeaveTimer = useRef<number>();
+  const activeNodeIdRef = useRef<string | null>(null);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
+  activeNodeIdRef.current = activeNodeId;
 
-  const onPoolResizeEnd = useCallback(
+  const onInteractionStart = useCallback((nodeId: string) => {
+    window.clearTimeout(hoverLeaveTimer.current);
+    setActiveNodeId(nodeId);
+    setHoveredNodeId(nodeId);
+  }, []);
+
+  const onNodeTransformEnd = useCallback(
     async (nodeId: string, pos: { x: number; y: number; width: number; height: number }) => {
+      setActiveNodeId(null);
       const current = diagramRef.current;
       const updatedPositions = { ...current.positions, [nodeId]: pos };
       const updated = await sidebarApi.updateDiagram(current.id, { positions: updatedPositions });
@@ -441,7 +705,7 @@ function DiagramEditorInner({
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(
-    buildNodes(diagram, components, componentTypes, null, onPoolResizeEnd)
+    buildNodes(diagram, components, componentTypes, null, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd)
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState(
     buildEdges(diagram, connections, connectionTypes)
@@ -457,9 +721,11 @@ function DiagramEditorInner({
   const { screenToFlowPosition } = useReactFlow();
 
   useEffect(() => {
-    setNodes(buildNodes(diagram, components, componentTypes, connectingFrom, onPoolResizeEnd));
+    setNodes(buildNodes(diagram, components, componentTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd));
     setEdges(buildEdges(diagram, connections, connectionTypes));
-  }, [diagram.componentIds, diagram.connectionIds, components, componentTypes, connections, connectingFrom]);
+  }, [diagram, components, componentTypes, connections, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd]);
+
+  useEffect(() => () => window.clearTimeout(hoverLeaveTimer.current), []);
 
   // Close context menu on outside click
   useEffect(() => {
@@ -567,19 +833,6 @@ function DiagramEditorInner({
     onDiagramChange(updated);
     setContextMenu((m) => ({ ...m, visible: false }));
   }
-
-  // ── Drag stop ───────────────────────────────────────────────────────────────
-
-  const onNodeDragStop: NodeDragHandler = useCallback(
-    async (_event, node) => {
-      // Bestehende Größe (z. B. von Pools) beim Verschieben nicht verlieren
-      const prev = diagram.positions[node.id];
-      const updatedPositions = { ...diagram.positions, [node.id]: { ...prev, ...node.position } };
-      const updated = await sidebarApi.updateDiagram(diagram.id, { positions: updatedPositions });
-      onDiagramChange(updated);
-    },
-    [diagram, onDiagramChange]
-  );
 
   // ── Drop aus Sidebar/Palette ────────────────────────────────────────────────
 
@@ -738,7 +991,7 @@ function DiagramEditorInner({
         </button>
         <strong className="diagram-title">{diagram.name}</strong>
         <span className="muted diagram-hint">
-          Aus der Palette ziehen · Klick auf Knoten/Verbindung zeigt Eigenschaften · Rechtsklick für Optionen
+          Hover: Mitte = verschieben · Kanten = eine Richtung · Ecken = beide Richtungen
         </span>
         <button className="diagram-close-btn" onClick={onClose} title="Tab schließen"><X size={16} /></button>
       </div>
@@ -777,13 +1030,23 @@ function DiagramEditorInner({
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
+            nodesDraggable={false}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
             onEdgeClick={onEdgeClick}
             onNodeContextMenu={onNodeContextMenu}
-            onNodeDragStop={onNodeDragStop}
+            onNodeMouseEnter={(_e, node) => {
+              window.clearTimeout(hoverLeaveTimer.current);
+              setHoveredNodeId(node.id);
+            }}
+            onNodeMouseLeave={(_e, node) => {
+              if (activeNodeIdRef.current === node.id) return;
+              hoverLeaveTimer.current = window.setTimeout(() => {
+                setHoveredNodeId((prev) => (prev === node.id ? null : prev));
+              }, 120);
+            }}
             fitView
           >
             <MiniMap nodeStrokeWidth={3} pannable zoomable />
