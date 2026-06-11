@@ -2037,6 +2037,22 @@ tr.attention td {
   align-items: center;
 }
 
+.diagram-create-type {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.diagram-create-type strong {
+  color: #172033;
+}
+
 /* ── Context menu ─────────────────────────────────────────────────────────── */
 
 .diagram-context-menu {
@@ -2198,6 +2214,7 @@ tr.attention td {
 }
 
 .shape-event-circle {
+  position: relative;
   width: 84px;
   height: 84px;
   border-radius: 50%;
@@ -2210,6 +2227,23 @@ tr.attention td {
   padding: 8px;
   overflow: hidden;
   box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06);
+}
+
+/* BPMN-Ereignis-Varianten: Start = dünn, Zwischen = Doppelkreis, Ende = dick */
+.shape-event-circle--start {
+  border-width: 2px;
+}
+
+.shape-event-circle--end {
+  border-width: 5px;
+}
+
+.shape-event-inner {
+  position: absolute;
+  inset: 3px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 50%;
+  pointer-events: none;
 }
 
 .shape-event-circle strong {
@@ -2238,6 +2272,18 @@ tr.attention td {
   border-radius: 6px;
   transform: rotate(45deg);
   box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* XOR/AND/OR-Marker in der Raute (zurückgedreht) */
+.shape-gateway-marker {
+  transform: rotate(-45deg);
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+  user-select: none;
 }
 
 .shape-gateway-label {
@@ -2364,13 +2410,26 @@ tr.attention td {
   border-radius: 6px;
 }
 
-.shape-glyph--event {
+.shape-glyph--event,
+.shape-glyph--event-start,
+.shape-glyph--event-end {
   width: 12px;
   height: 12px;
   border-radius: 50%;
 }
 
-.shape-glyph--gateway {
+.shape-glyph--event-start {
+  border-width: 1px;
+}
+
+.shape-glyph--event-end {
+  border-width: 3px;
+}
+
+.shape-glyph--gateway,
+.shape-glyph--gateway-xor,
+.shape-glyph--gateway-and,
+.shape-glyph--gateway-or {
   width: 10px;
   height: 10px;
   transform: rotate(45deg);
@@ -2391,7 +2450,10 @@ tr.attention td {
   scale: 1.8;
 }
 
-.shape-glyph--lg.shape-glyph--gateway {
+.shape-glyph--lg.shape-glyph--gateway,
+.shape-glyph--lg.shape-glyph--gateway-xor,
+.shape-glyph--lg.shape-glyph--gateway-and,
+.shape-glyph--lg.shape-glyph--gateway-or {
   scale: 1.6;
 }
 

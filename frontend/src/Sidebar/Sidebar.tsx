@@ -15,7 +15,7 @@ import {
   X
 } from "lucide-react";
 import { sidebarApi } from "./sidebarApi";
-import { COMPONENT_DRAG_MIME, DEFAULT_TYPE_CATEGORY } from "./sidebarTypes";
+import { COMPONENT_DRAG_MIME, COMPONENT_TYPE_DRAG_MIME, DEFAULT_TYPE_CATEGORY } from "./sidebarTypes";
 import type { ComponentType, SidebarState } from "./sidebarTypes";
 
 export type SidebarSelection =
@@ -228,7 +228,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     setOpenTypeCategories((p) => ({ ...p, [cat]: !isTypeCategoryOpen(cat) }));
   }
 
-  const typeCategory = (ct: ComponentType) => ct.category?.trim() || DEFAULT_TYPE_CATEGORY;
+  const typeCategory = (ct: { category?: string }) => ct.category?.trim() || DEFAULT_TYPE_CATEGORY;
 
   const toggle = useCallback((key: keyof typeof open) => {
     setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -451,6 +451,12 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               onClick={() => onSelect({ kind: "componentType", id: ct.id })}
               onDelete={() => deleteComponentType(ct.id)}
               onContextMenu={(e) => openContextMenu(e, "componentType", ct.id, ct.name)}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(COMPONENT_TYPE_DRAG_MIME, ct.id);
+                e.dataTransfer.effectAllowed = "copy";
+              }}
+              dragHint="In ein offenes Diagramm ziehen, um eine neue Komponente dieses Typs zu erstellen"
               renaming={isRenaming("componentType", ct.id)}
               onRenameSubmit={(name) => renameItem("componentType", ct.id, name)}
               onRenameCancel={() => setRenaming(null)}
@@ -507,20 +513,61 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
         active={isActive({ kind: "connectionTypes" })}
         count={connectionTypes.length}
       >
-        {visibleConnectionTypes.map((ct) => (
-          <Row
-            key={ct.id}
-            label={ct.name}
-            color={ct.color}
-            active={isActive({ kind: "connectionType", id: ct.id })}
-            onClick={() => onSelect({ kind: "connectionType", id: ct.id })}
-            onDelete={() => deleteConnectionType(ct.id)}
-            onContextMenu={(e) => openContextMenu(e, "connectionType", ct.id, ct.name)}
-            renaming={isRenaming("connectionType", ct.id)}
-            onRenameSubmit={(name) => renameItem("connectionType", ct.id, name)}
-            onRenameCancel={() => setRenaming(null)}
-          />
-        ))}
+        {(() => {
+          const categories = [...new Set(visibleConnectionTypes.map(typeCategory))].sort((a, b) => {
+            if (a === DEFAULT_TYPE_CATEGORY) return -1;
+            if (b === DEFAULT_TYPE_CATEGORY) return 1;
+            return a.localeCompare(b);
+          });
+
+          const renderConnTypeRow = (ct: (typeof connectionTypes)[number]) => (
+            <Row
+              key={ct.id}
+              label={ct.name}
+              color={ct.color}
+              active={isActive({ kind: "connectionType", id: ct.id })}
+              onClick={() => onSelect({ kind: "connectionType", id: ct.id })}
+              onDelete={() => deleteConnectionType(ct.id)}
+              onContextMenu={(e) => openContextMenu(e, "connectionType", ct.id, ct.name)}
+              renaming={isRenaming("connectionType", ct.id)}
+              onRenameSubmit={(name) => renameItem("connectionType", ct.id, name)}
+              onRenameCancel={() => setRenaming(null)}
+            />
+          );
+
+          // Nur eine Kategorie → flache Liste ohne unnötige Verschachtelung
+          if (categories.length <= 1) {
+            return visibleConnectionTypes.map(renderConnTypeRow);
+          }
+
+          return categories.map((cat) => {
+            const items = visibleConnectionTypes.filter((ct) => typeCategory(ct) === cat);
+            const key = `conn:${cat}`;
+            const catOpen = isTypeCategoryOpen(key) || searching;
+            return (
+              <div key={key} className="sb-type-group">
+                <div
+                  className="sb-type-group-header"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleTypeCategory(key)}
+                  onKeyDown={(e) => e.key === "Enter" && toggleTypeCategory(key)}
+                >
+                  <span className="sb-chevron">
+                    {catOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                  </span>
+                  <span className="sb-type-group-label">{cat}</span>
+                  <span className="sb-type-group-count">{items.length}</span>
+                </div>
+                {catOpen && (
+                  <div className="sb-type-group-children">
+                    {items.map(renderConnTypeRow)}
+                  </div>
+                )}
+              </div>
+            );
+          });
+        })()}
         {connectionTypes.length === 0 && (
           <EmptyHint text="Noch keine Typen definiert." actionLabel="Typ anlegen" onAction={addConnectionType} />
         )}

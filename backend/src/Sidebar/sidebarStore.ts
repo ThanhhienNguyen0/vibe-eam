@@ -69,23 +69,73 @@ const defaultState: SidebarState = {
       category: "BPMN"
     },
     {
+      id: "ct-task",
+      name: "Aufgabe",
+      color: "#2563eb",
+      icon: "box",
+      description: "BPMN-Aufgabe / Task.",
+      customPropertyKeys: ["rolle"],
+      shape: "process",
+      category: "BPMN"
+    },
+    {
+      id: "ct-event-start",
+      name: "Start-Ereignis",
+      color: "#16a34a",
+      icon: "box",
+      description: "BPMN-Start-Ereignis (dünner Kreis).",
+      customPropertyKeys: ["ausloeser"],
+      shape: "event-start",
+      category: "BPMN"
+    },
+    {
       id: "ct-event",
-      name: "Ereignis",
+      name: "Zwischenereignis",
       color: "#ca8a04",
       icon: "box",
-      description: "BPMN-Ereignis (Start, Ende, Zwischenereignis).",
+      description: "BPMN-Zwischenereignis (Doppelkreis).",
       customPropertyKeys: ["ereignisart"],
       shape: "event",
       category: "BPMN"
     },
     {
-      id: "ct-gateway",
-      name: "Gateway",
+      id: "ct-event-end",
+      name: "End-Ereignis",
+      color: "#dc2626",
+      icon: "box",
+      description: "BPMN-End-Ereignis (dicker Kreis).",
+      customPropertyKeys: ["ergebnis"],
+      shape: "event-end",
+      category: "BPMN"
+    },
+    {
+      id: "ct-gw-xor",
+      name: "XOR-Gateway",
       color: "#9333ea",
       icon: "box",
-      description: "BPMN-Gateway für Verzweigungen.",
+      description: "Exklusives Gateway – genau ein Pfad wird gewählt.",
       customPropertyKeys: ["bedingung"],
-      shape: "gateway",
+      shape: "gateway-xor",
+      category: "BPMN"
+    },
+    {
+      id: "ct-gw-and",
+      name: "AND-Gateway",
+      color: "#9333ea",
+      icon: "box",
+      description: "Paralleles Gateway – alle Pfade werden ausgeführt.",
+      customPropertyKeys: [],
+      shape: "gateway-and",
+      category: "BPMN"
+    },
+    {
+      id: "ct-gw-or",
+      name: "OR-Gateway",
+      color: "#9333ea",
+      icon: "box",
+      description: "Inklusives Gateway – ein oder mehrere Pfade.",
+      customPropertyKeys: ["bedingung"],
+      shape: "gateway-or",
       category: "BPMN"
     }
   ],
@@ -116,6 +166,36 @@ const defaultState: SidebarState = {
       allowedSourceTypeIds: [],
       allowedTargetTypeIds: [],
       description: "Two components communicate with each other."
+    },
+    {
+      id: "conn-seq",
+      name: "Sequenzfluss",
+      color: "#172033",
+      lineStyle: "solid",
+      allowedSourceTypeIds: ["ct-event-start", "ct-task", "ct-event", "ct-gw-xor", "ct-gw-and", "ct-gw-or"],
+      allowedTargetTypeIds: ["ct-event-end", "ct-task", "ct-event", "ct-gw-xor", "ct-gw-and", "ct-gw-or"],
+      description: "BPMN-Sequenzfluss: Reihenfolge im Prozess. Start hat keinen Eingang, Ende keinen Ausgang, keine Pools.",
+      category: "BPMN"
+    },
+    {
+      id: "conn-msg",
+      name: "Nachrichtenfluss",
+      color: "#0e7490",
+      lineStyle: "dashed",
+      allowedSourceTypeIds: ["ct-pool", "ct-task", "ct-event-start", "ct-event", "ct-event-end"],
+      allowedTargetTypeIds: ["ct-pool", "ct-task", "ct-event-start", "ct-event", "ct-event-end"],
+      description: "BPMN-Nachrichtenfluss: Kommunikation zwischen Pools/Teilnehmern.",
+      category: "BPMN"
+    },
+    {
+      id: "conn-assoc",
+      name: "Assoziation",
+      color: "#94a3b8",
+      lineStyle: "dotted",
+      allowedSourceTypeIds: [],
+      allowedTargetTypeIds: [],
+      description: "BPMN-Assoziation: verknüpft Artefakte/Daten mit Flusselementen.",
+      category: "BPMN"
     }
   ],
   components: [],

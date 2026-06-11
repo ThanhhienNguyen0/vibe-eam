@@ -106,13 +106,14 @@ router.get("/connection-types", async (_req, res, next) => {
 
 router.post("/connection-types", async (req, res, next) => {
   try {
-    const { name, color, lineStyle, allowedSourceTypeIds, allowedTargetTypeIds, description } = req.body as {
+    const { name, color, lineStyle, allowedSourceTypeIds, allowedTargetTypeIds, description, category } = req.body as {
       name?: string;
       color?: string;
       lineStyle?: string;
       allowedSourceTypeIds?: string[];
       allowedTargetTypeIds?: string[];
       description?: string;
+      category?: string;
     };
     if (!name?.trim()) return res.status(400).json({ error: "name is required." });
     const ct = await addConnectionType({
@@ -122,7 +123,8 @@ router.post("/connection-types", async (req, res, next) => {
       lineStyle: (lineStyle as "solid" | "dashed" | "dotted") ?? "solid",
       allowedSourceTypeIds: allowedSourceTypeIds ?? [],
       allowedTargetTypeIds: allowedTargetTypeIds ?? [],
-      description: description ?? ""
+      description: description ?? "",
+      category: category?.trim() || "Standard"
     });
     res.status(201).json(ct);
   } catch (err) {

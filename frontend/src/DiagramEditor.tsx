@@ -19,7 +19,7 @@ import ReactFlow, {
 } from "reactflow";
 import { GitBranch, MousePointerClick, PanelLeftClose, PanelLeftOpen, Search, SlidersHorizontal, X } from "lucide-react";
 import { sidebarApi } from "./Sidebar/sidebarApi";
-import { COMPONENT_DRAG_MIME } from "./Sidebar/sidebarTypes";
+import { COMPONENT_DRAG_MIME, COMPONENT_TYPE_DRAG_MIME } from "./Sidebar/sidebarTypes";
 import type {
   ComponentInstance,
   ComponentShape,
@@ -38,6 +38,7 @@ interface Props {
   connections: ConnectionInstance[];
   onDiagramChange: (updated: Diagram) => void;
   onConnectionCreated: (conn: ConnectionInstance) => void;
+  onComponentCreated: (comp: ComponentInstance) => void;
   onSelectComponent: (id: string) => void;
   onSelectConnection: (id: string) => void;
   onClose: () => void;
@@ -116,10 +117,12 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
     );
   }
 
-  if (shape === "event") {
+  if (shape === "event" || shape === "event-start" || shape === "event-end") {
+    const variant = shape === "event-start" ? "start" : shape === "event-end" ? "end" : "intermediate";
     return (
       <div className={`shaped-node shape-event${isSource ? " is-source" : ""}`}>
-        <div className="shape-event-circle" style={{ borderColor: color }}>
+        <div className={`shape-event-circle shape-event-circle--${variant}`} style={{ borderColor: color }}>
+          {variant === "intermediate" && <div className="shape-event-inner" style={{ borderColor: color }} />}
           <strong>{name}</strong>
         </div>
         <span className="shape-caption">{typeName}</span>
@@ -128,10 +131,13 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
     );
   }
 
-  if (shape === "gateway") {
+  if (shape === "gateway" || shape === "gateway-xor" || shape === "gateway-and" || shape === "gateway-or") {
+    const marker = shape === "gateway-xor" ? "✕" : shape === "gateway-and" ? "+" : shape === "gateway-or" ? "○" : null;
     return (
       <div className={`shaped-node shape-gateway${isSource ? " is-source" : ""}`}>
-        <div className="shape-gateway-diamond" style={{ borderColor: color }} />
+        <div className="shape-gateway-diamond" style={{ borderColor: color }}>
+          {marker && <span className="shape-gateway-marker" style={{ color }}>{marker}</span>}
+        </div>
         <div className="shape-gateway-label">
           <strong>{name}</strong>
           <span className="shape-caption">{typeName}</span>
@@ -344,6 +350,67 @@ function PaletteItem({
   );
 }
 
+/* ── Dialog: Neue Komponente aus gezogenem Typ erstellen ────────────────────── */
+
+function CreateComponentDialog({
+  type,
+  onConfirm,
+  onCancel
+}: {
+  type: ComponentType;
+  onConfirm: (name: string, properties: Record<string, string>) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [properties, setProperties] = useState<Record<string, string>>({});
+  const canConfirm = name.trim().length > 0;
+
+  function confirm() {
+    if (canConfirm) onConfirm(name.trim(), properties);
+  }
+
+  return (
+    <div className="diagram-suggestion-overlay" onKeyDown={(e) => e.key === "Escape" && onCancel()}>
+      <div className="diagram-suggestion-card">
+        <div className="diagram-suggestion-header">
+          <strong>Neue Komponente erstellen</strong>
+          <button className="sb-close-btn" onClick={onCancel}><X size={14} /></button>
+        </div>
+        <div className="diagram-create-type">
+          <span className={`shape-glyph shape-glyph--${type.shape ?? "box"}`} style={{ borderColor: type.color }} />
+          <span>Typ: <strong>{type.name}</strong></span>
+        </div>
+        <div className="sb-form">
+          <label>Name
+            <input
+              autoFocus
+              value={name}
+              placeholder={`Neue ${type.name}`}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && confirm()}
+            />
+          </label>
+          {type.customPropertyKeys.map((k) => (
+            <label key={k}>{k}
+              <input
+                value={properties[k] ?? ""}
+                onChange={(e) => setProperties((p) => ({ ...p, [k]: e.target.value }))}
+                onKeyDown={(e) => e.key === "Enter" && confirm()}
+              />
+            </label>
+          ))}
+        </div>
+        <div className="diagram-suggestion-actions">
+          <button className="sb-save-btn" style={{ margin: 0 }} disabled={!canConfirm} onClick={confirm}>
+            Erstellen & einfügen
+          </button>
+          <button onClick={onCancel}>Abbrechen</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Editor ─────────────────────────────────────────────────────────────────── */
 
 function DiagramEditorInner({
@@ -354,6 +421,7 @@ function DiagramEditorInner({
   connections,
   onDiagramChange,
   onConnectionCreated,
+  onComponentCreated,
   onSelectComponent,
   onSelectConnection,
   onClose
@@ -380,6 +448,7 @@ function DiagramEditorInner({
   );
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [pendingAdd, setPendingAdd] = useState<PendingAdd | null>(null);
+  const [pendingCreate, setPendingCreate] = useState<{ typeId: string; position: DiagramPosition } | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenu>({ visible: false, x: 0, y: 0, nodeId: "" });
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -418,7 +487,11 @@ function DiagramEditorInner({
         return srcOk && tgtOk;
       });
 
-      const connType = allowed[0] ?? connectionTypes[0];
+      // Spezifischere Typen (mit eingeschränkten Quell-/Ziel-Listen) gewinnen
+      // gegenüber Catch-all-Typen ohne Einschränkungen.
+      const specificity = (ct: ConnectionType) =>
+        (ct.allowedSourceTypeIds.length > 0 ? 1 : 0) + (ct.allowedTargetTypeIds.length > 0 ? 1 : 0);
+      const connType = [...allowed].sort((a, b) => specificity(b) - specificity(a))[0] ?? connectionTypes[0];
       if (!connType) { setError("Keine Verbindungs-Typen definiert."); return; }
 
       try {
@@ -511,7 +584,10 @@ function DiagramEditorInner({
   // ── Drop aus Sidebar/Palette ────────────────────────────────────────────────
 
   const onCanvasDragOver = useCallback((e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes(COMPONENT_DRAG_MIME)) return;
+    const accepts =
+      e.dataTransfer.types.includes(COMPONENT_DRAG_MIME) ||
+      e.dataTransfer.types.includes(COMPONENT_TYPE_DRAG_MIME);
+    if (!accepts) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
     setIsDragOver(true);
@@ -525,14 +601,47 @@ function DiagramEditorInner({
   const onCanvasDrop = useCallback(
     (e: React.DragEvent) => {
       setIsDragOver(false);
+      const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+
+      // Typ gezogen → Dialog zum Erstellen einer neuen Komponente
+      const typeId = e.dataTransfer.getData(COMPONENT_TYPE_DRAG_MIME);
+      if (typeId) {
+        e.preventDefault();
+        setPendingCreate({ typeId, position });
+        return;
+      }
+
+      // Bestehende Komponente gezogen → direkt hinzufügen
       const compId = e.dataTransfer.getData(COMPONENT_DRAG_MIME);
       if (!compId) return;
       e.preventDefault();
-      const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       startAddComponent(compId, position);
     },
     [screenToFlowPosition, diagram, connections, components]
   );
+
+  async function createAndPlaceComponent(name: string, properties: Record<string, string>) {
+    if (!pendingCreate) return;
+    const { typeId, position } = pendingCreate;
+    try {
+      const comp = await sidebarApi.createComponent({
+        name,
+        componentTypeId: typeId,
+        properties,
+        description: ""
+      });
+      onComponentCreated(comp);
+      const updated = await sidebarApi.updateDiagram(diagram.id, {
+        componentIds: [...diagram.componentIds, comp.id],
+        positions: { ...diagram.positions, [comp.id]: position }
+      });
+      onDiagramChange(updated);
+      setPendingCreate(null);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Komponente konnte nicht erstellt werden.");
+    }
+  }
 
   // ── Smart add ───────────────────────────────────────────────────────────────
 
@@ -691,6 +800,19 @@ function DiagramEditorInner({
           )}
         </div>
       </div>
+
+      {/* ── Dialog: neue Komponente aus gezogenem Typ ───────────────────────── */}
+      {pendingCreate && (() => {
+        const type = componentTypes.find((t) => t.id === pendingCreate.typeId);
+        if (!type) return null;
+        return (
+          <CreateComponentDialog
+            type={type}
+            onConfirm={createAndPlaceComponent}
+            onCancel={() => setPendingCreate(null)}
+          />
+        );
+      })()}
 
       {/* ── Smart-add suggestion overlay ────────────────────────────────────── */}
       {pendingAdd && (() => {

@@ -80,10 +80,10 @@
     },
     {
       "id": "4d45b97a-308d-4382-ad67-e82c2440366a",
-      "name": "Ereignis",
+      "name": "Zwischenereignis",
       "color": "#ca8a04",
       "icon": "box",
-      "description": "BPMN-Ereignis (Start, Ende, Zwischenereignis).",
+      "description": "BPMN-Zwischenereignis (Doppelkreis).",
       "customPropertyKeys": [
         "ereignisart"
       ],
@@ -100,6 +100,76 @@
         "bedingung"
       ],
       "shape": "gateway",
+      "category": "BPMN"
+    },
+    {
+      "id": "ae8393e0-8b41-46f3-a1cc-7648c44e02f1",
+      "name": "Aufgabe",
+      "color": "#2563eb",
+      "icon": "box",
+      "description": "BPMN-Aufgabe / Task.",
+      "customPropertyKeys": [
+        "rolle"
+      ],
+      "shape": "process",
+      "category": "BPMN"
+    },
+    {
+      "id": "2aadba47-0e18-4cd1-8b3c-8d54cd264591",
+      "name": "Start-Ereignis",
+      "color": "#16a34a",
+      "icon": "box",
+      "description": "BPMN-Start-Ereignis (dünner Kreis).",
+      "customPropertyKeys": [
+        "ausloeser"
+      ],
+      "shape": "event-start",
+      "category": "BPMN"
+    },
+    {
+      "id": "7c060520-dcd7-403c-9b33-b756f7cfea2e",
+      "name": "End-Ereignis",
+      "color": "#dc2626",
+      "icon": "box",
+      "description": "BPMN-End-Ereignis (dicker Kreis).",
+      "customPropertyKeys": [
+        "ergebnis"
+      ],
+      "shape": "event-end",
+      "category": "BPMN"
+    },
+    {
+      "id": "e3d00899-4507-4ddc-82db-c1ba0f4aab4f",
+      "name": "XOR-Gateway",
+      "color": "#9333ea",
+      "icon": "box",
+      "description": "Exklusives Gateway – genau ein Pfad wird gewählt.",
+      "customPropertyKeys": [
+        "bedingung"
+      ],
+      "shape": "gateway-xor",
+      "category": "BPMN"
+    },
+    {
+      "id": "1383c7f3-88a0-41b7-b74a-539f6ef2d482",
+      "name": "AND-Gateway",
+      "color": "#9333ea",
+      "icon": "box",
+      "description": "Paralleles Gateway – alle Pfade werden ausgeführt.",
+      "customPropertyKeys": [],
+      "shape": "gateway-and",
+      "category": "BPMN"
+    },
+    {
+      "id": "42785b8a-c314-4e7f-87b8-6a746604ca1e",
+      "name": "OR-Gateway",
+      "color": "#9333ea",
+      "icon": "box",
+      "description": "Inklusives Gateway – ein oder mehrere Pfade.",
+      "customPropertyKeys": [
+        "bedingung"
+      ],
+      "shape": "gateway-or",
       "category": "BPMN"
     }
   ],
@@ -152,6 +222,64 @@
       "allowedSourceTypeIds": [],
       "allowedTargetTypeIds": [],
       "description": "A verwendet B"
+    },
+    {
+      "id": "8487f629-41cd-41f2-b783-f19689eec61b",
+      "name": "Sequenzfluss",
+      "color": "#172033",
+      "lineStyle": "solid",
+      "allowedSourceTypeIds": [
+        "2aadba47-0e18-4cd1-8b3c-8d54cd264591",
+        "ae8393e0-8b41-46f3-a1cc-7648c44e02f1",
+        "4d45b97a-308d-4382-ad67-e82c2440366a",
+        "2c40eb50-cf89-47dc-91e3-20b7c10a74a7",
+        "e3d00899-4507-4ddc-82db-c1ba0f4aab4f",
+        "1383c7f3-88a0-41b7-b74a-539f6ef2d482",
+        "42785b8a-c314-4e7f-87b8-6a746604ca1e"
+      ],
+      "allowedTargetTypeIds": [
+        "7c060520-dcd7-403c-9b33-b756f7cfea2e",
+        "ae8393e0-8b41-46f3-a1cc-7648c44e02f1",
+        "4d45b97a-308d-4382-ad67-e82c2440366a",
+        "2c40eb50-cf89-47dc-91e3-20b7c10a74a7",
+        "e3d00899-4507-4ddc-82db-c1ba0f4aab4f",
+        "1383c7f3-88a0-41b7-b74a-539f6ef2d482",
+        "42785b8a-c314-4e7f-87b8-6a746604ca1e"
+      ],
+      "description": "BPMN-Sequenzfluss: Reihenfolge im Prozess. Start hat keinen Eingang, Ende keinen Ausgang, keine Pools.",
+      "category": "BPMN"
+    },
+    {
+      "id": "4a2fbae0-7a4b-44f9-b862-24d65035a13f",
+      "name": "Nachrichtenfluss",
+      "color": "#0e7490",
+      "lineStyle": "dashed",
+      "allowedSourceTypeIds": [
+        "a2c5ee60-68fa-4be8-a308-7534c6d03c84",
+        "ae8393e0-8b41-46f3-a1cc-7648c44e02f1",
+        "2aadba47-0e18-4cd1-8b3c-8d54cd264591",
+        "4d45b97a-308d-4382-ad67-e82c2440366a",
+        "7c060520-dcd7-403c-9b33-b756f7cfea2e"
+      ],
+      "allowedTargetTypeIds": [
+        "a2c5ee60-68fa-4be8-a308-7534c6d03c84",
+        "ae8393e0-8b41-46f3-a1cc-7648c44e02f1",
+        "2aadba47-0e18-4cd1-8b3c-8d54cd264591",
+        "4d45b97a-308d-4382-ad67-e82c2440366a",
+        "7c060520-dcd7-403c-9b33-b756f7cfea2e"
+      ],
+      "description": "BPMN-Nachrichtenfluss: Kommunikation zwischen Pools/Teilnehmern.",
+      "category": "BPMN"
+    },
+    {
+      "id": "6d27bf3e-0f94-4612-ad80-e917315c5126",
+      "name": "Assoziation",
+      "color": "#94a3b8",
+      "lineStyle": "dotted",
+      "allowedSourceTypeIds": [],
+      "allowedTargetTypeIds": [],
+      "description": "BPMN-Assoziation: verknüpft Artefakte/Daten mit Flusselementen.",
+      "category": "BPMN"
     }
   ],
   "components": [
@@ -182,6 +310,34 @@
       "componentTypeId": "2c40eb50-cf89-47dc-91e3-20b7c10a74a7",
       "properties": {},
       "description": ""
+    },
+    {
+      "id": "488139a7-612a-4043-a2b5-a322b1ee5b7a",
+      "name": "asd",
+      "componentTypeId": "a2c5ee60-68fa-4be8-a308-7534c6d03c84",
+      "properties": {},
+      "description": ""
+    },
+    {
+      "id": "87275a5f-f56a-41c9-83e6-93aa0d2f7342",
+      "name": "asd",
+      "componentTypeId": "2aadba47-0e18-4cd1-8b3c-8d54cd264591",
+      "properties": {},
+      "description": ""
+    },
+    {
+      "id": "952edc04-4303-47d0-baea-8d808d260f76",
+      "name": "asd",
+      "componentTypeId": "ct-app",
+      "properties": {},
+      "description": ""
+    },
+    {
+      "id": "23441052-d9c0-49aa-8962-cbe12b0dc5fb",
+      "name": "asd",
+      "componentTypeId": "ct-proc",
+      "properties": {},
+      "description": ""
     }
   ],
   "connections": [
@@ -192,6 +348,15 @@
       "sourceComponentId": "6d3787b9-9b22-4874-9462-f82a84017493",
       "targetComponentId": "c46518c2-d83d-4743-8d5b-2fa772ad778b",
       "description": ""
+    },
+    {
+      "id": "edccf7f8-ec97-4e69-b004-3599631358ce",
+      "name": "",
+      "connectionTypeId": "conn-dep",
+      "sourceComponentId": "23441052-d9c0-49aa-8962-cbe12b0dc5fb",
+      "targetComponentId": "952edc04-4303-47d0-baea-8d808d260f76",
+      "description": "",
+      "properties": {}
     }
   ],
   "diagrams": [
@@ -224,6 +389,35 @@
         "2ea8dfed-92ef-4a7c-b08b-abbdbca01da7": {
           "x": 132.3082317643309,
           "y": -88.15567635974287
+        }
+      }
+    },
+    {
+      "id": "cfe20825-f106-4817-8115-5bfb19b6b2ef",
+      "name": "BPMN",
+      "description": "",
+      "componentIds": [
+        "488139a7-612a-4043-a2b5-a322b1ee5b7a",
+        "87275a5f-f56a-41c9-83e6-93aa0d2f7342",
+        "952edc04-4303-47d0-baea-8d808d260f76"
+      ],
+      "connectionIds": [],
+      "positions": {
+        "488139a7-612a-4043-a2b5-a322b1ee5b7a": {
+          "x": 264.7261219111965,
+          "y": 355.08180532588074
+        },
+        "87275a5f-f56a-41c9-83e6-93aa0d2f7342": {
+          "x": 320.25603033972357,
+          "y": 434.77017563644023
+        },
+        "952edc04-4303-47d0-baea-8d808d260f76": {
+          "x": 365.6114341717449,
+          "y": 239.07127053259603
+        },
+        "23441052-d9c0-49aa-8962-cbe12b0dc5fb": {
+          "x": -48.45650378940434,
+          "y": 43.18842925824467
         }
       }
     }

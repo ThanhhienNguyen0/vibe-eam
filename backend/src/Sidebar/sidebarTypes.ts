@@ -1,4 +1,15 @@
-export type ComponentShape = "box" | "process" | "event" | "gateway" | "datastore" | "pool";
+export type ComponentShape =
+  | "box"
+  | "process"
+  | "event"
+  | "event-start"
+  | "event-end"
+  | "gateway"
+  | "gateway-xor"
+  | "gateway-and"
+  | "gateway-or"
+  | "datastore"
+  | "pool";
 
 export interface ComponentType {
   id: string;
@@ -19,6 +30,7 @@ export interface ConnectionType {
   allowedSourceTypeIds: string[];
   allowedTargetTypeIds: string[];
   description: string;
+  category?: string;
 }
 
 export interface ComponentInstance {

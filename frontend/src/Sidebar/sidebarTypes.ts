@@ -1,14 +1,33 @@
 /** DataTransfer-MIME-Type für Drag & Drop von Komponenten auf die Diagrammfläche. */
 export const COMPONENT_DRAG_MIME = "application/x-vibe-component";
 
+/** DataTransfer-MIME-Type für Drag & Drop von Komponenten-Typen (erstellt neue Instanz). */
+export const COMPONENT_TYPE_DRAG_MIME = "application/x-vibe-component-type";
+
 /** Darstellungsform einer Komponente im Diagramm (BPMN-angelehnt). */
-export type ComponentShape = "box" | "process" | "event" | "gateway" | "datastore" | "pool";
+export type ComponentShape =
+  | "box"
+  | "process"
+  | "event"
+  | "event-start"
+  | "event-end"
+  | "gateway"
+  | "gateway-xor"
+  | "gateway-and"
+  | "gateway-or"
+  | "datastore"
+  | "pool";
 
 export const COMPONENT_SHAPES: { value: ComponentShape; label: string }[] = [
   { value: "box", label: "Standard (Rechteck)" },
   { value: "process", label: "Prozess / Aufgabe (abgerundet)" },
-  { value: "event", label: "Ereignis (Kreis)" },
+  { value: "event-start", label: "Start-Ereignis (dünner Kreis)" },
+  { value: "event", label: "Zwischenereignis (Doppelkreis)" },
+  { value: "event-end", label: "End-Ereignis (dicker Kreis)" },
   { value: "gateway", label: "Gateway (Raute)" },
+  { value: "gateway-xor", label: "XOR-Gateway (Raute mit ✕)" },
+  { value: "gateway-and", label: "AND-Gateway (Raute mit +)" },
+  { value: "gateway-or", label: "OR-Gateway (Raute mit ○)" },
   { value: "datastore", label: "Datenspeicher (Zylinder)" },
   { value: "pool", label: "Pool / Container (groß, skalierbar)" }
 ];
@@ -37,6 +56,7 @@ export interface ConnectionType {
   allowedSourceTypeIds: string[];
   allowedTargetTypeIds: string[];
   description: string;
+  category?: string;
 }
 
 export interface ComponentInstance {

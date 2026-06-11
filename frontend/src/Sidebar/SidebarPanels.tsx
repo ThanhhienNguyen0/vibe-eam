@@ -102,6 +102,7 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
           key={ct.id}
           ct={ct}
           componentTypes={componentTypes}
+          existingCategories={[...new Set(connectionTypes.map((t) => t.category?.trim() || "Standard"))]}
           onSave={async (patch) => {
             const updated = await sidebarApi.updateConnectionType(ct.id, patch);
             onStateChange({ ...sidebarState, connectionTypes: connectionTypes.map((c) => (c.id === ct.id ? updated : c)) });
@@ -467,10 +468,12 @@ function ComponentTypeEditor({
 function ConnectionTypeEditor({
   ct,
   componentTypes,
+  existingCategories,
   onSave
 }: {
   ct: ConnectionType;
   componentTypes: ComponentType[];
+  existingCategories: string[];
   onSave: (p: Partial<ConnectionType>) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(ct);
@@ -488,6 +491,17 @@ function ConnectionTypeEditor({
   return (
     <div className="sb-form">
       <label>Name<input value={draft.name} onChange={(e) => set("name", e.target.value)} /></label>
+      <label>Kategorie <span className="muted">(Unterordner in der Sidebar)</span>
+        <input
+          value={draft.category ?? ""}
+          placeholder="Standard"
+          list="sb-conn-type-categories"
+          onChange={(e) => set("category", e.target.value)}
+        />
+        <datalist id="sb-conn-type-categories">
+          {existingCategories.map((c) => <option key={c} value={c} />)}
+        </datalist>
+      </label>
       <label>Beschreibung<textarea value={draft.description} onChange={(e) => set("description", e.target.value)} /></label>
       <div className="sb-two-col">
         <label>Farbe<input type="color" value={draft.color} onChange={(e) => set("color", e.target.value)} /></label>

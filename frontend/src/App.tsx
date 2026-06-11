@@ -86,6 +86,9 @@ export default function App() {
               onConnectionCreated={(conn) =>
                 setSidebarState((s) => ({ ...s, connections: [...s.connections, conn] }))
               }
+              onComponentCreated={(comp) =>
+                setSidebarState((s) => ({ ...s, components: [...s.components, comp] }))
+              }
               onSelectComponent={(id) => setSidebarSelection({ kind: "component", id })}
               onSelectConnection={(id) => setSidebarSelection({ kind: "connection", id })}
               onClose={() => setActiveDiagramId(null)}
