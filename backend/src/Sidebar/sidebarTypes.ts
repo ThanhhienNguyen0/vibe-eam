@@ -32,6 +32,7 @@ export interface ConnectionInstance {
   sourceComponentId: string;
   targetComponentId: string;
   description: string;
+  properties?: Record<string, string>;
 }
 
 export interface DiagramPosition {

@@ -1,3 +1,6 @@
+/** DataTransfer-MIME-Type für Drag & Drop von Komponenten auf die Diagrammfläche. */
+export const COMPONENT_DRAG_MIME = "application/x-vibe-component";
+
 export interface ComponentType {
   id: string;
   name: string;
@@ -32,6 +35,8 @@ export interface ConnectionInstance {
   sourceComponentId: string;
   targetComponentId: string;
   description: string;
+  /** Frei definierbare Key/Value-Eigenschaften (optional, ältere Daten haben das Feld nicht). */
+  properties?: Record<string, string>;
 }
 
 export interface DiagramPosition {

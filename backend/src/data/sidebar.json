@@ -58,7 +58,7 @@
     },
     {
       "id": "32241ce4-0325-46ad-9242-e8bab8ab7635",
-      "name": "Personen",
+      "name": "Person",
       "color": "#cdd920",
       "icon": "box",
       "description": "",
@@ -125,13 +125,6 @@
       "description": ""
     },
     {
-      "id": "a7210aae-09f1-4ed3-b36e-a58682d1d0ee",
-      "name": "Neue Komponente",
-      "componentTypeId": "ct-app",
-      "properties": {},
-      "description": ""
-    },
-    {
       "id": "6d3787b9-9b22-4874-9462-f82a84017493",
       "name": "Vertrieb",
       "componentTypeId": "32241ce4-0325-46ad-9242-e8bab8ab7635",
@@ -159,23 +152,28 @@
   "diagrams": [
     {
       "id": "305f4810-9ba7-467c-ac24-12357c3c450b",
-      "name": "Neues Diagramm",
-      "description": "",
+      "name": "MeinDia",
+      "description": "asd",
       "componentIds": [
-        "c46518c2-d83d-4743-8d5b-2fa772ad778b",
-        "6d3787b9-9b22-4874-9462-f82a84017493"
+        "6d3787b9-9b22-4874-9462-f82a84017493",
+        "1ca5ac02-1fb6-4394-ad57-2af2f424425b",
+        "c46518c2-d83d-4743-8d5b-2fa772ad778b"
       ],
       "connectionIds": [
         "dc26e44b-b467-4f92-82d5-8a3b8145cefa"
       ],
       "positions": {
-        "a7210aae-09f1-4ed3-b36e-a58682d1d0ee": {
-          "x": 256.9249795478101,
-          "y": 211.5875763944302
-        },
         "6d3787b9-9b22-4874-9462-f82a84017493": {
-          "x": 164.5105145158651,
-          "y": 60.62721886270529
+          "x": -594.0533646798738,
+          "y": -332.16491724720936
+        },
+        "1ca5ac02-1fb6-4394-ad57-2af2f424425b": {
+          "x": -656.4458807723731,
+          "y": -488.75377363836174
+        },
+        "c46518c2-d83d-4743-8d5b-2fa772ad778b": {
+          "x": -597.3512306297936,
+          "y": -195.57622811661588
         }
       }
     }

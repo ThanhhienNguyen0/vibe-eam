@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Trash2, X } from "lucide-react";
+import { ArrowRight, GitBranch, LayoutDashboard, Plus, Trash2, X } from "lucide-react";
 import { sidebarApi } from "./sidebarApi";
 import type { SidebarSelection } from "./Sidebar";
 import type {
@@ -15,6 +15,7 @@ interface Props {
   selection: SidebarSelection | null;
   sidebarState: SidebarState;
   onStateChange: (next: SidebarState) => void;
+  onSelect: (sel: SidebarSelection) => void;
   onOpenDiagram: (id: string) => void;
   onClose: () => void;
 }
@@ -31,7 +32,7 @@ function DetailWrapper({ title, onClose, children }: { title: string; onClose: (
   );
 }
 
-export default function SidebarPanels({ selection, sidebarState, onStateChange, onOpenDiagram, onClose }: Props) {
+export default function SidebarPanels({ selection, sidebarState, onStateChange, onSelect, onOpenDiagram, onClose }: Props) {
   if (!selection) return null;
 
   const { componentTypes, connectionTypes, components, connections, diagrams } = sidebarState;
@@ -115,7 +116,12 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
           {components.map((comp) => {
             const type = componentTypes.find((t) => t.id === comp.componentTypeId);
             return (
-              <div key={comp.id} className="sb-instance-row" style={{ borderLeftColor: type?.color ?? "#cbd5e1" }}>
+              <div
+                key={comp.id}
+                className="sb-instance-row sb-diagram-row"
+                style={{ borderLeftColor: type?.color ?? "#cbd5e1" }}
+                onClick={() => onSelect({ kind: "component", id: comp.id })}
+              >
                 <strong>{comp.name}</strong>
                 <span className="muted">{type?.name ?? "Unbekannter Typ"}</span>
               </div>
@@ -136,6 +142,12 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
           key={comp.id}
           comp={comp}
           componentTypes={componentTypes}
+          connections={connections}
+          connectionTypes={connectionTypes}
+          components={components}
+          diagrams={diagrams}
+          onSelect={onSelect}
+          onOpenDiagram={onOpenDiagram}
           onSave={async (patch) => {
             const updated = await sidebarApi.updateComponent(comp.id, patch);
             onStateChange({ ...sidebarState, components: components.map((c) => (c.id === comp.id ? updated : c)) });
@@ -155,7 +167,12 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
             const tgt = components.find((c) => c.id === conn.targetComponentId);
             const type = connectionTypes.find((t) => t.id === conn.connectionTypeId);
             return (
-              <div key={conn.id} className="sb-instance-row" style={{ borderLeftColor: type?.color ?? "#cbd5e1" }}>
+              <div
+                key={conn.id}
+                className="sb-instance-row sb-diagram-row"
+                style={{ borderLeftColor: type?.color ?? "#cbd5e1" }}
+                onClick={() => onSelect({ kind: "connection", id: conn.id })}
+              >
                 <strong>{conn.name || `${src?.name ?? "?"} → ${tgt?.name ?? "?"}`}</strong>
                 <span className="muted">{type?.name ?? "Unbekannter Typ"}</span>
               </div>
@@ -170,13 +187,18 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
   if (selection.kind === "connection") {
     const conn = connections.find((c) => c.id === selection.id);
     if (!conn) return null;
+    const src = components.find((c) => c.id === conn.sourceComponentId);
+    const tgt = components.find((c) => c.id === conn.targetComponentId);
     return (
-      <DetailWrapper title={conn.name || "Verbindung"} onClose={onClose}>
+      <DetailWrapper title={conn.name || `${src?.name ?? "?"} → ${tgt?.name ?? "?"}`} onClose={onClose}>
         <ConnectionEditor
           key={conn.id}
           conn={conn}
           connectionTypes={connectionTypes}
           components={components}
+          diagrams={diagrams}
+          onSelect={onSelect}
+          onOpenDiagram={onOpenDiagram}
           onSave={async (patch) => {
             const updated = await sidebarApi.updateConnection(conn.id, patch);
             onStateChange({ ...sidebarState, connections: connections.map((c) => (c.id === conn.id ? updated : c)) });
@@ -224,6 +246,144 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
   return null;
 }
 
+// ── Individuelle Key/Value-Eigenschaften (wiederverwendbar) ───────────────────
+
+function CustomPropertiesSection({
+  properties,
+  reservedKeys,
+  onChange
+}: {
+  properties: Record<string, string>;
+  /** Schlüssel, die bereits über den Typ definiert sind und hier nicht doppelt auftauchen sollen. */
+  reservedKeys: string[];
+  onChange: (next: Record<string, string>) => void;
+}) {
+  const [newKey, setNewKey] = useState("");
+  const [newValue, setNewValue] = useState("");
+
+  const customEntries = Object.entries(properties).filter(([k]) => !reservedKeys.includes(k));
+
+  function addProperty() {
+    const key = newKey.trim();
+    if (!key || key in properties || reservedKeys.includes(key)) return;
+    onChange({ ...properties, [key]: newValue });
+    setNewKey("");
+    setNewValue("");
+  }
+
+  function removeProperty(key: string) {
+    const next = { ...properties };
+    delete next[key];
+    onChange(next);
+  }
+
+  return (
+    <>
+      <h3>Individuelle Eigenschaften</h3>
+      {customEntries.length === 0 && (
+        <p className="muted sb-custom-hint">Noch keine eigenen Eigenschaften. Füge unten Schlüssel und Wert hinzu.</p>
+      )}
+      {customEntries.map(([key, value]) => (
+        <div key={key} className="sb-attr-row">
+          <span>{key}</span>
+          <input value={value} onChange={(e) => onChange({ ...properties, [key]: e.target.value })} />
+          <button className="sb-icon-btn" title="Eigenschaft entfernen" onClick={() => removeProperty(key)}>
+            <Trash2 size={13} />
+          </button>
+        </div>
+      ))}
+      <div className="sb-attr-row">
+        <input
+          placeholder="Schlüssel"
+          value={newKey}
+          onChange={(e) => setNewKey(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && addProperty()}
+        />
+        <input
+          placeholder="Wert"
+          value={newValue}
+          onChange={(e) => setNewValue(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && addProperty()}
+        />
+        <button className="sb-add-prop-btn" title="Eigenschaft hinzufügen" onClick={addProperty} disabled={!newKey.trim()}>
+          <Plus size={14} />
+        </button>
+      </div>
+    </>
+  );
+}
+
+// ── Verknüpfungs-Infos (Verbindungen / Diagramme) ─────────────────────────────
+
+function LinkedConnections({
+  compId,
+  connections,
+  connectionTypes,
+  components,
+  onSelect
+}: {
+  compId: string;
+  connections: ConnectionInstance[];
+  connectionTypes: ConnectionType[];
+  components: ComponentInstance[];
+  onSelect: (sel: SidebarSelection) => void;
+}) {
+  const related = connections.filter((c) => c.sourceComponentId === compId || c.targetComponentId === compId);
+
+  return (
+    <>
+      <h3>Verbindungen <span className="sb-count-badge">{related.length}</span></h3>
+      {related.length === 0 && <p className="muted sb-custom-hint">Keine Verbindungen zu anderen Komponenten.</p>}
+      <div className="sb-link-list">
+        {related.map((conn) => {
+          const type = connectionTypes.find((t) => t.id === conn.connectionTypeId);
+          const isOutgoing = conn.sourceComponentId === compId;
+          const otherId = isOutgoing ? conn.targetComponentId : conn.sourceComponentId;
+          const other = components.find((c) => c.id === otherId);
+          return (
+            <button key={conn.id} className="sb-link-row" onClick={() => onSelect({ kind: "connection", id: conn.id })}>
+              <GitBranch size={13} style={{ color: type?.color ?? "#94a3b8" }} />
+              <span className="sb-link-label">
+                {isOutgoing ? "→" : "←"} <strong>{other?.name ?? "?"}</strong>
+                <span className="muted"> · {type?.name ?? "?"}</span>
+              </span>
+              <ArrowRight size={12} className="sb-link-arrow" />
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function LinkedDiagrams({
+  diagrams,
+  isIncluded,
+  onOpenDiagram
+}: {
+  diagrams: Diagram[];
+  isIncluded: (d: Diagram) => boolean;
+  onOpenDiagram: (id: string) => void;
+}) {
+  const included = diagrams.filter(isIncluded);
+
+  return (
+    <>
+      <h3>In Diagrammen <span className="sb-count-badge">{included.length}</span></h3>
+      {included.length === 0 && <p className="muted sb-custom-hint">In keinem Diagramm enthalten.</p>}
+      <div className="sb-link-list">
+        {included.map((d) => (
+          <button key={d.id} className="sb-link-row" onClick={() => onOpenDiagram(d.id)} title="Diagramm öffnen">
+            <LayoutDashboard size={13} />
+            <span className="sb-link-label"><strong>{d.name}</strong></span>
+            <ArrowRight size={12} className="sb-link-arrow" />
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
 // ── ComponentTypeEditor ───────────────────────────────────────────────────────
 
 function ComponentTypeEditor({ ct, onSave }: { ct: ComponentType; onSave: (p: Partial<ComponentType>) => Promise<void> }) {
@@ -259,7 +419,8 @@ function ComponentTypeEditor({ ct, onSave }: { ct: ComponentType; onSave: (p: Pa
           </select>
         </label>
       </div>
-      <h3>Benutzerdefinierte Eigenschaften</h3>
+      <h3>Eigenschafts-Schlüssel für diesen Typ</h3>
+      <p className="muted sb-custom-hint">Diese Felder bekommt jede Komponente dieses Typs automatisch.</p>
       {draft.customPropertyKeys.map((k) => (
         <div key={k} className="sb-attr-row">
           <span>{k}</span>
@@ -342,10 +503,22 @@ function ConnectionTypeEditor({
 function ComponentEditor({
   comp,
   componentTypes,
+  connections,
+  connectionTypes,
+  components,
+  diagrams,
+  onSelect,
+  onOpenDiagram,
   onSave
 }: {
   comp: ComponentInstance;
   componentTypes: ComponentType[];
+  connections: ConnectionInstance[];
+  connectionTypes: ConnectionType[];
+  components: ComponentInstance[];
+  diagrams: Diagram[];
+  onSelect: (sel: SidebarSelection) => void;
+  onOpenDiagram: (id: string) => void;
   onSave: (p: Partial<ComponentInstance>) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(comp);
@@ -356,6 +529,7 @@ function ComponentEditor({
   }
 
   const selectedType = componentTypes.find((t) => t.id === draft.componentTypeId);
+  const typeKeys = selectedType?.customPropertyKeys ?? [];
 
   return (
     <div className="sb-form">
@@ -366,17 +540,39 @@ function ComponentEditor({
         </select>
       </label>
       <label>Beschreibung<textarea value={draft.description} onChange={(e) => set("description", e.target.value)} /></label>
-      {selectedType && selectedType.customPropertyKeys.length > 0 && (
+
+      {typeKeys.length > 0 && (
         <>
-          <h3>Eigenschaften</h3>
-          {selectedType.customPropertyKeys.map((k) => (
+          <h3>Typ-Eigenschaften <span className="muted">({selectedType?.name})</span></h3>
+          {typeKeys.map((k) => (
             <label key={k}>{k}
               <input value={draft.properties[k] ?? ""} onChange={(e) => set("properties", { ...draft.properties, [k]: e.target.value })} />
             </label>
           ))}
         </>
       )}
+
+      <CustomPropertiesSection
+        properties={draft.properties}
+        reservedKeys={typeKeys}
+        onChange={(next) => set("properties", next)}
+      />
+
       <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft)}>Speichern</button>
+
+      <LinkedConnections
+        compId={comp.id}
+        connections={connections}
+        connectionTypes={connectionTypes}
+        components={components}
+        onSelect={onSelect}
+      />
+
+      <LinkedDiagrams
+        diagrams={diagrams}
+        isIncluded={(d) => d.componentIds.includes(comp.id)}
+        onOpenDiagram={onOpenDiagram}
+      />
     </div>
   );
 }
@@ -387,15 +583,21 @@ function ConnectionEditor({
   conn,
   connectionTypes,
   components,
+  diagrams,
+  onSelect,
+  onOpenDiagram,
   onSave
 }: {
   conn: ConnectionInstance;
   connectionTypes: ConnectionType[];
   components: ComponentInstance[];
+  diagrams: Diagram[];
+  onSelect: (sel: SidebarSelection) => void;
+  onOpenDiagram: (id: string) => void;
   onSave: (p: Partial<ConnectionInstance>) => Promise<void>;
 }) {
-  const [draft, setDraft] = useState(conn);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(conn);
+  const [draft, setDraft] = useState<ConnectionInstance>({ ...conn, properties: conn.properties ?? {} });
+  const dirty = JSON.stringify(draft) !== JSON.stringify({ ...conn, properties: conn.properties ?? {} });
 
   function set<K extends keyof ConnectionInstance>(key: K, val: ConnectionInstance[K]) {
     setDraft((prev) => ({ ...prev, [key]: val }));
@@ -410,17 +612,48 @@ function ConnectionEditor({
         </select>
       </label>
       <label>Quelle
-        <select value={draft.sourceComponentId} onChange={(e) => set("sourceComponentId", e.target.value)}>
-          {components.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <div className="sb-endpoint-row">
+          <select value={draft.sourceComponentId} onChange={(e) => set("sourceComponentId", e.target.value)}>
+            {components.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <button
+            className="sb-jump-btn"
+            title="Zur Quell-Komponente springen"
+            onClick={() => onSelect({ kind: "component", id: draft.sourceComponentId })}
+          >
+            <ArrowRight size={13} />
+          </button>
+        </div>
       </label>
       <label>Ziel
-        <select value={draft.targetComponentId} onChange={(e) => set("targetComponentId", e.target.value)}>
-          {components.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <div className="sb-endpoint-row">
+          <select value={draft.targetComponentId} onChange={(e) => set("targetComponentId", e.target.value)}>
+            {components.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <button
+            className="sb-jump-btn"
+            title="Zur Ziel-Komponente springen"
+            onClick={() => onSelect({ kind: "component", id: draft.targetComponentId })}
+          >
+            <ArrowRight size={13} />
+          </button>
+        </div>
       </label>
       <label>Beschreibung<textarea value={draft.description} onChange={(e) => set("description", e.target.value)} /></label>
+
+      <CustomPropertiesSection
+        properties={draft.properties ?? {}}
+        reservedKeys={[]}
+        onChange={(next) => set("properties", next)}
+      />
+
       <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft)}>Speichern</button>
+
+      <LinkedDiagrams
+        diagrams={diagrams}
+        isIncluded={(d) => d.connectionIds.includes(conn.id)}
+        onOpenDiagram={onOpenDiagram}
+      />
     </div>
   );
 }

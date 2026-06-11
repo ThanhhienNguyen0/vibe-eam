@@ -210,12 +210,13 @@ router.get("/connections", async (_req, res, next) => {
 
 router.post("/connections", async (req, res, next) => {
   try {
-    const { name, connectionTypeId, sourceComponentId, targetComponentId, description } = req.body as {
+    const { name, connectionTypeId, sourceComponentId, targetComponentId, description, properties } = req.body as {
       name?: string;
       connectionTypeId?: string;
       sourceComponentId?: string;
       targetComponentId?: string;
       description?: string;
+      properties?: Record<string, string>;
     };
     if (!connectionTypeId) return res.status(400).json({ error: "connectionTypeId is required." });
     if (!sourceComponentId) return res.status(400).json({ error: "sourceComponentId is required." });
@@ -226,7 +227,8 @@ router.post("/connections", async (req, res, next) => {
       connectionTypeId,
       sourceComponentId,
       targetComponentId,
-      description: description ?? ""
+      description: description ?? "",
+      properties: properties ?? {}
     });
     res.status(201).json(conn);
   } catch (err) {

@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, {
   Background,
   Controls,
   MarkerType,
   MiniMap,
+  ReactFlowProvider,
+  useReactFlow,
   type Connection,
   type Edge,
   type Node,
@@ -11,14 +13,16 @@ import ReactFlow, {
   useEdgesState,
   useNodesState
 } from "reactflow";
-import { GitBranch, Plus, X } from "lucide-react";
+import { GitBranch, MousePointerClick, PanelLeftClose, PanelLeftOpen, Search, SlidersHorizontal, X } from "lucide-react";
 import { sidebarApi } from "./Sidebar/sidebarApi";
+import { COMPONENT_DRAG_MIME } from "./Sidebar/sidebarTypes";
 import type {
   ComponentInstance,
   ComponentType,
   ConnectionInstance,
   ConnectionType,
-  Diagram
+  Diagram,
+  DiagramPosition
 } from "./Sidebar/sidebarTypes";
 
 interface Props {
@@ -29,6 +33,8 @@ interface Props {
   connections: ConnectionInstance[];
   onDiagramChange: (updated: Diagram) => void;
   onConnectionCreated: (conn: ConnectionInstance) => void;
+  onSelectComponent: (id: string) => void;
+  onSelectConnection: (id: string) => void;
   onClose: () => void;
 }
 
@@ -42,6 +48,7 @@ interface Suggestion {
 interface PendingAdd {
   compId: string;
   suggestions: Suggestion[];
+  position?: DiagramPosition;
 }
 
 interface ContextMenu {
@@ -126,7 +133,94 @@ function buildEdges(
   });
 }
 
-export default function DiagramEditor({
+/* ── Komponenten-Palette (Drag & Drop oder Klick) ───────────────────────────── */
+
+interface PaletteProps {
+  components: ComponentInstance[];
+  componentTypes: ComponentType[];
+  onAdd: (compId: string) => void;
+}
+
+function Palette({ components, componentTypes, onAdd }: PaletteProps) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+
+  const visible = q
+    ? components.filter((c) => c.name.toLowerCase().includes(q))
+    : components;
+
+  const groups = useMemo(() => {
+    const usedTypeIds = [...new Set(visible.map((c) => c.componentTypeId))];
+    const grouped = componentTypes
+      .filter((ct) => usedTypeIds.includes(ct.id))
+      .map((ct) => ({ type: ct, items: visible.filter((c) => c.componentTypeId === ct.id) }));
+    const ungrouped = visible.filter((c) => !componentTypes.find((t) => t.id === c.componentTypeId));
+    return { grouped, ungrouped };
+  }, [visible, componentTypes]);
+
+  return (
+    <aside className="diagram-palette" aria-label="Komponenten-Palette">
+      <div className="diagram-palette-header">
+        <strong>Komponenten</strong>
+        <span className="muted">Ziehen oder klicken</span>
+      </div>
+      <div className="diagram-palette-search">
+        <Search size={12} />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Filtern…"
+          aria-label="Palette filtern"
+        />
+        {q && <button title="Filter leeren" onClick={() => setQuery("")}><X size={11} /></button>}
+      </div>
+      <div className="diagram-palette-list">
+        {groups.grouped.map(({ type, items }) => (
+          <div key={type.id} className="diagram-palette-group">
+            <div className="diagram-palette-group-label">
+              <span className="sb-color-dot" style={{ background: type.color }} />
+              {type.name}
+            </div>
+            {items.map((comp) => (
+              <PaletteItem key={comp.id} comp={comp} color={type.color} onAdd={onAdd} />
+            ))}
+          </div>
+        ))}
+        {groups.ungrouped.map((comp) => (
+          <PaletteItem key={comp.id} comp={comp} color="#cbd5e1" onAdd={onAdd} />
+        ))}
+        {components.length === 0 && (
+          <p className="diagram-palette-empty">Alle Komponenten sind bereits im Diagramm.</p>
+        )}
+        {components.length > 0 && visible.length === 0 && (
+          <p className="diagram-palette-empty">Keine Treffer.</p>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function PaletteItem({ comp, color, onAdd }: { comp: ComponentInstance; color: string; onAdd: (id: string) => void }) {
+  return (
+    <button
+      className="diagram-palette-item"
+      style={{ borderLeftColor: color }}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData(COMPONENT_DRAG_MIME, comp.id);
+        e.dataTransfer.effectAllowed = "copy";
+      }}
+      onClick={() => onAdd(comp.id)}
+      title="Auf die Fläche ziehen oder klicken zum Hinzufügen"
+    >
+      <strong>{comp.name}</strong>
+    </button>
+  );
+}
+
+/* ── Editor ─────────────────────────────────────────────────────────────────── */
+
+function DiagramEditorInner({
   diagram,
   componentTypes,
   connectionTypes,
@@ -134,6 +228,8 @@ export default function DiagramEditor({
   connections,
   onDiagramChange,
   onConnectionCreated,
+  onSelectComponent,
+  onSelectConnection,
   onClose
 }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState(
@@ -142,12 +238,14 @@ export default function DiagramEditor({
   const [edges, setEdges, onEdgesChange] = useEdgesState(
     buildEdges(diagram, connections, connectionTypes)
   );
-  const [showPicker, setShowPicker] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(true);
   const [pendingAdd, setPendingAdd] = useState<PendingAdd | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenu>({ visible: false, x: 0, y: 0, nodeId: "" });
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
+  const { screenToFlowPosition } = useReactFlow();
 
   useEffect(() => {
     setNodes(buildNodes(diagram, components, componentTypes, connectingFrom));
@@ -158,7 +256,7 @@ export default function DiagramEditor({
   useEffect(() => {
     if (!contextMenu.visible) return;
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      if (menuRef.current && !menuRef.current.contains(e.target as globalThis.Node)) {
         setContextMenu((m) => ({ ...m, visible: false }));
       }
     };
@@ -212,17 +310,27 @@ export default function DiagramEditor({
     [createConnectionBetween]
   );
 
-  // ── Node click: handle connect mode ────────────────────────────────────────
+  // ── Node click: connect mode oder Properties öffnen ────────────────────────
 
   const onNodeClick = useCallback(
     async (_e: React.MouseEvent, node: Node) => {
-      if (!connectingFrom) return;
+      if (!connectingFrom) {
+        onSelectComponent(node.id);
+        return;
+      }
       const target = node.id;
       setConnectingFrom(null);
       if (target === connectingFrom) return;
       await createConnectionBetween(connectingFrom, target);
     },
-    [connectingFrom, createConnectionBetween]
+    [connectingFrom, createConnectionBetween, onSelectComponent]
+  );
+
+  const onEdgeClick = useCallback(
+    (_e: React.MouseEvent, edge: Edge) => {
+      onSelectConnection(edge.id);
+    },
+    [onSelectConnection]
   );
 
   // ── Context menu ────────────────────────────────────────────────────────────
@@ -258,9 +366,35 @@ export default function DiagramEditor({
     [diagram, onDiagramChange]
   );
 
+  // ── Drop aus Sidebar/Palette ────────────────────────────────────────────────
+
+  const onCanvasDragOver = useCallback((e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes(COMPONENT_DRAG_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    setIsDragOver(true);
+  }, []);
+
+  const onCanvasDragLeave = useCallback((e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as globalThis.Node | null)) return;
+    setIsDragOver(false);
+  }, []);
+
+  const onCanvasDrop = useCallback(
+    (e: React.DragEvent) => {
+      setIsDragOver(false);
+      const compId = e.dataTransfer.getData(COMPONENT_DRAG_MIME);
+      if (!compId) return;
+      e.preventDefault();
+      const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      startAddComponent(compId, position);
+    },
+    [screenToFlowPosition, diagram, connections, components]
+  );
+
   // ── Smart add ───────────────────────────────────────────────────────────────
 
-  async function startAddComponent(compId: string) {
+  async function startAddComponent(compId: string, position?: DiagramPosition) {
     if (diagram.componentIds.includes(compId)) return;
 
     const related = connections.filter(
@@ -277,13 +411,11 @@ export default function DiagramEditor({
     });
 
     if (suggestions.length === 0) {
-      await doAdd(compId, [], []);
-      setShowPicker(false);
+      await doAdd(compId, [], [], position);
       return;
     }
 
-    setPendingAdd({ compId, suggestions });
-    setShowPicker(false);
+    setPendingAdd({ compId, suggestions, position });
   }
 
   function toggleSuggestion(index: number) {
@@ -292,7 +424,7 @@ export default function DiagramEditor({
     );
   }
 
-  async function doAdd(compId: string, extraCompIds: string[], extraConnIds: string[]) {
+  async function doAdd(compId: string, extraCompIds: string[], extraConnIds: string[], position?: DiagramPosition) {
     const newCompIds = [
       ...diagram.componentIds, compId,
       ...extraCompIds.filter((id) => !diagram.componentIds.includes(id))
@@ -301,36 +433,62 @@ export default function DiagramEditor({
       ...diagram.connectionIds,
       ...extraConnIds.filter((id) => !diagram.connectionIds.includes(id))
     ];
-    const updated = await sidebarApi.updateDiagram(diagram.id, { componentIds: newCompIds, connectionIds: newConnIds });
+    const newPositions = { ...diagram.positions };
+    if (position) {
+      newPositions[compId] = position;
+      // Mit-hinzugefügte Nachbarn fächerförmig neben der Drop-Position platzieren
+      extraCompIds.forEach((id, i) => {
+        if (!newPositions[id]) newPositions[id] = { x: position.x + 260, y: position.y + i * 110 };
+      });
+    }
+    const updated = await sidebarApi.updateDiagram(diagram.id, {
+      componentIds: newCompIds,
+      connectionIds: newConnIds,
+      positions: newPositions
+    });
     onDiagramChange(updated);
   }
 
   async function confirmAdd() {
     if (!pendingAdd) return;
     const selected = pendingAdd.suggestions.filter((s) => s.selected);
-    await doAdd(pendingAdd.compId, selected.flatMap((s) => (s.otherComp ? [s.otherComp.id] : [])), selected.map((s) => s.conn.id));
+    await doAdd(
+      pendingAdd.compId,
+      selected.flatMap((s) => (s.otherComp ? [s.otherComp.id] : [])),
+      selected.map((s) => s.conn.id),
+      pendingAdd.position
+    );
     setPendingAdd(null);
   }
 
   async function addCompOnly() {
     if (!pendingAdd) return;
-    await doAdd(pendingAdd.compId, [], []);
+    await doAdd(pendingAdd.compId, [], [], pendingAdd.position);
     setPendingAdd(null);
   }
 
   const availableComponents = components.filter((c) => !diagram.componentIds.includes(c.id));
   const contextComp = components.find((c) => c.id === contextMenu.nodeId);
+  const diagramIsEmpty = diagram.componentIds.length === 0;
 
   return (
     <div className="diagram-editor">
 
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
       <div className="diagram-toolbar">
-        <strong className="diagram-title">{diagram.name}</strong>
-        <button onClick={() => { setShowPicker((v) => !v); setPendingAdd(null); }} title="Komponente hinzufügen">
-          <Plus size={16} /> Komponente
+        <button
+          className="diagram-palette-toggle"
+          onClick={() => setPaletteOpen((v) => !v)}
+          title={paletteOpen ? "Palette ausblenden" : "Palette einblenden"}
+          aria-pressed={paletteOpen}
+        >
+          {paletteOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+          Palette
         </button>
-        <span className="muted diagram-hint">Rechtsklick auf Node für Optionen</span>
+        <strong className="diagram-title">{diagram.name}</strong>
+        <span className="muted diagram-hint">
+          Aus der Palette ziehen · Klick auf Knoten/Verbindung zeigt Eigenschaften · Rechtsklick für Optionen
+        </span>
         <button className="diagram-close-btn" onClick={onClose} title="Tab schließen"><X size={16} /></button>
       </div>
 
@@ -348,29 +506,48 @@ export default function DiagramEditor({
         );
       })()}
 
-      {/* ── Component picker ────────────────────────────────────────────────── */}
-      {showPicker && (
-        <div className="diagram-picker">
-          <strong>Komponente hinzufügen</strong>
-          {availableComponents.length === 0 && <p className="muted">Alle Komponenten bereits im Diagramm.</p>}
-          <div className="diagram-picker-list">
-            {availableComponents.map((comp) => {
-              const type = componentTypes.find((t) => t.id === comp.componentTypeId);
-              return (
-                <button
-                  key={comp.id}
-                  className="diagram-picker-item"
-                  style={{ borderLeftColor: type?.color ?? "#cbd5e1" }}
-                  onClick={() => startAddComponent(comp.id)}
-                >
-                  <strong>{comp.name}</strong>
-                  <span>{type?.name ?? "?"}</span>
-                </button>
-              );
-            })}
-          </div>
+      {/* ── Palette + Canvas ────────────────────────────────────────────────── */}
+      <div className="diagram-body">
+        {paletteOpen && (
+          <Palette
+            components={availableComponents}
+            componentTypes={componentTypes}
+            onAdd={(id) => startAddComponent(id)}
+          />
+        )}
+
+        <div
+          className={`diagram-canvas${isDragOver ? " diagram-canvas--drop" : ""}`}
+          onDragOver={onCanvasDragOver}
+          onDragLeave={onCanvasDragLeave}
+          onDrop={onCanvasDrop}
+        >
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onNodeClick={onNodeClick}
+            onEdgeClick={onEdgeClick}
+            onNodeContextMenu={onNodeContextMenu}
+            onNodeDragStop={onNodeDragStop}
+            fitView
+          >
+            <MiniMap nodeStrokeWidth={3} pannable zoomable />
+            <Controls />
+            <Background gap={24} />
+          </ReactFlow>
+
+          {diagramIsEmpty && (
+            <div className="diagram-empty-hint">
+              <MousePointerClick size={28} />
+              <strong>Diagramm ist noch leer</strong>
+              <span>Ziehe eine Komponente aus der Palette hierher{paletteOpen ? "" : " (Palette links einblenden)"} oder klicke sie an.</span>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* ── Smart-add suggestion overlay ────────────────────────────────────── */}
       {pendingAdd && (() => {
@@ -417,25 +594,6 @@ export default function DiagramEditor({
         );
       })()}
 
-      {/* ── ReactFlow canvas ────────────────────────────────────────────────── */}
-      <div className="diagram-canvas">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onNodeClick={onNodeClick}
-          onNodeContextMenu={onNodeContextMenu}
-          onNodeDragStop={onNodeDragStop}
-          fitView
-        >
-          <MiniMap nodeStrokeWidth={3} pannable zoomable />
-          <Controls />
-          <Background gap={24} />
-        </ReactFlow>
-      </div>
-
       {/* ── Context menu (fixed to viewport) ────────────────────────────────── */}
       {contextMenu.visible && (
         <div
@@ -447,6 +605,15 @@ export default function DiagramEditor({
           {contextComp && (
             <div className="diagram-context-label">{contextComp.name}</div>
           )}
+          <button
+            className="diagram-context-item"
+            onClick={() => {
+              onSelectComponent(contextMenu.nodeId);
+              setContextMenu((m) => ({ ...m, visible: false }));
+            }}
+          >
+            <SlidersHorizontal size={14} /> Eigenschaften anzeigen
+          </button>
           <button
             className="diagram-context-item"
             onClick={() => {
@@ -466,5 +633,13 @@ export default function DiagramEditor({
         </div>
       )}
     </div>
+  );
+}
+
+export default function DiagramEditor(props: Props) {
+  return (
+    <ReactFlowProvider>
+      <DiagramEditorInner {...props} />
+    </ReactFlowProvider>
   );
 }
