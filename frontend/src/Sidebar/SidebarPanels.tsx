@@ -2,8 +2,10 @@ import { useState } from "react";
 import { ArrowRight, GitBranch, LayoutDashboard, Plus, Trash2, X } from "lucide-react";
 import { sidebarApi } from "./sidebarApi";
 import type { SidebarSelection } from "./Sidebar";
+import { COMPONENT_SHAPES } from "./sidebarTypes";
 import type {
   ComponentInstance,
+  ComponentShape,
   ComponentType,
   ConnectionInstance,
   ConnectionType,
@@ -63,6 +65,7 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
         <ComponentTypeEditor
           key={ct.id}
           ct={ct}
+          existingCategories={[...new Set(componentTypes.map((t) => t.category?.trim() || "Standard"))]}
           onSave={async (patch) => {
             const updated = await sidebarApi.updateComponentType(ct.id, patch);
             onStateChange({ ...sidebarState, componentTypes: componentTypes.map((c) => (c.id === ct.id ? updated : c)) });
@@ -386,7 +389,15 @@ function LinkedDiagrams({
 
 // ── ComponentTypeEditor ───────────────────────────────────────────────────────
 
-function ComponentTypeEditor({ ct, onSave }: { ct: ComponentType; onSave: (p: Partial<ComponentType>) => Promise<void> }) {
+function ComponentTypeEditor({
+  ct,
+  existingCategories,
+  onSave
+}: {
+  ct: ComponentType;
+  existingCategories: string[];
+  onSave: (p: Partial<ComponentType>) => Promise<void>;
+}) {
   const [draft, setDraft] = useState(ct);
   const [newKey, setNewKey] = useState("");
   const dirty = JSON.stringify(draft) !== JSON.stringify(ct);
@@ -408,16 +419,31 @@ function ComponentTypeEditor({ ct, onSave }: { ct: ComponentType; onSave: (p: Pa
   return (
     <div className="sb-form">
       <label>Name<input value={draft.name} onChange={(e) => set("name", e.target.value)} /></label>
+      <label>Kategorie <span className="muted">(Unterordner in der Sidebar)</span>
+        <input
+          value={draft.category ?? ""}
+          placeholder="Standard"
+          list="sb-type-categories"
+          onChange={(e) => set("category", e.target.value)}
+        />
+        <datalist id="sb-type-categories">
+          {existingCategories.map((c) => <option key={c} value={c} />)}
+        </datalist>
+      </label>
       <label>Beschreibung<textarea value={draft.description} onChange={(e) => set("description", e.target.value)} /></label>
       <div className="sb-two-col">
         <label>Farbe<input type="color" value={draft.color} onChange={(e) => set("color", e.target.value)} /></label>
-        <label>Icon
-          <select value={draft.icon} onChange={(e) => set("icon", e.target.value)}>
-            {["app", "server", "db", "proc", "svc", "box"].map((i) => (
-              <option key={i} value={i}>{i}</option>
+        <label>Form im Diagramm
+          <select value={draft.shape ?? "box"} onChange={(e) => set("shape", e.target.value as ComponentShape)}>
+            {COMPONENT_SHAPES.map((s) => (
+              <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </select>
         </label>
+      </div>
+      <div className="sb-shape-preview-row">
+        <span className={`shape-glyph shape-glyph--lg shape-glyph--${draft.shape ?? "box"}`} style={{ borderColor: draft.color }} />
+        <span className="muted">So wird der Typ im Diagramm dargestellt.</span>
       </div>
       <h3>Eigenschafts-Schlüssel für diesen Typ</h3>
       <p className="muted sb-custom-hint">Diese Felder bekommt jede Komponente dieses Typs automatisch.</p>

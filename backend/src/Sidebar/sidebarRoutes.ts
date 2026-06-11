@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { ComponentShape } from "./sidebarTypes.js";
 import {
   addComponent,
   addComponentType,
@@ -47,12 +48,14 @@ router.get("/component-types", async (_req, res, next) => {
 
 router.post("/component-types", async (req, res, next) => {
   try {
-    const { name, color, icon, description, customPropertyKeys } = req.body as {
+    const { name, color, icon, description, customPropertyKeys, shape, category } = req.body as {
       name?: string;
       color?: string;
       icon?: string;
       description?: string;
       customPropertyKeys?: string[];
+      shape?: string;
+      category?: string;
     };
     if (!name?.trim()) return res.status(400).json({ error: "name is required." });
     const ct = await addComponentType({
@@ -61,7 +64,9 @@ router.post("/component-types", async (req, res, next) => {
       color: color ?? "#475569",
       icon: icon ?? "box",
       description: description ?? "",
-      customPropertyKeys: customPropertyKeys ?? []
+      customPropertyKeys: customPropertyKeys ?? [],
+      shape: (shape as ComponentShape) ?? "box",
+      category: category?.trim() || "Standard"
     });
     res.status(201).json(ct);
   } catch (err) {

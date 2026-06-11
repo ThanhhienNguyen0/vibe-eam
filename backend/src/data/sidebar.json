@@ -32,7 +32,8 @@
       "customPropertyKeys": [
         "engine",
         "version"
-      ]
+      ],
+      "shape": "datastore"
     },
     {
       "id": "ct-proc",
@@ -43,7 +44,8 @@
       "customPropertyKeys": [
         "owner",
         "sla"
-      ]
+      ],
+      "shape": "process"
     },
     {
       "id": "ct-svc",
@@ -63,6 +65,42 @@
       "icon": "box",
       "description": "",
       "customPropertyKeys": []
+    },
+    {
+      "id": "a2c5ee60-68fa-4be8-a308-7534c6d03c84",
+      "name": "Pool",
+      "color": "#0e7490",
+      "icon": "box",
+      "description": "BPMN-Pool / Container für Verantwortungsbereiche (z. B. Abteilung, System).",
+      "customPropertyKeys": [
+        "verantwortlich"
+      ],
+      "shape": "pool",
+      "category": "BPMN"
+    },
+    {
+      "id": "4d45b97a-308d-4382-ad67-e82c2440366a",
+      "name": "Ereignis",
+      "color": "#ca8a04",
+      "icon": "box",
+      "description": "BPMN-Ereignis (Start, Ende, Zwischenereignis).",
+      "customPropertyKeys": [
+        "ereignisart"
+      ],
+      "shape": "event",
+      "category": "BPMN"
+    },
+    {
+      "id": "2c40eb50-cf89-47dc-91e3-20b7c10a74a7",
+      "name": "Gateway",
+      "color": "#9333ea",
+      "icon": "box",
+      "description": "BPMN-Gateway für Verzweigungen und Zusammenführungen.",
+      "customPropertyKeys": [
+        "bedingung"
+      ],
+      "shape": "gateway",
+      "category": "BPMN"
     }
   ],
   "connectionTypes": [
@@ -137,6 +175,13 @@
       "componentTypeId": "32241ce4-0325-46ad-9242-e8bab8ab7635",
       "properties": {},
       "description": ""
+    },
+    {
+      "id": "2ea8dfed-92ef-4a7c-b08b-abbdbca01da7",
+      "name": "XXX",
+      "componentTypeId": "2c40eb50-cf89-47dc-91e3-20b7c10a74a7",
+      "properties": {},
+      "description": ""
     }
   ],
   "connections": [
@@ -157,7 +202,8 @@
       "componentIds": [
         "6d3787b9-9b22-4874-9462-f82a84017493",
         "1ca5ac02-1fb6-4394-ad57-2af2f424425b",
-        "c46518c2-d83d-4743-8d5b-2fa772ad778b"
+        "c46518c2-d83d-4743-8d5b-2fa772ad778b",
+        "2ea8dfed-92ef-4a7c-b08b-abbdbca01da7"
       ],
       "connectionIds": [
         "dc26e44b-b467-4f92-82d5-8a3b8145cefa"
@@ -174,6 +220,10 @@
         "c46518c2-d83d-4743-8d5b-2fa772ad778b": {
           "x": -597.3512306297936,
           "y": -195.57622811661588
+        },
+        "2ea8dfed-92ef-4a7c-b08b-abbdbca01da7": {
+          "x": 132.3082317643309,
+          "y": -88.15567635974287
         }
       }
     }

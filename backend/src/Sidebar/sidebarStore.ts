@@ -38,7 +38,8 @@ const defaultState: SidebarState = {
       color: "#7c3aed",
       icon: "db",
       description: "A database system.",
-      customPropertyKeys: ["engine", "version"]
+      customPropertyKeys: ["engine", "version"],
+      shape: "datastore"
     },
     {
       id: "ct-proc",
@@ -46,7 +47,8 @@ const defaultState: SidebarState = {
       color: "#0f766e",
       icon: "proc",
       description: "A business process.",
-      customPropertyKeys: ["owner", "sla"]
+      customPropertyKeys: ["owner", "sla"],
+      shape: "process"
     },
     {
       id: "ct-svc",
@@ -55,6 +57,36 @@ const defaultState: SidebarState = {
       icon: "svc",
       description: "An external or internal service.",
       customPropertyKeys: ["endpoint", "owner"]
+    },
+    {
+      id: "ct-pool",
+      name: "Pool",
+      color: "#0e7490",
+      icon: "box",
+      description: "BPMN-Pool / Container für Verantwortungsbereiche.",
+      customPropertyKeys: ["verantwortlich"],
+      shape: "pool",
+      category: "BPMN"
+    },
+    {
+      id: "ct-event",
+      name: "Ereignis",
+      color: "#ca8a04",
+      icon: "box",
+      description: "BPMN-Ereignis (Start, Ende, Zwischenereignis).",
+      customPropertyKeys: ["ereignisart"],
+      shape: "event",
+      category: "BPMN"
+    },
+    {
+      id: "ct-gateway",
+      name: "Gateway",
+      color: "#9333ea",
+      icon: "box",
+      description: "BPMN-Gateway für Verzweigungen.",
+      customPropertyKeys: ["bedingung"],
+      shape: "gateway",
+      category: "BPMN"
     }
   ],
   connectionTypes: [

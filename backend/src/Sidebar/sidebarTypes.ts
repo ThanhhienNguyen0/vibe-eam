@@ -1,3 +1,5 @@
+export type ComponentShape = "box" | "process" | "event" | "gateway" | "datastore" | "pool";
+
 export interface ComponentType {
   id: string;
   name: string;
@@ -5,6 +7,8 @@ export interface ComponentType {
   icon: string;
   description: string;
   customPropertyKeys: string[];
+  shape?: ComponentShape;
+  category?: string;
 }
 
 export interface ConnectionType {
@@ -38,6 +42,8 @@ export interface ConnectionInstance {
 export interface DiagramPosition {
   x: number;
   y: number;
+  width?: number;
+  height?: number;
 }
 
 export interface Diagram {

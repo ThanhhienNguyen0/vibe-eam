@@ -2131,6 +2131,284 @@ tr.attention td {
   color: #64748b;
 }
 
+/* ── Geformte Knoten (BPMN-angelehnt) ─────────────────────────────────────── */
+
+.react-flow__node-shaped {
+  background: transparent;
+  border: none;
+  padding: 0;
+  width: auto;
+}
+
+.shaped-node {
+  position: relative;
+  font-family: inherit;
+  color: #172033;
+}
+
+.shaped-node strong {
+  font-size: 13px;
+}
+
+.shaped-node > span,
+.shape-caption {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.shaped-node .react-flow__handle {
+  width: 8px;
+  height: 8px;
+  background: #94a3b8;
+  border: 2px solid #ffffff;
+}
+
+/* Standard-Rechteck */
+.shape-box {
+  display: grid;
+  gap: 3px;
+  min-width: 160px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 2px solid #cbd5e1;
+  border-left-width: 8px;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06);
+}
+
+/* Prozess / Aufgabe (BPMN-Task) */
+.shape-process {
+  display: grid;
+  gap: 3px;
+  min-width: 160px;
+  padding: 12px 16px;
+  background: #ffffff;
+  border: 2px solid #cbd5e1;
+  border-radius: 14px;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06);
+  text-align: center;
+}
+
+/* Ereignis (Kreis) */
+.shape-event {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: 110px;
+}
+
+.shape-event-circle {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  border: 3px solid #cbd5e1;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06);
+}
+
+.shape-event-circle strong {
+  font-size: 11px;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Gateway (Raute) */
+.shape-gateway {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: 120px;
+  padding-top: 10px;
+}
+
+.shape-gateway-diamond {
+  width: 56px;
+  height: 56px;
+  background: #ffffff;
+  border: 2px solid #cbd5e1;
+  border-radius: 6px;
+  transform: rotate(45deg);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06);
+}
+
+.shape-gateway-label {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  text-align: center;
+  max-width: 120px;
+}
+
+.shape-gateway-label strong {
+  font-size: 12px;
+}
+
+/* Datenspeicher (Zylinder) */
+.shape-datastore {
+  display: grid;
+  gap: 2px;
+  min-width: 140px;
+  padding: 18px 14px 10px;
+  background: #ffffff;
+  border: 2px solid #cbd5e1;
+  border-radius: 10px 10px 14px 14px;
+  text-align: center;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06);
+}
+
+.shape-datastore-top {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  height: 16px;
+  border: 2px solid #cbd5e1;
+  border-radius: 50%;
+  background: #f8fafc;
+}
+
+/* Pool / Container */
+.shape-pool {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background: rgba(248, 250, 252, 0.72);
+  border: 2px solid #cbd5e1;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.shape-pool-band {
+  width: 30px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shape-pool-band span {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  max-height: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shape-pool-body {
+  flex: 1;
+  padding: 8px 10px;
+}
+
+.shape-pool-body span {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.shape-pool-resize-line {
+  border-color: #2563eb;
+}
+
+.shape-pool-resize-handle {
+  width: 10px;
+  height: 10px;
+  background: #2563eb;
+  border-radius: 2px;
+}
+
+/* Verbinden-Modus & Auswahl */
+.shaped-node.is-source .shape-event-circle,
+.shaped-node.is-source .shape-gateway-diamond,
+.shape-box.is-source,
+.shape-process.is-source,
+.shape-datastore.is-source,
+.shape-pool.is-source {
+  box-shadow: 0 0 0 3px #bfdbfe;
+}
+
+.react-flow__node-shaped.selected .shape-box,
+.react-flow__node-shaped.selected .shape-process,
+.react-flow__node-shaped.selected .shape-datastore,
+.react-flow__node-shaped.selected .shape-pool,
+.react-flow__node-shaped.selected .shape-event-circle,
+.react-flow__node-shaped.selected .shape-gateway-diamond {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
+}
+
+/* ── Form-Glyphs (Palette & Typ-Editor) ───────────────────────────────────── */
+
+.shape-glyph {
+  display: inline-block;
+  width: 14px;
+  height: 11px;
+  border: 2px solid #cbd5e1;
+  border-radius: 3px;
+  background: #ffffff;
+  flex-shrink: 0;
+}
+
+.shape-glyph--process {
+  border-radius: 6px;
+}
+
+.shape-glyph--event {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.shape-glyph--gateway {
+  width: 10px;
+  height: 10px;
+  transform: rotate(45deg);
+  border-radius: 2px;
+}
+
+.shape-glyph--datastore {
+  border-radius: 50% 50% 5px 5px / 40% 40% 5px 5px;
+}
+
+.shape-glyph--pool {
+  width: 18px;
+  border-left-width: 5px;
+}
+
+.shape-glyph--lg {
+  transform-origin: center;
+  scale: 1.8;
+}
+
+.shape-glyph--lg.shape-glyph--gateway {
+  scale: 1.6;
+}
+
+.sb-shape-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 6px 14px;
+  font-size: 12px;
+}
+
+.diagram-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* ── Startansicht (Diagrammübersicht) ─────────────────────────────────────── */
 
 .home-view {

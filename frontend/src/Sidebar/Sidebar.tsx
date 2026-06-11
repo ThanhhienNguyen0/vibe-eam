@@ -15,8 +15,8 @@ import {
   X
 } from "lucide-react";
 import { sidebarApi } from "./sidebarApi";
-import { COMPONENT_DRAG_MIME } from "./sidebarTypes";
-import type { SidebarState } from "./sidebarTypes";
+import { COMPONENT_DRAG_MIME, DEFAULT_TYPE_CATEGORY } from "./sidebarTypes";
+import type { ComponentType, SidebarState } from "./sidebarTypes";
 
 export type SidebarSelection =
   | { kind: "componentTypes" }
@@ -221,6 +221,14 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
   function toggleTypeGroup(typeId: string) {
     setOpenTypeGroups((p) => ({ ...p, [typeId]: !isTypeGroupOpen(typeId) }));
   }
+
+  const [openTypeCategories, setOpenTypeCategories] = useState<Record<string, boolean>>({});
+  const isTypeCategoryOpen = (cat: string) => openTypeCategories[cat] ?? true;
+  function toggleTypeCategory(cat: string) {
+    setOpenTypeCategories((p) => ({ ...p, [cat]: !isTypeCategoryOpen(cat) }));
+  }
+
+  const typeCategory = (ct: ComponentType) => ct.category?.trim() || DEFAULT_TYPE_CATEGORY;
 
   const toggle = useCallback((key: keyof typeof open) => {
     setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -427,20 +435,60 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
         active={isActive({ kind: "componentTypes" })}
         count={componentTypes.length}
       >
-        {visibleComponentTypes.map((ct) => (
-          <Row
-            key={ct.id}
-            label={ct.name}
-            color={ct.color}
-            active={isActive({ kind: "componentType", id: ct.id })}
-            onClick={() => onSelect({ kind: "componentType", id: ct.id })}
-            onDelete={() => deleteComponentType(ct.id)}
-            onContextMenu={(e) => openContextMenu(e, "componentType", ct.id, ct.name)}
-            renaming={isRenaming("componentType", ct.id)}
-            onRenameSubmit={(name) => renameItem("componentType", ct.id, name)}
-            onRenameCancel={() => setRenaming(null)}
-          />
-        ))}
+        {(() => {
+          const categories = [...new Set(visibleComponentTypes.map(typeCategory))].sort((a, b) => {
+            if (a === DEFAULT_TYPE_CATEGORY) return -1;
+            if (b === DEFAULT_TYPE_CATEGORY) return 1;
+            return a.localeCompare(b);
+          });
+
+          const renderTypeRow = (ct: ComponentType) => (
+            <Row
+              key={ct.id}
+              label={ct.name}
+              color={ct.color}
+              active={isActive({ kind: "componentType", id: ct.id })}
+              onClick={() => onSelect({ kind: "componentType", id: ct.id })}
+              onDelete={() => deleteComponentType(ct.id)}
+              onContextMenu={(e) => openContextMenu(e, "componentType", ct.id, ct.name)}
+              renaming={isRenaming("componentType", ct.id)}
+              onRenameSubmit={(name) => renameItem("componentType", ct.id, name)}
+              onRenameCancel={() => setRenaming(null)}
+            />
+          );
+
+          // Nur eine Kategorie → flache Liste ohne unnötige Verschachtelung
+          if (categories.length <= 1) {
+            return visibleComponentTypes.map(renderTypeRow);
+          }
+
+          return categories.map((cat) => {
+            const items = visibleComponentTypes.filter((ct) => typeCategory(ct) === cat);
+            const catOpen = isTypeCategoryOpen(cat) || searching;
+            return (
+              <div key={cat} className="sb-type-group">
+                <div
+                  className="sb-type-group-header"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleTypeCategory(cat)}
+                  onKeyDown={(e) => e.key === "Enter" && toggleTypeCategory(cat)}
+                >
+                  <span className="sb-chevron">
+                    {catOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                  </span>
+                  <span className="sb-type-group-label">{cat}</span>
+                  <span className="sb-type-group-count">{items.length}</span>
+                </div>
+                {catOpen && (
+                  <div className="sb-type-group-children">
+                    {items.map(renderTypeRow)}
+                  </div>
+                )}
+              </div>
+            );
+          });
+        })()}
         {componentTypes.length === 0 && (
           <EmptyHint text="Noch keine Typen definiert." actionLabel="Typ anlegen" onAction={addComponentType} />
         )}

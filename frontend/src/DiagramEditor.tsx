@@ -2,14 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, {
   Background,
   Controls,
+  Handle,
   MarkerType,
   MiniMap,
+  NodeResizer,
+  Position,
   ReactFlowProvider,
   useReactFlow,
   type Connection,
   type Edge,
   type Node,
   type NodeDragHandler,
+  type NodeProps,
   useEdgesState,
   useNodesState
 } from "reactflow";
@@ -18,6 +22,7 @@ import { sidebarApi } from "./Sidebar/sidebarApi";
 import { COMPONENT_DRAG_MIME } from "./Sidebar/sidebarTypes";
 import type {
   ComponentInstance,
+  ComponentShape,
   ComponentType,
   ConnectionInstance,
   ConnectionType,
@@ -64,41 +69,151 @@ const lineStyleDash: Record<string, string | undefined> = {
   dotted: "2 3"
 };
 
+/* ── Custom Node: rendert Komponenten je nach Form (BPMN-angelehnt) ─────────── */
+
+const POOL_DEFAULT = { width: 480, height: 260 };
+
+interface ShapedNodeData {
+  name: string;
+  typeName: string;
+  color: string;
+  shape: ComponentShape;
+  isSource: boolean;
+  onResizeEnd?: (nodeId: string, pos: { x: number; y: number; width: number; height: number }) => void;
+}
+
+function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
+  const { name, typeName, color, shape, isSource } = data;
+
+  const handles = (
+    <>
+      <Handle type="target" position={Position.Left} />
+      <Handle type="source" position={Position.Right} />
+    </>
+  );
+
+  if (shape === "pool") {
+    return (
+      <div className={`shaped-node shape-pool${isSource ? " is-source" : ""}`} style={{ borderColor: color }}>
+        <NodeResizer
+          isVisible={selected}
+          minWidth={240}
+          minHeight={140}
+          lineClassName="shape-pool-resize-line"
+          handleClassName="shape-pool-resize-handle"
+          onResizeEnd={(_e, params) =>
+            data.onResizeEnd?.(id, { x: params.x, y: params.y, width: params.width, height: params.height })
+          }
+        />
+        <div className="shape-pool-band" style={{ background: color }}>
+          <span>{name}</span>
+        </div>
+        <div className="shape-pool-body">
+          <span>{typeName}</span>
+        </div>
+        {handles}
+      </div>
+    );
+  }
+
+  if (shape === "event") {
+    return (
+      <div className={`shaped-node shape-event${isSource ? " is-source" : ""}`}>
+        <div className="shape-event-circle" style={{ borderColor: color }}>
+          <strong>{name}</strong>
+        </div>
+        <span className="shape-caption">{typeName}</span>
+        {handles}
+      </div>
+    );
+  }
+
+  if (shape === "gateway") {
+    return (
+      <div className={`shaped-node shape-gateway${isSource ? " is-source" : ""}`}>
+        <div className="shape-gateway-diamond" style={{ borderColor: color }} />
+        <div className="shape-gateway-label">
+          <strong>{name}</strong>
+          <span className="shape-caption">{typeName}</span>
+        </div>
+        {handles}
+      </div>
+    );
+  }
+
+  if (shape === "datastore") {
+    return (
+      <div className={`shaped-node shape-datastore${isSource ? " is-source" : ""}`} style={{ borderColor: color }}>
+        <div className="shape-datastore-top" style={{ borderColor: color }} />
+        <strong>{name}</strong>
+        <span>{typeName}</span>
+        {handles}
+      </div>
+    );
+  }
+
+  if (shape === "process") {
+    return (
+      <div className={`shaped-node shape-process${isSource ? " is-source" : ""}`} style={{ borderColor: color }}>
+        <strong>{name}</strong>
+        <span>{typeName}</span>
+        {handles}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`shaped-node shape-box${isSource ? " is-source" : ""}`}
+      style={{ borderColor: color, borderLeftColor: color }}
+    >
+      <strong>{name}</strong>
+      <span>{typeName}</span>
+      {handles}
+    </div>
+  );
+}
+
+const nodeTypes = { shaped: ShapedNode };
+
 function buildNodes(
   diagram: Diagram,
   components: ComponentInstance[],
   componentTypes: ComponentType[],
-  connectingFrom: string | null
+  connectingFrom: string | null,
+  onResizeEnd: ShapedNodeData["onResizeEnd"]
 ): Node[] {
   return diagram.componentIds.flatMap((id) => {
     const comp = components.find((c) => c.id === id);
     if (!comp) return [];
     const type = componentTypes.find((t) => t.id === comp.componentTypeId);
+    const shape = type?.shape ?? "box";
     const pos = diagram.positions[id] ?? { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 };
-    const isSource = connectingFrom === id;
-    return [
-      {
-        id: comp.id,
-        position: pos,
-        data: {
-          label: (
-            <div className="diagram-node">
-              <strong>{comp.name}</strong>
-              <span>{type?.name ?? "?"}</span>
-            </div>
-          )
-        },
-        style: {
-          border: isSource ? "2px solid #1d4ed8" : `2px solid ${type?.color ?? "#cbd5e1"}`,
-          borderLeft: `8px solid ${type?.color ?? "#cbd5e1"}`,
-          borderRadius: 8,
-          minWidth: 160,
-          background: isSource ? "#eff6ff" : "#ffffff",
-          padding: 10,
-          boxShadow: isSource ? "0 0 0 3px #bfdbfe" : undefined
-        }
-      }
-    ];
+    const isPool = shape === "pool";
+    const node: Node = {
+      id: comp.id,
+      type: "shaped",
+      position: { x: pos.x, y: pos.y },
+      data: {
+        name: comp.name,
+        typeName: type?.name ?? "?",
+        color: type?.color ?? "#cbd5e1",
+        shape,
+        isSource: connectingFrom === id,
+        onResizeEnd
+      } satisfies ShapedNodeData,
+      // Pools liegen hinter den anderen Knoten, damit man Elemente darauf platzieren kann
+      ...(isPool
+        ? {
+            zIndex: -1,
+            style: {
+              width: pos.width ?? POOL_DEFAULT.width,
+              height: pos.height ?? POOL_DEFAULT.height
+            }
+          }
+        : {})
+    };
+    return [node];
   });
 }
 
@@ -182,12 +297,12 @@ function Palette({ components, componentTypes, onAdd }: PaletteProps) {
               {type.name}
             </div>
             {items.map((comp) => (
-              <PaletteItem key={comp.id} comp={comp} color={type.color} onAdd={onAdd} />
+              <PaletteItem key={comp.id} comp={comp} color={type.color} shape={type.shape ?? "box"} onAdd={onAdd} />
             ))}
           </div>
         ))}
         {groups.ungrouped.map((comp) => (
-          <PaletteItem key={comp.id} comp={comp} color="#cbd5e1" onAdd={onAdd} />
+          <PaletteItem key={comp.id} comp={comp} color="#cbd5e1" shape="box" onAdd={onAdd} />
         ))}
         {components.length === 0 && (
           <p className="diagram-palette-empty">Alle Komponenten sind bereits im Diagramm.</p>
@@ -200,7 +315,17 @@ function Palette({ components, componentTypes, onAdd }: PaletteProps) {
   );
 }
 
-function PaletteItem({ comp, color, onAdd }: { comp: ComponentInstance; color: string; onAdd: (id: string) => void }) {
+function PaletteItem({
+  comp,
+  color,
+  shape,
+  onAdd
+}: {
+  comp: ComponentInstance;
+  color: string;
+  shape: ComponentShape;
+  onAdd: (id: string) => void;
+}) {
   return (
     <button
       className="diagram-palette-item"
@@ -213,6 +338,7 @@ function PaletteItem({ comp, color, onAdd }: { comp: ComponentInstance; color: s
       onClick={() => onAdd(comp.id)}
       title="Auf die Fläche ziehen oder klicken zum Hinzufügen"
     >
+      <span className={`shape-glyph shape-glyph--${shape}`} style={{ borderColor: color }} />
       <strong>{comp.name}</strong>
     </button>
   );
@@ -232,8 +358,22 @@ function DiagramEditorInner({
   onSelectConnection,
   onClose
 }: Props) {
+  // Pool-Größe nach Skalieren persistieren (inkl. Position, falls oben/links gezogen wurde)
+  const diagramRef = useRef(diagram);
+  diagramRef.current = diagram;
+
+  const onPoolResizeEnd = useCallback(
+    async (nodeId: string, pos: { x: number; y: number; width: number; height: number }) => {
+      const current = diagramRef.current;
+      const updatedPositions = { ...current.positions, [nodeId]: pos };
+      const updated = await sidebarApi.updateDiagram(current.id, { positions: updatedPositions });
+      onDiagramChange(updated);
+    },
+    [onDiagramChange]
+  );
+
   const [nodes, setNodes, onNodesChange] = useNodesState(
-    buildNodes(diagram, components, componentTypes, null)
+    buildNodes(diagram, components, componentTypes, null, onPoolResizeEnd)
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState(
     buildEdges(diagram, connections, connectionTypes)
@@ -248,9 +388,9 @@ function DiagramEditorInner({
   const { screenToFlowPosition } = useReactFlow();
 
   useEffect(() => {
-    setNodes(buildNodes(diagram, components, componentTypes, connectingFrom));
+    setNodes(buildNodes(diagram, components, componentTypes, connectingFrom, onPoolResizeEnd));
     setEdges(buildEdges(diagram, connections, connectionTypes));
-  }, [diagram.componentIds, diagram.connectionIds, connections, connectingFrom]);
+  }, [diagram.componentIds, diagram.connectionIds, components, componentTypes, connections, connectingFrom]);
 
   // Close context menu on outside click
   useEffect(() => {
@@ -359,7 +499,9 @@ function DiagramEditorInner({
 
   const onNodeDragStop: NodeDragHandler = useCallback(
     async (_event, node) => {
-      const updatedPositions = { ...diagram.positions, [node.id]: node.position };
+      // Bestehende Größe (z. B. von Pools) beim Verschieben nicht verlieren
+      const prev = diagram.positions[node.id];
+      const updatedPositions = { ...diagram.positions, [node.id]: { ...prev, ...node.position } };
       const updated = await sidebarApi.updateDiagram(diagram.id, { positions: updatedPositions });
       onDiagramChange(updated);
     },
@@ -525,6 +667,7 @@ function DiagramEditorInner({
           <ReactFlow
             nodes={nodes}
             edges={edges}
+            nodeTypes={nodeTypes}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
