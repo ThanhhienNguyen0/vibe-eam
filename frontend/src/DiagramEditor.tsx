@@ -17,21 +17,32 @@ import ReactFlow, {
 } from "reactflow";
 import { GitBranch, MousePointerClick, PanelLeftClose, PanelLeftOpen, Search, SlidersHorizontal, X } from "lucide-react";
 import { sidebarApi } from "./Sidebar/sidebarApi";
+import { getAllowedConnectionTypes, validateDiagram, type DiagramValidationResult } from "./Sidebar/metamodelRules";
 import { COMPONENT_DRAG_MIME, COMPONENT_TYPE_DRAG_MIME } from "./Sidebar/sidebarTypes";
 import type {
   ComponentInstance,
+  ConnectionRule,
   ComponentShape,
   ComponentType,
   ConnectionInstance,
   ConnectionType,
   Diagram,
-  DiagramPosition
+  DiagramPosition,
+  Metamodel,
+  ValidationRule,
+  ViewpointRule,
+  Viewpoint
 } from "./Sidebar/sidebarTypes";
 
 interface Props {
   diagram: Diagram;
+  metamodel: Metamodel;
   componentTypes: ComponentType[];
   connectionTypes: ConnectionType[];
+  connectionRules: ConnectionRule[];
+  viewpointRules: ViewpointRule[];
+  validationRules: ValidationRule[];
+  viewpoints: Viewpoint[];
   components: ComponentInstance[];
   connections: ConnectionInstance[];
   onDiagramChange: (updated: Diagram) => void;
@@ -667,8 +678,13 @@ function CreateComponentDialog({
 
 function DiagramEditorInner({
   diagram,
+  metamodel,
   componentTypes,
   connectionTypes,
+  connectionRules,
+  viewpointRules,
+  validationRules,
+  viewpoints,
   components,
   connections,
   onDiagramChange,
@@ -717,8 +733,18 @@ function DiagramEditorInner({
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState("");
+  const [validationResult, setValidationResult] = useState<DiagramValidationResult | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
+  const activeViewpoint = diagram.viewpointId ? viewpoints.find((viewpoint) => viewpoint.id === diagram.viewpointId) : undefined;
+  const sidebarState = useMemo(
+    () => ({ metamodel, componentTypes, connectionTypes, connectionRules, viewpointRules, validationRules, viewpoints, components, connections, diagrams: [diagram] }),
+    [metamodel, componentTypes, connectionTypes, connectionRules, viewpointRules, validationRules, viewpoints, components, connections, diagram]
+  );
+  const visibleComponentTypes = useMemo(
+    () => activeViewpoint ? componentTypes.filter((type) => activeViewpoint.allowedComponentTypeIds.includes(type.id)) : componentTypes,
+    [activeViewpoint, componentTypes]
+  );
 
   useEffect(() => {
     setNodes(buildNodes(diagram, components, componentTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd));
@@ -747,18 +773,19 @@ function DiagramEditorInner({
       const tgtComp = components.find((c) => c.id === targetId);
       if (!srcComp || !tgtComp) return;
 
-      const allowed = connectionTypes.filter((ct) => {
-        const srcOk = ct.allowedSourceTypeIds.length === 0 || ct.allowedSourceTypeIds.includes(srcComp.componentTypeId);
-        const tgtOk = ct.allowedTargetTypeIds.length === 0 || ct.allowedTargetTypeIds.includes(tgtComp.componentTypeId);
-        return srcOk && tgtOk;
-      });
+      const allowed = getAllowedConnectionTypes(sidebarState, srcComp.componentTypeId, tgtComp.componentTypeId, activeViewpoint?.id);
+      const sourceType = componentTypes.find((type) => type.id === srcComp.componentTypeId);
+      const targetType = componentTypes.find((type) => type.id === tgtComp.componentTypeId);
 
       // Spezifischere Typen (mit eingeschränkten Quell-/Ziel-Listen) gewinnen
       // gegenüber Catch-all-Typen ohne Einschränkungen.
       const specificity = (ct: ConnectionType) =>
         (ct.allowedSourceTypeIds.length > 0 ? 1 : 0) + (ct.allowedTargetTypeIds.length > 0 ? 1 : 0);
-      const connType = [...allowed].sort((a, b) => specificity(b) - specificity(a))[0] ?? connectionTypes[0];
-      if (!connType) { setError("Keine Verbindungs-Typen definiert."); return; }
+      const connType = [...allowed].sort((a, b) => specificity(b) - specificity(a))[0];
+      if (!connType) {
+        setError("No connection rule allows this source/target combination.");
+        return;
+      }
 
       try {
         const newConn = await sidebarApi.createConnection({
@@ -778,7 +805,7 @@ function DiagramEditorInner({
         setError(err instanceof Error ? err.message : "Verbindung konnte nicht erstellt werden.");
       }
     },
-    [components, connectionTypes, diagram, onConnectionCreated, onDiagramChange]
+    [activeViewpoint, componentTypes, components, connectionTypes, diagram, onConnectionCreated, onDiagramChange, sidebarState]
   );
 
   const onConnect = useCallback(
@@ -876,6 +903,11 @@ function DiagramEditorInner({
   async function createAndPlaceComponent(name: string, properties: Record<string, string>) {
     if (!pendingCreate) return;
     const { typeId, position } = pendingCreate;
+    if (activeViewpoint && !activeViewpoint.allowedComponentTypeIds.includes(typeId)) {
+      const type = componentTypes.find((item) => item.id === typeId);
+      setError(`${type?.name ?? "This component type"} is not allowed in the selected ${activeViewpoint.name}.`);
+      return;
+    }
     try {
       const comp = await sidebarApi.createComponent({
         name,
@@ -900,6 +932,12 @@ function DiagramEditorInner({
 
   async function startAddComponent(compId: string, position?: DiagramPosition) {
     if (diagram.componentIds.includes(compId)) return;
+    const component = components.find((item) => item.id === compId);
+    const componentType = componentTypes.find((type) => type.id === component?.componentTypeId);
+    if (activeViewpoint && componentType && !activeViewpoint.allowedComponentTypeIds.includes(componentType.id)) {
+      setError(`${componentType.name} is not allowed in the selected ${activeViewpoint.name}.`);
+      return;
+    }
 
     const related = connections.filter(
       (c) => c.sourceComponentId === compId || c.targetComponentId === compId
@@ -971,9 +1009,31 @@ function DiagramEditorInner({
     setPendingAdd(null);
   }
 
-  const availableComponents = components.filter((c) => !diagram.componentIds.includes(c.id));
+  async function runDiagramValidation() {
+    const local = validateDiagram(diagram, sidebarState);
+    setValidationResult(local);
+    try {
+      const server = await sidebarApi.validateDiagram(diagram.id);
+      setValidationResult(server);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Diagrammvalidierung konnte nicht ausgefuehrt werden.");
+    }
+  }
+
+  const visibleComponentTypeIds = new Set(visibleComponentTypes.map((type) => type.id));
+  const availableComponents = components.filter((c) => !diagram.componentIds.includes(c.id) && visibleComponentTypeIds.has(c.componentTypeId));
   const contextComp = components.find((c) => c.id === contextMenu.nodeId);
   const diagramIsEmpty = diagram.componentIds.length === 0;
+  const validationGroups = validationResult ? [
+    { title: "Metamodel errors", items: validationResult.errors.filter((item) => item.scope === "metamodel") },
+    { title: "Viewpoint errors", items: validationResult.errors.filter((item) => item.scope === "viewpoint") },
+    { title: "Diagram errors", items: validationResult.errors.filter((item) => !item.scope || item.scope === "diagram") },
+    { title: "Required rule errors", items: validationResult.errors.filter((item) => item.scope === "required-rule") },
+    { title: "Required rule warnings", items: validationResult.warnings.filter((item) => item.scope === "required-rule") },
+    { title: "Viewpoint warnings", items: validationResult.warnings.filter((item) => item.scope === "viewpoint") },
+    { title: "Other warnings", items: validationResult.warnings.filter((item) => !item.scope || (item.scope !== "required-rule" && item.scope !== "viewpoint")) }
+  ].filter((group) => group.items.length > 0) : [];
 
   return (
     <div className="diagram-editor">
@@ -990,6 +1050,27 @@ function DiagramEditorInner({
           Palette
         </button>
         <strong className="diagram-title">{diagram.name}</strong>
+        <select
+          className="diagram-viewpoint-select"
+          value={diagram.viewpointId ?? ""}
+          onChange={async (e) => {
+            try {
+              const updated = await sidebarApi.updateDiagram(diagram.id, { viewpointId: e.target.value || undefined });
+              onDiagramChange(updated);
+              setValidationResult(null);
+              setError("");
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Viewpoint konnte nicht gesetzt werden.");
+            }
+          }}
+          title="Viewpoint fuer Diagramm"
+        >
+          <option value="">Kein Viewpoint</option>
+          {viewpoints.map((viewpoint) => <option key={viewpoint.id} value={viewpoint.id}>{viewpoint.name}</option>)}
+        </select>
+        <button className="diagram-palette-toggle" onClick={runDiagramValidation}>
+          <SlidersHorizontal size={16} /> Validate diagram
+        </button>
         <span className="muted diagram-hint">
           Hover: Mitte = verschieben · Kanten = eine Richtung · Ecken = beide Richtungen
         </span>
@@ -999,6 +1080,25 @@ function DiagramEditorInner({
       {error && <div className="error-banner">{error}</div>}
 
       {/* ── Connect mode banner ─────────────────────────────────────────────── */}
+      {validationResult && (
+        <div className={`diagram-validation-panel${validationResult.valid ? " diagram-validation-panel--valid" : ""}`}>
+          <strong>{validationResult.valid ? "Diagramm gueltig" : "Diagramm ungueltig"}</strong>
+          {validationGroups.map((group) => (
+            <div key={group.title} className="diagram-validation-group">
+              <span className="muted">{group.title}</span>
+              <ul>
+                {group.items.map((item, index) => (
+                  <li key={`${group.title}-${index}`}>
+                    <strong>{item.severity.toUpperCase()} {item.code}</strong>: {item.message}
+                    {(item.ruleId || item.affectedEntityId) && <span className="muted"> ({item.ruleId ?? item.affectedEntityId})</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+
       {connectingFrom && (() => {
         const fromComp = components.find((c) => c.id === connectingFrom);
         return (
@@ -1015,7 +1115,7 @@ function DiagramEditorInner({
         {paletteOpen && (
           <Palette
             components={availableComponents}
-            componentTypes={componentTypes}
+            componentTypes={visibleComponentTypes}
             onAdd={(id) => startAddComponent(id)}
           />
         )}

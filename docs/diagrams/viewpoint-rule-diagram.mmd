@@ -1,0 +1,17 @@
+flowchart TB
+  StakeholderNode["Stakeholder\nmodel element"]:::model
+  Note["Viewpoints are role filters.\nStakeholder nodes are diagram elements.\nThey are not the same concept."]:::note
+
+  subgraph VIEWS["Stakeholder-specific Viewpoints"]
+    M["Management View\nPurpose: executive overview\nTypes: Stakeholder, Goal, Capability, Application\nRules: interested_in, supports, serves\nRequired: Business Capability"]
+    B["Business Owner View\nPurpose: processes, capabilities and applications\nTypes: Capability, Process, Application, Stakeholder\nRules: realizes, serves, responsible_for\nRequired: Capability, serves"]
+    A["Application Owner View\nPurpose: app/data/technology dependencies\nTypes: Application, Data Object, Technology Node, Stakeholder\nRules: uses, depends_on, owns, responsible_for\nRequired: Application, uses"]
+    IT["IT Operations View\nPurpose: operational dependencies\nTypes: Application, Technology Node, Data Object\nRules: depends_on, uses\nRequired: Technology Node, depends_on"]
+    F["Full Architecture View\nPurpose: complete architecture view\nTypes: all EAM types\nRules: all EAM connection rules"]
+  end
+
+  StakeholderNode --> Note
+  Note --> VIEWS
+
+  classDef model fill:#e0f2fe,stroke:#0891b2,color:#164e63;
+  classDef note fill:#f8fafc,stroke:#94a3b8,color:#334155;

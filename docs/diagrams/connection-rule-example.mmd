@@ -1,0 +1,32 @@
+flowchart LR
+  subgraph ALLOWED["Allowed by ConnectionRule"]
+    App["Application"]
+    Proc["Business Process"]
+    Data["Data Object"]
+    Tech["Technology Node"]
+    Stake["Stakeholder"]
+    Cap["Business Capability"]
+    Goal["Goal / Objective"]
+
+    App -- serves --> Proc
+    App -- uses --> Data
+    App -- depends_on --> Tech
+    Stake -- responsible_for --> App
+    Stake -- interested_in --> Cap
+    Goal -- supports --> Cap
+  end
+
+  subgraph REJECTED["Rejected by validation"]
+    Data2["Data Object"]
+    Cap2["Business Capability"]
+    Stake2["Stakeholder"]
+    Tech2["Technology Node"]
+    Proc2["Business Process"]
+
+    Data2 -. "serves is not allowed" .-> Cap2
+    Stake2 -. "depends_on is not allowed" .-> Tech2
+    Tech2 -. "realizes is not allowed" .-> Proc2
+  end
+
+  classDef rejected stroke:#dc2626,stroke-width:2px,color:#991b1b,stroke-dasharray:5 4;
+  class Data2,Cap2,Stake2,Tech2,Proc2 rejected;

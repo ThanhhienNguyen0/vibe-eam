@@ -6,11 +6,13 @@ import { COMPONENT_SHAPES } from "./sidebarTypes";
 import type {
   ComponentInstance,
   ComponentShape,
+  ConnectionRule,
   ComponentType,
   ConnectionInstance,
   ConnectionType,
   Diagram,
-  SidebarState
+  SidebarState,
+  Viewpoint
 } from "./sidebarTypes";
 
 interface Props {
@@ -37,7 +39,7 @@ function DetailWrapper({ title, onClose, children }: { title: string; onClose: (
 export default function SidebarPanels({ selection, sidebarState, onStateChange, onSelect, onOpenDiagram, onClose }: Props) {
   if (!selection) return null;
 
-  const { componentTypes, connectionTypes, components, connections, diagrams } = sidebarState;
+  const { componentTypes, connectionTypes, connectionRules, viewpoints, components, connections, diagrams } = sidebarState;
 
   if (selection.kind === "componentTypes") {
     return (
@@ -65,6 +67,7 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
         <ComponentTypeEditor
           key={ct.id}
           ct={ct}
+          viewpoints={viewpoints}
           existingCategories={[...new Set(componentTypes.map((t) => t.category?.trim() || "Standard"))]}
           onSave={async (patch) => {
             const updated = await sidebarApi.updateComponentType(ct.id, patch);
@@ -102,10 +105,90 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
           key={ct.id}
           ct={ct}
           componentTypes={componentTypes}
+          viewpoints={viewpoints}
           existingCategories={[...new Set(connectionTypes.map((t) => t.category?.trim() || "Standard"))]}
           onSave={async (patch) => {
             const updated = await sidebarApi.updateConnectionType(ct.id, patch);
             onStateChange({ ...sidebarState, connectionTypes: connectionTypes.map((c) => (c.id === ct.id ? updated : c)) });
+          }}
+        />
+      </DetailWrapper>
+    );
+  }
+
+  if (selection.kind === "connectionRules") {
+    return (
+      <DetailWrapper title="Connection Rules" onClose={onClose}>
+        <p className="muted">Connection Rules sind die fachliche Quelle fuer erlaubte Source-Type / Relation / Target-Type Kombinationen.</p>
+        <div className="sb-instance-list">
+          {connectionRules.map((rule) => {
+            const source = componentTypes.find((type) => type.id === rule.sourceComponentTypeId);
+            const connectionType = connectionTypes.find((type) => type.id === rule.connectionTypeId);
+            const target = componentTypes.find((type) => type.id === rule.targetComponentTypeId);
+            return (
+              <div key={rule.id} className="sb-instance-row sb-diagram-row" onClick={() => onSelect({ kind: "connectionRule", id: rule.id })}>
+                <strong>{source?.name ?? "?"} --{connectionType?.name ?? "?"}--&gt; {target?.name ?? "?"}</strong>
+                <span className="muted">{rule.required ? "required" : "optional"} / {rule.severity}</span>
+              </div>
+            );
+          })}
+          {connectionRules.length === 0 && <p className="muted">Noch keine Connection Rules definiert.</p>}
+        </div>
+      </DetailWrapper>
+    );
+  }
+
+  if (selection.kind === "connectionRule") {
+    const rule = connectionRules.find((item) => item.id === selection.id);
+    if (!rule) return null;
+    return (
+      <DetailWrapper title="Connection Rule" onClose={onClose}>
+        <ConnectionRuleEditor
+          key={rule.id}
+          rule={rule}
+          componentTypes={componentTypes}
+          connectionTypes={connectionTypes}
+          viewpoints={viewpoints}
+          onSave={async (patch) => {
+            const updated = await sidebarApi.updateConnectionRule(rule.id, patch);
+            onStateChange({ ...sidebarState, connectionRules: connectionRules.map((item) => (item.id === rule.id ? updated : item)) });
+          }}
+        />
+      </DetailWrapper>
+    );
+  }
+
+  if (selection.kind === "viewpoints") {
+    return (
+      <DetailWrapper title="Viewpoints" onClose={onClose}>
+        <p className="muted">Stakeholder-Sichten definieren erlaubte und verpflichtende Typen fuer Diagramme.</p>
+        <div className="sb-type-grid">
+          {viewpoints.map((vp) => (
+            <div key={vp.id} className="sb-type-card" onClick={() => onSelect({ kind: "viewpoint", id: vp.id })}>
+              <strong>{vp.name}</strong>
+              <span className="muted">{vp.stakeholderRole || "Keine Rolle"}</span>
+              <span className="sb-badge">{vp.allowedComponentTypeIds.length} Typen</span>
+            </div>
+          ))}
+          {viewpoints.length === 0 && <p className="muted">Noch keine Viewpoints definiert.</p>}
+        </div>
+      </DetailWrapper>
+    );
+  }
+
+  if (selection.kind === "viewpoint") {
+    const vp = viewpoints.find((v) => v.id === selection.id);
+    if (!vp) return null;
+    return (
+      <DetailWrapper title={vp.name} onClose={onClose}>
+        <ViewpointEditor
+          key={vp.id}
+          viewpoint={vp}
+          componentTypes={componentTypes}
+          connectionTypes={connectionTypes}
+          onSave={async (patch) => {
+            const updated = await sidebarApi.updateViewpoint(vp.id, patch);
+            onStateChange({ ...sidebarState, viewpoints: viewpoints.map((v) => (v.id === vp.id ? updated : v)) });
           }}
         />
       </DetailWrapper>
@@ -237,6 +320,7 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
         <DiagramMetaEditor
           key={d.id}
           diagram={d}
+          viewpoints={viewpoints}
           onSave={async (patch) => {
             const updated = await sidebarApi.updateDiagram(d.id, patch);
             onStateChange({ ...sidebarState, diagrams: diagrams.map((x) => (x.id === d.id ? updated : x)) });
@@ -392,10 +476,12 @@ function LinkedDiagrams({
 
 function ComponentTypeEditor({
   ct,
+  viewpoints,
   existingCategories,
   onSave
 }: {
   ct: ComponentType;
+  viewpoints: Viewpoint[];
   existingCategories: string[];
   onSave: (p: Partial<ComponentType>) => Promise<void>;
 }) {
@@ -417,9 +503,17 @@ function ComponentTypeEditor({
     set("customPropertyKeys", draft.customPropertyKeys.filter((x) => x !== k));
   }
 
+  function toggleViewpoint(id: string) {
+    const list = draft.allowedInViewpointIds ?? [];
+    set("allowedInViewpointIds", list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+  }
+
   return (
     <div className="sb-form">
       <label>Name<input value={draft.name} onChange={(e) => set("name", e.target.value)} /></label>
+      <label>Layer
+        <input value={draft.layer ?? ""} placeholder="Business, Application, Data, Technology" onChange={(e) => set("layer", e.target.value)} />
+      </label>
       <label>Kategorie <span className="muted">(Unterordner in der Sidebar)</span>
         <input
           value={draft.category ?? ""}
@@ -447,6 +541,19 @@ function ComponentTypeEditor({
         <span className="muted">So wird der Typ im Diagramm dargestellt.</span>
       </div>
       <h3>Eigenschafts-Schlüssel für diesen Typ</h3>
+      <h3>Viewpoint-Zuordnung <span className="muted">(leer = alle)</span></h3>
+      <label className="sb-check-row">
+        <input type="checkbox" checked={Boolean(draft.isRequiredInViewpoint)} onChange={(e) => set("isRequiredInViewpoint", e.target.checked)} />
+        Typ ist in passenden Viewpoints als Pflichtregel markierbar
+      </label>
+      <div className="sb-check-list">
+        {viewpoints.map((vp) => (
+          <label key={vp.id} className="sb-check-row">
+            <input type="checkbox" checked={(draft.allowedInViewpointIds ?? []).includes(vp.id)} onChange={() => toggleViewpoint(vp.id)} />
+            {vp.name}
+          </label>
+        ))}
+      </div>
       <p className="muted sb-custom-hint">Diese Felder bekommt jede Komponente dieses Typs automatisch.</p>
       {draft.customPropertyKeys.map((k) => (
         <div key={k} className="sb-attr-row">
@@ -468,11 +575,13 @@ function ComponentTypeEditor({
 function ConnectionTypeEditor({
   ct,
   componentTypes,
+  viewpoints,
   existingCategories,
   onSave
 }: {
   ct: ConnectionType;
   componentTypes: ComponentType[];
+  viewpoints: Viewpoint[];
   existingCategories: string[];
   onSave: (p: Partial<ConnectionType>) => Promise<void>;
 }) {
@@ -483,14 +592,16 @@ function ConnectionTypeEditor({
     setDraft((prev) => ({ ...prev, [key]: val }));
   }
 
-  function toggleList(key: "allowedSourceTypeIds" | "allowedTargetTypeIds", id: string) {
+  function toggleList(key: "allowedSourceTypeIds" | "allowedTargetTypeIds" | "requiredForSourceTypes" | "requiredForTargetTypes", id: string) {
     const list = draft[key];
-    set(key, list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+    const safeList = list ?? [];
+    set(key, safeList.includes(id) ? safeList.filter((x) => x !== id) : [...safeList, id]);
   }
 
   return (
     <div className="sb-form">
       <label>Name<input value={draft.name} onChange={(e) => set("name", e.target.value)} /></label>
+      <p className="muted sb-custom-hint">Allowed source/target combinations are managed via Connection Rules. The fields below are legacy compatibility fields.</p>
       <label>Kategorie <span className="muted">(Unterordner in der Sidebar)</span>
         <input
           value={draft.category ?? ""}
@@ -513,6 +624,9 @@ function ConnectionTypeEditor({
           </select>
         </label>
       </div>
+      <label>Richtung / Bedeutung
+        <input value={draft.directionDescription ?? ""} onChange={(e) => set("directionDescription", e.target.value)} placeholder="z. B. Application to business process" />
+      </label>
       <h3>Erlaubte Quell-Typen <span className="muted">(leer = alle)</span></h3>
       <div className="sb-check-list">
         {componentTypes.map((t) => (
@@ -533,12 +647,199 @@ function ConnectionTypeEditor({
           </label>
         ))}
       </div>
+      <h3>Pflichtregeln fuer Quellen</h3>
+      <p className="muted sb-custom-hint">Wenn ein Diagramm einen dieser Quelltypen enthaelt, kann diese Verbindung als Pflichtregel geprueft werden.</p>
+      <div className="sb-check-list">
+        {componentTypes.map((t) => (
+          <label key={t.id} className="sb-check-row">
+            <input type="checkbox" checked={(draft.requiredForSourceTypes ?? []).includes(t.id)} onChange={() => toggleList("requiredForSourceTypes", t.id)} />
+            <span className="sb-color-dot" style={{ background: t.color }} />
+            {t.name}
+          </label>
+        ))}
+      </div>
+      <h3>Pflichtregeln fuer Ziele</h3>
+      <div className="sb-check-list">
+        {componentTypes.map((t) => (
+          <label key={t.id} className="sb-check-row">
+            <input type="checkbox" checked={(draft.requiredForTargetTypes ?? []).includes(t.id)} onChange={() => toggleList("requiredForTargetTypes", t.id)} />
+            <span className="sb-color-dot" style={{ background: t.color }} />
+            {t.name}
+          </label>
+        ))}
+      </div>
+      {viewpoints.length > 0 && (
+        <p className="muted sb-custom-hint">Viewpoint-Zuordnung wird im Viewpoint-Editor gepflegt.</p>
+      )}
       <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft)}>Speichern</button>
     </div>
   );
 }
 
 // ── ComponentEditor ───────────────────────────────────────────────────────────
+
+function ConnectionRuleEditor({
+  rule,
+  componentTypes,
+  connectionTypes,
+  viewpoints,
+  onSave
+}: {
+  rule: ConnectionRule;
+  componentTypes: ComponentType[];
+  connectionTypes: ConnectionType[];
+  viewpoints: Viewpoint[];
+  onSave: (p: Partial<ConnectionRule>) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState(rule);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(rule);
+
+  function set<K extends keyof ConnectionRule>(key: K, val: ConnectionRule[K]) {
+    setDraft((prev) => ({ ...prev, [key]: val }));
+  }
+
+  function toggleViewpoint(id: string) {
+    const list = draft.viewpointIds ?? [];
+    set("viewpointIds", list.includes(id) ? list.filter((item) => item !== id) : [...list, id]);
+  }
+
+  return (
+    <div className="sb-form">
+      <label>Source Component Type
+        <select value={draft.sourceComponentTypeId} onChange={(e) => set("sourceComponentTypeId", e.target.value)}>
+          {componentTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
+        </select>
+      </label>
+      <label>Connection Type
+        <select value={draft.connectionTypeId} onChange={(e) => set("connectionTypeId", e.target.value)}>
+          {connectionTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
+        </select>
+      </label>
+      <label>Target Component Type
+        <select value={draft.targetComponentTypeId} onChange={(e) => set("targetComponentTypeId", e.target.value)}>
+          {componentTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
+        </select>
+      </label>
+      <div className="sb-two-col">
+        <label className="sb-check-row">
+          <input type="checkbox" checked={draft.allowed} onChange={(e) => set("allowed", e.target.checked)} />
+          allowed
+        </label>
+        <label className="sb-check-row">
+          <input type="checkbox" checked={draft.required} onChange={(e) => set("required", e.target.checked)} />
+          required
+        </label>
+      </div>
+      <label>Severity
+        <select value={draft.severity} onChange={(e) => set("severity", e.target.value as ConnectionRule["severity"])}>
+          <option value="error">error</option>
+          <option value="warning">warning</option>
+        </select>
+      </label>
+      <div className="sb-two-col">
+        <label>Min occurrences<input type="number" min={0} value={draft.minOccurrences ?? ""} onChange={(e) => set("minOccurrences", e.target.value === "" ? undefined : Number(e.target.value))} /></label>
+        <label>Max occurrences<input type="number" min={0} value={draft.maxOccurrences ?? ""} onChange={(e) => set("maxOccurrences", e.target.value === "" ? undefined : Number(e.target.value))} /></label>
+      </div>
+      <label>Description<textarea value={draft.description} onChange={(e) => set("description", e.target.value)} /></label>
+      <label>Rationale<textarea value={draft.rationale} onChange={(e) => set("rationale", e.target.value)} /></label>
+      <h3>Viewpoints <span className="muted">(leer = alle)</span></h3>
+      <div className="sb-check-list">
+        {viewpoints.map((viewpoint) => (
+          <label key={viewpoint.id} className="sb-check-row">
+            <input type="checkbox" checked={(draft.viewpointIds ?? []).includes(viewpoint.id)} onChange={() => toggleViewpoint(viewpoint.id)} />
+            {viewpoint.name}
+          </label>
+        ))}
+      </div>
+      <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft)}>Speichern</button>
+    </div>
+  );
+}
+
+function ViewpointEditor({
+  viewpoint,
+  componentTypes,
+  connectionTypes,
+  onSave
+}: {
+  viewpoint: Viewpoint;
+  componentTypes: ComponentType[];
+  connectionTypes: ConnectionType[];
+  onSave: (p: Partial<Viewpoint>) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState(viewpoint);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(viewpoint);
+
+  function set<K extends keyof Viewpoint>(key: K, val: Viewpoint[K]) {
+    setDraft((prev) => ({ ...prev, [key]: val }));
+  }
+
+  function toggleList(
+    key: "allowedComponentTypeIds" | "allowedConnectionTypeIds" | "requiredComponentTypeIds" | "requiredConnectionTypeIds",
+    id: string
+  ) {
+    const list = draft[key];
+    set(key, list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+  }
+
+  return (
+    <div className="sb-form">
+      <label>Name<input value={draft.name} onChange={(e) => set("name", e.target.value)} /></label>
+      <label>Stakeholder-Rolle<input value={draft.stakeholderRole} onChange={(e) => set("stakeholderRole", e.target.value)} /></label>
+      <label>Zweck<textarea value={draft.purpose} onChange={(e) => set("purpose", e.target.value)} /></label>
+      <label>Beschreibung<textarea value={draft.description} onChange={(e) => set("description", e.target.value)} /></label>
+      <label>Maximal sichtbare Layer
+        <input
+          type="number"
+          min={1}
+          value={draft.maxVisibleLayers ?? ""}
+          onChange={(e) => set("maxVisibleLayers", e.target.value === "" ? undefined : Number(e.target.value))}
+        />
+      </label>
+      <h3>Erlaubte Component Types</h3>
+      <div className="sb-check-list">
+        {componentTypes.map((type) => (
+          <label key={type.id} className="sb-check-row">
+            <input type="checkbox" checked={draft.allowedComponentTypeIds.includes(type.id)} onChange={() => toggleList("allowedComponentTypeIds", type.id)} />
+            <span className="sb-color-dot" style={{ background: type.color }} />
+            {type.name}
+          </label>
+        ))}
+      </div>
+      <h3>Pflicht-Component Types</h3>
+      <div className="sb-check-list">
+        {componentTypes.map((type) => (
+          <label key={type.id} className="sb-check-row">
+            <input type="checkbox" checked={draft.requiredComponentTypeIds.includes(type.id)} onChange={() => toggleList("requiredComponentTypeIds", type.id)} />
+            <span className="sb-color-dot" style={{ background: type.color }} />
+            {type.name}
+          </label>
+        ))}
+      </div>
+      <h3>Erlaubte Connection Types</h3>
+      <div className="sb-check-list">
+        {connectionTypes.map((type) => (
+          <label key={type.id} className="sb-check-row">
+            <input type="checkbox" checked={draft.allowedConnectionTypeIds.includes(type.id)} onChange={() => toggleList("allowedConnectionTypeIds", type.id)} />
+            <span className="sb-color-dot" style={{ background: type.color }} />
+            {type.name}
+          </label>
+        ))}
+      </div>
+      <h3>Pflicht-Connection Types</h3>
+      <div className="sb-check-list">
+        {connectionTypes.map((type) => (
+          <label key={type.id} className="sb-check-row">
+            <input type="checkbox" checked={draft.requiredConnectionTypeIds.includes(type.id)} onChange={() => toggleList("requiredConnectionTypeIds", type.id)} />
+            <span className="sb-color-dot" style={{ background: type.color }} />
+            {type.name}
+          </label>
+        ))}
+      </div>
+      <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft)}>Speichern</button>
+    </div>
+  );
+}
 
 function ComponentEditor({
   comp,
@@ -702,10 +1003,12 @@ function ConnectionEditor({
 
 function DiagramMetaEditor({
   diagram,
+  viewpoints,
   onSave,
   onOpen
 }: {
   diagram: Diagram;
+  viewpoints: Viewpoint[];
   onSave: (p: Partial<Diagram>) => Promise<void>;
   onOpen: () => void;
 }) {
@@ -715,6 +1018,12 @@ function DiagramMetaEditor({
   return (
     <div className="sb-form">
       <label>Name<input value={draft.name} onChange={(e) => setDraft((p) => ({ ...p, name: e.target.value }))} /></label>
+      <label>Viewpoint
+        <select value={draft.viewpointId ?? ""} onChange={(e) => setDraft((p) => ({ ...p, viewpointId: e.target.value || undefined }))}>
+          <option value="">Kein Viewpoint</option>
+          {viewpoints.map((vp) => <option key={vp.id} value={vp.id}>{vp.name}</option>)}
+        </select>
+      </label>
       <label>Beschreibung<textarea value={draft.description} onChange={(e) => setDraft((p) => ({ ...p, description: e.target.value }))} /></label>
       <p className="muted">{diagram.componentIds.length} Komponenten · {diagram.connectionIds.length} Verbindungen</p>
       <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft)}>Speichern</button>

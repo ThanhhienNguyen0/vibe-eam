@@ -1,27 +1,39 @@
 import { Router } from "express";
 import type { ComponentShape } from "./sidebarTypes.js";
+import { validateConnectionInstance, validateDiagram } from "./metamodelRules.js";
 import {
   addComponent,
   addComponentType,
   addConnection,
+  addConnectionRule,
   addConnectionType,
   addDiagram,
+  addViewpoint,
   deleteComponent,
   deleteComponentType,
   deleteConnection,
+  deleteConnectionRule,
   deleteConnectionType,
   deleteDiagram,
+  deleteViewpoint,
+  exportMetamodelDefinition,
   getComponents,
   getComponentTypes,
   getConnections,
+  getConnectionRules,
   getConnectionTypes,
   getDiagrams,
+  getViewpoints,
+  importMetamodelDefinition,
+  readDefaultMetamodelDefinition,
   readSidebarState,
   updateComponent,
   updateComponentType,
   updateConnection,
+  updateConnectionRule,
   updateConnectionType,
-  updateDiagram
+  updateDiagram,
+  updateViewpoint
 } from "./sidebarStore.js";
 
 const router = Router();
@@ -38,6 +50,32 @@ router.get("/", async (_req, res, next) => {
 
 // ── Component Types ──────────────────────────────────────────────────────────
 
+router.get("/metamodel/export", async (_req, res, next) => {
+  try {
+    res.json(await exportMetamodelDefinition());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/metamodel/default", async (_req, res, next) => {
+  try {
+    res.json(await readDefaultMetamodelDefinition());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/metamodel/import", async (req, res, next) => {
+  try {
+    const result = await importMetamodelDefinition(req.body);
+    if (!result.success) return res.status(400).json(result);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/component-types", async (_req, res, next) => {
   try {
     res.json(await getComponentTypes());
@@ -48,7 +86,7 @@ router.get("/component-types", async (_req, res, next) => {
 
 router.post("/component-types", async (req, res, next) => {
   try {
-    const { name, color, icon, description, customPropertyKeys, shape, category } = req.body as {
+    const { name, color, icon, description, customPropertyKeys, shape, category, layer, isRequiredInViewpoint, allowedInViewpointIds } = req.body as {
       name?: string;
       color?: string;
       icon?: string;
@@ -56,6 +94,9 @@ router.post("/component-types", async (req, res, next) => {
       customPropertyKeys?: string[];
       shape?: string;
       category?: string;
+      layer?: string;
+      isRequiredInViewpoint?: boolean;
+      allowedInViewpointIds?: string[];
     };
     if (!name?.trim()) return res.status(400).json({ error: "name is required." });
     const ct = await addComponentType({
@@ -66,7 +107,10 @@ router.post("/component-types", async (req, res, next) => {
       description: description ?? "",
       customPropertyKeys: customPropertyKeys ?? [],
       shape: (shape as ComponentShape) ?? "box",
-      category: category?.trim() || "Standard"
+      category: category?.trim() || "Standard",
+      layer: layer?.trim() || category?.trim() || "Business",
+      isRequiredInViewpoint: Boolean(isRequiredInViewpoint),
+      allowedInViewpointIds: allowedInViewpointIds ?? []
     });
     res.status(201).json(ct);
   } catch (err) {
@@ -106,7 +150,18 @@ router.get("/connection-types", async (_req, res, next) => {
 
 router.post("/connection-types", async (req, res, next) => {
   try {
-    const { name, color, lineStyle, allowedSourceTypeIds, allowedTargetTypeIds, description, category } = req.body as {
+    const {
+      name,
+      color,
+      lineStyle,
+      allowedSourceTypeIds,
+      allowedTargetTypeIds,
+      description,
+      category,
+      requiredForSourceTypes,
+      requiredForTargetTypes,
+      directionDescription
+    } = req.body as {
       name?: string;
       color?: string;
       lineStyle?: string;
@@ -114,6 +169,9 @@ router.post("/connection-types", async (req, res, next) => {
       allowedTargetTypeIds?: string[];
       description?: string;
       category?: string;
+      requiredForSourceTypes?: string[];
+      requiredForTargetTypes?: string[];
+      directionDescription?: string;
     };
     if (!name?.trim()) return res.status(400).json({ error: "name is required." });
     const ct = await addConnectionType({
@@ -124,7 +182,10 @@ router.post("/connection-types", async (req, res, next) => {
       allowedSourceTypeIds: allowedSourceTypeIds ?? [],
       allowedTargetTypeIds: allowedTargetTypeIds ?? [],
       description: description ?? "",
-      category: category?.trim() || "Standard"
+      category: category?.trim() || "Standard",
+      requiredForSourceTypes: requiredForSourceTypes ?? [],
+      requiredForTargetTypes: requiredForTargetTypes ?? [],
+      directionDescription: directionDescription ?? ""
     });
     res.status(201).json(ct);
   } catch (err) {
@@ -153,6 +214,142 @@ router.delete("/connection-types/:id", async (req, res, next) => {
 });
 
 // ── Components ───────────────────────────────────────────────────────────────
+
+router.get("/connection-rules", async (_req, res, next) => {
+  try {
+    res.json(await getConnectionRules());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/connection-rules", async (req, res, next) => {
+  try {
+    const { sourceComponentTypeId, connectionTypeId, targetComponentTypeId, allowed, required, severity, description, rationale, viewpointIds, minOccurrences, maxOccurrences } = req.body as {
+      sourceComponentTypeId?: string;
+      connectionTypeId?: string;
+      targetComponentTypeId?: string;
+      allowed?: boolean;
+      required?: boolean;
+      severity?: "error" | "warning";
+      description?: string;
+      rationale?: string;
+      viewpointIds?: string[];
+      minOccurrences?: number;
+      maxOccurrences?: number;
+    };
+    if (!sourceComponentTypeId) return res.status(400).json({ error: "sourceComponentTypeId is required." });
+    if (!connectionTypeId) return res.status(400).json({ error: "connectionTypeId is required." });
+    if (!targetComponentTypeId) return res.status(400).json({ error: "targetComponentTypeId is required." });
+    const rule = await addConnectionRule({
+      id: crypto.randomUUID(),
+      sourceComponentTypeId,
+      connectionTypeId,
+      targetComponentTypeId,
+      allowed: allowed ?? true,
+      required: required ?? false,
+      severity: severity ?? "error",
+      description: description ?? "",
+      rationale: rationale ?? "",
+      viewpointIds: viewpointIds ?? [],
+      minOccurrences,
+      maxOccurrences
+    });
+    res.status(201).json(rule);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch("/connection-rules/:id", async (req, res, next) => {
+  try {
+    const updated = await updateConnectionRule(req.params.id, req.body);
+    if (!updated) return res.status(404).json({ error: "Connection rule not found." });
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/connection-rules/:id", async (req, res, next) => {
+  try {
+    const deleted = await deleteConnectionRule(req.params.id);
+    if (!deleted) return res.status(404).json({ error: "Connection rule not found." });
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/viewpoints", async (_req, res, next) => {
+  try {
+    res.json(await getViewpoints());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/viewpoints", async (req, res, next) => {
+  try {
+    const {
+      name,
+      description,
+      stakeholderRole,
+      allowedComponentTypeIds,
+      allowedConnectionTypeIds,
+      requiredComponentTypeIds,
+      requiredConnectionTypeIds,
+      maxVisibleLayers,
+      purpose
+    } = req.body as {
+      name?: string;
+      description?: string;
+      stakeholderRole?: string;
+      allowedComponentTypeIds?: string[];
+      allowedConnectionTypeIds?: string[];
+      requiredComponentTypeIds?: string[];
+      requiredConnectionTypeIds?: string[];
+      maxVisibleLayers?: number;
+      purpose?: string;
+    };
+    if (!name?.trim()) return res.status(400).json({ error: "name is required." });
+    const viewpoint = await addViewpoint({
+      id: crypto.randomUUID(),
+      name: name.trim(),
+      description: description ?? "",
+      stakeholderRole: stakeholderRole ?? "",
+      allowedComponentTypeIds: allowedComponentTypeIds ?? [],
+      allowedConnectionTypeIds: allowedConnectionTypeIds ?? [],
+      requiredComponentTypeIds: requiredComponentTypeIds ?? [],
+      requiredConnectionTypeIds: requiredConnectionTypeIds ?? [],
+      maxVisibleLayers,
+      purpose: purpose ?? ""
+    });
+    res.status(201).json(viewpoint);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch("/viewpoints/:id", async (req, res, next) => {
+  try {
+    const updated = await updateViewpoint(req.params.id, req.body);
+    if (!updated) return res.status(404).json({ error: "Viewpoint not found." });
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/viewpoints/:id", async (req, res, next) => {
+  try {
+    const deleted = await deleteViewpoint(req.params.id);
+    if (!deleted) return res.status(404).json({ error: "Viewpoint not found." });
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.get("/components", async (_req, res, next) => {
   try {
@@ -228,7 +425,7 @@ router.post("/connections", async (req, res, next) => {
     if (!connectionTypeId) return res.status(400).json({ error: "connectionTypeId is required." });
     if (!sourceComponentId) return res.status(400).json({ error: "sourceComponentId is required." });
     if (!targetComponentId) return res.status(400).json({ error: "targetComponentId is required." });
-    const conn = await addConnection({
+    const candidate = {
       id: crypto.randomUUID(),
       name: name ?? "",
       connectionTypeId,
@@ -236,7 +433,11 @@ router.post("/connections", async (req, res, next) => {
       targetComponentId,
       description: description ?? "",
       properties: properties ?? {}
-    });
+    };
+    const state = await readSidebarState();
+    const validation = validateConnectionInstance(candidate, state);
+    if (!validation.valid) return res.status(400).json({ error: validation.errors[0]?.message ?? "Connection is not valid.", ...validation });
+    const conn = await addConnection(candidate);
     res.status(201).json(conn);
   } catch (err) {
     next(err);
@@ -245,6 +446,12 @@ router.post("/connections", async (req, res, next) => {
 
 router.patch("/connections/:id", async (req, res, next) => {
   try {
+    const state = await readSidebarState();
+    const existing = state.connections.find((connection) => connection.id === req.params.id);
+    if (!existing) return res.status(404).json({ error: "Connection not found." });
+    const candidate = { ...existing, ...req.body, id: req.params.id };
+    const validation = validateConnectionInstance(candidate, state);
+    if (!validation.valid) return res.status(400).json({ error: validation.errors[0]?.message ?? "Connection is not valid.", ...validation });
     const updated = await updateConnection(req.params.id, req.body);
     if (!updated) return res.status(404).json({ error: "Connection not found." });
     res.json(updated);
@@ -275,15 +482,18 @@ router.get("/diagrams", async (_req, res, next) => {
 
 router.post("/diagrams", async (req, res, next) => {
   try {
-    const { name, description } = req.body as { name?: string; description?: string };
+    const { name, description, viewpointId } = req.body as { name?: string; description?: string; viewpointId?: string };
     if (!name?.trim()) return res.status(400).json({ error: "name is required." });
+    const state = await readSidebarState();
     const diagram = await addDiagram({
       id: crypto.randomUUID(),
       name: name.trim(),
       description: description ?? "",
       componentIds: [],
       connectionIds: [],
-      positions: {}
+      positions: {},
+      metamodelId: state.metamodel.id,
+      viewpointId
     });
     res.status(201).json(diagram);
   } catch (err) {
@@ -291,8 +501,25 @@ router.post("/diagrams", async (req, res, next) => {
   }
 });
 
+router.get("/diagrams/:id/validate", async (req, res, next) => {
+  try {
+    const state = await readSidebarState();
+    const diagram = state.diagrams.find((item) => item.id === req.params.id);
+    if (!diagram) return res.status(404).json({ error: "Diagram not found." });
+    res.json(validateDiagram(diagram, state));
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.patch("/diagrams/:id", async (req, res, next) => {
   try {
+    const state = await readSidebarState();
+    const existing = state.diagrams.find((diagram) => diagram.id === req.params.id);
+    if (!existing) return res.status(404).json({ error: "Diagram not found." });
+    const candidate = { ...existing, ...req.body, id: req.params.id };
+    const validation = validateDiagram(candidate, state, { includeRequiredRules: false });
+    if (!validation.valid) return res.status(400).json({ error: validation.errors[0]?.message ?? "Diagram is not valid.", ...validation });
     const updated = await updateDiagram(req.params.id, req.body);
     if (!updated) return res.status(404).json({ error: "Diagram not found." });
     res.json(updated);

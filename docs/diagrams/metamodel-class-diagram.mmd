@@ -1,0 +1,135 @@
+classDiagram
+direction LR
+
+class Metamodel {
+  id
+  name
+  description
+  version
+  isActive
+}
+
+class ComponentType {
+  id
+  name
+  layer
+  color
+  icon
+  shape
+}
+
+class ConnectionType {
+  id
+  name
+  directionDescription
+  lineStyle
+}
+
+class ConnectionRule {
+  id
+  sourceComponentTypeId
+  connectionTypeId
+  targetComponentTypeId
+  allowed
+  required
+  severity
+  rationale
+}
+
+class Viewpoint {
+  id
+  name
+  stakeholderRole
+  purpose
+}
+
+class ViewpointRule {
+  id
+  viewpointId
+  allowedComponentTypeIds
+  allowedConnectionTypeIds
+  allowedConnectionRuleIds
+  requiredComponentTypeIds
+  requiredConnectionRuleIds
+}
+
+class ValidationRule {
+  id
+  name
+  scope
+  sourceComponentTypeId
+  requiredConnectionTypeId
+  targetComponentTypeId
+  direction
+  minOccurrences
+  severity
+}
+
+class Diagram {
+  id
+  name
+  metamodelId
+  viewpointId
+}
+
+class ComponentInstance {
+  id
+  componentTypeId
+  name
+  properties
+}
+
+class ConnectionInstance {
+  id
+  connectionTypeId
+  sourceComponentId
+  targetComponentId
+}
+
+class ValidationEngine {
+  validateDiagram()
+  validateConnectionInstance()
+}
+
+class ValidationResult {
+  valid
+  errors
+  warnings
+}
+
+class ValidationMessage {
+  id
+  severity
+  scope
+  ruleType
+  code
+  message
+}
+
+Metamodel "1" --> "*" ComponentType
+Metamodel "1" --> "*" ConnectionType
+Metamodel "1" --> "*" ConnectionRule
+Metamodel "1" --> "*" Viewpoint
+Metamodel "1" --> "*" ViewpointRule
+Metamodel "1" --> "*" ValidationRule
+Diagram "*" --> "1" Metamodel : conforms to
+Diagram "*" --> "0..1" Viewpoint : selected view
+Diagram "1" --> "*" ComponentInstance
+Diagram "1" --> "*" ConnectionInstance
+ComponentType "1" --> "*" ComponentInstance
+ConnectionType "1" --> "*" ConnectionInstance
+ConnectionRule "*" --> "1" ComponentType : source type
+ConnectionRule "*" --> "1" ComponentType : target type
+ConnectionRule "*" --> "1" ConnectionType
+Viewpoint "1" --> "1" ViewpointRule
+ViewpointRule ..> ComponentType : allows/requires
+ViewpointRule ..> ConnectionType : allows/requires
+ViewpointRule ..> ConnectionRule : allows/requires
+ValidationRule ..> ComponentType : checks typed relation
+ValidationRule ..> ConnectionType : requires relation
+ValidationEngine ..> Diagram : validates
+ValidationEngine ..> Metamodel : uses
+ValidationEngine ..> ViewpointRule : applies
+ValidationEngine ..> ValidationRule : applies
+ValidationEngine ..> ValidationResult : produces
+ValidationResult "1" --> "*" ValidationMessage

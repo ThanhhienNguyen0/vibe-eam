@@ -1,21 +1,36 @@
 import { useEffect, useState } from "react";
-import { LayoutDashboard, Plus } from "lucide-react";
+import { GitBranch, LayoutDashboard, Plus } from "lucide-react";
 import Sidebar, { type SidebarSelection } from "./Sidebar/Sidebar";
 import SidebarPanels from "./Sidebar/SidebarPanels";
 import DiagramEditor from "./DiagramEditor";
+import MetamodelView from "./MetamodelView";
 import { sidebarApi } from "./Sidebar/sidebarApi";
 import type { SidebarState } from "./Sidebar/sidebarTypes";
 
 export default function App() {
   const [sidebarState, setSidebarState] = useState<SidebarState>({
+    metamodel: {
+      id: "",
+      name: "",
+      description: "",
+      version: "",
+      isActive: true,
+      createdAt: "",
+      updatedAt: ""
+    },
     componentTypes: [],
     connectionTypes: [],
+    connectionRules: [],
+    viewpointRules: [],
+    validationRules: [],
     components: [],
     connections: [],
-    diagrams: []
+    diagrams: [],
+    viewpoints: []
   });
   const [sidebarSelection, setSidebarSelection] = useState<SidebarSelection | null>(null);
   const [activeDiagramId, setActiveDiagramId] = useState<string | null>(null);
+  const [workspaceView, setWorkspaceView] = useState<"diagrams" | "metamodel">("diagrams");
   const [error, setError] = useState("");
 
   const activeDiagram = sidebarState.diagrams.find((d) => d.id === activeDiagramId) ?? null;
@@ -26,6 +41,7 @@ export default function App() {
 
   function openDiagram(id: string) {
     setActiveDiagramId(id);
+    setWorkspaceView("diagrams");
   }
 
   async function createDiagram() {
@@ -41,6 +57,20 @@ export default function App() {
           <h1>EAM Prototype</h1>
           <p>Leichtgewichtige Architektur-Modellierung</p>
         </div>
+        <nav className="tabs" aria-label="Workspace">
+          <button
+            className={`tabs-diagram-tab${!activeDiagram && workspaceView === "diagrams" ? " active" : ""}`}
+            onClick={() => { setActiveDiagramId(null); setWorkspaceView("diagrams"); }}
+          >
+            <LayoutDashboard size={14} /> Diagramme
+          </button>
+          <button
+            className={`tabs-diagram-tab${!activeDiagram && workspaceView === "metamodel" ? " active" : ""}`}
+            onClick={() => { setActiveDiagramId(null); setWorkspaceView("metamodel"); }}
+          >
+            <GitBranch size={14} /> Metamodel
+          </button>
+        </nav>
         {activeDiagram && (
           <nav className="tabs" aria-label="Geöffnetes Diagramm">
             <button className="tabs-diagram-tab active">
@@ -76,8 +106,13 @@ export default function App() {
           {activeDiagram ? (
             <DiagramEditor
               diagram={activeDiagram}
+              metamodel={sidebarState.metamodel}
               componentTypes={sidebarState.componentTypes}
               connectionTypes={sidebarState.connectionTypes}
+              connectionRules={sidebarState.connectionRules}
+              viewpointRules={sidebarState.viewpointRules}
+              validationRules={sidebarState.validationRules}
+              viewpoints={sidebarState.viewpoints}
               components={sidebarState.components}
               connections={sidebarState.connections}
               onDiagramChange={(updated) =>
@@ -93,6 +128,8 @@ export default function App() {
               onSelectConnection={(id) => setSidebarSelection({ kind: "connection", id })}
               onClose={() => setActiveDiagramId(null)}
             />
+          ) : workspaceView === "metamodel" ? (
+            <MetamodelView sidebarState={sidebarState} onStateChange={setSidebarState} />
           ) : (
             <HomeView
               sidebarState={sidebarState}

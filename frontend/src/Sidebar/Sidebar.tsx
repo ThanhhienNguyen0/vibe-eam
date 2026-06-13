@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
+  Eye,
   ExternalLink,
   GitBranch,
   Layers,
@@ -23,6 +24,10 @@ export type SidebarSelection =
   | { kind: "componentType"; id: string }
   | { kind: "connectionTypes" }
   | { kind: "connectionType"; id: string }
+  | { kind: "connectionRules" }
+  | { kind: "connectionRule"; id: string }
+  | { kind: "viewpoints" }
+  | { kind: "viewpoint"; id: string }
   | { kind: "components" }
   | { kind: "component"; id: string }
   | { kind: "connections" }
@@ -30,7 +35,7 @@ export type SidebarSelection =
   | { kind: "diagrams" }
   | { kind: "diagram"; id: string };
 
-type ItemKind = "componentType" | "connectionType" | "component" | "connection" | "diagram";
+type ItemKind = "componentType" | "connectionType" | "connectionRule" | "viewpoint" | "component" | "connection" | "diagram";
 
 interface Props {
   onSelect: (sel: SidebarSelection) => void;
@@ -184,12 +189,14 @@ function EmptyHint({ text, actionLabel, onAction }: { text: string; actionLabel?
 }
 
 export default function Sidebar({ onSelect, selection, sidebarState, onStateChange, onOpenDiagram }: Props) {
-  const { componentTypes, connectionTypes, components, connections, diagrams } = sidebarState;
+  const { componentTypes, connectionTypes, connectionRules, viewpoints, components, connections, diagrams } = sidebarState;
 
   const [open, setOpen] = useState({
     rules: true,
     componentTypes: true,
     connectionTypes: false,
+    connectionRules: false,
+    viewpoints: true,
     mgmt: true,
     components: true,
     connections: false,
@@ -254,6 +261,13 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
 
   const visibleComponentTypes = componentTypes.filter((ct) => matches(ct.name));
   const visibleConnectionTypes = connectionTypes.filter((ct) => matches(ct.name));
+  const visibleConnectionRules = connectionRules.filter((rule) => {
+    const source = componentTypes.find((type) => type.id === rule.sourceComponentTypeId)?.name ?? rule.sourceComponentTypeId;
+    const connection = connectionTypes.find((type) => type.id === rule.connectionTypeId)?.name ?? rule.connectionTypeId;
+    const target = componentTypes.find((type) => type.id === rule.targetComponentTypeId)?.name ?? rule.targetComponentTypeId;
+    return matches(`${source} ${connection} ${target}`);
+  });
+  const visibleViewpoints = viewpoints.filter((vp) => matches(vp.name));
   const visibleComponents = components.filter((c) => matches(c.name));
   const visibleConnections = connections.filter((c) => matches(connectionLabel(c.id)));
   const visibleDiagrams = diagrams.filter((d) => matches(d.name));
@@ -285,6 +299,39 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     onStateChange({ ...sidebarState, connectionTypes: [...connectionTypes, ct] });
     onSelect({ kind: "connectionType", id: ct.id });
     setRenaming({ kind: "connectionType", id: ct.id });
+  }
+
+  async function addConnectionRule() {
+    if (componentTypes.length < 2 || connectionTypes.length === 0) return;
+    const rule = await sidebarApi.createConnectionRule({
+      sourceComponentTypeId: componentTypes[0].id,
+      connectionTypeId: connectionTypes[0].id,
+      targetComponentTypeId: componentTypes[1]?.id ?? componentTypes[0].id,
+      allowed: true,
+      required: false,
+      severity: "error",
+      description: "",
+      rationale: "",
+      viewpointIds: []
+    });
+    onStateChange({ ...sidebarState, connectionRules: [...connectionRules, rule] });
+    onSelect({ kind: "connectionRule", id: rule.id });
+  }
+
+  async function addViewpoint() {
+    const vp = await sidebarApi.createViewpoint({
+      name: "Neuer Viewpoint",
+      description: "",
+      stakeholderRole: "",
+      purpose: "",
+      allowedComponentTypeIds: componentTypes.map((type) => type.id),
+      allowedConnectionTypeIds: connectionTypes.map((type) => type.id),
+      requiredComponentTypeIds: [],
+      requiredConnectionTypeIds: []
+    });
+    onStateChange({ ...sidebarState, viewpoints: [...viewpoints, vp] });
+    onSelect({ kind: "viewpoint", id: vp.id });
+    setRenaming({ kind: "viewpoint", id: vp.id });
   }
 
   async function addComponent() {
@@ -336,6 +383,25 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     onStateChange({ ...sidebarState, connectionTypes: connectionTypes.filter((c) => c.id !== id) });
   }
 
+  async function deleteViewpoint(id: string) {
+    const name = viewpoints.find((v) => v.id === id)?.name ?? "Viewpoint";
+    if (!window.confirm(`Viewpoint "${name}" wirklich loeschen?`)) return;
+    await sidebarApi.deleteViewpoint(id);
+    onStateChange({
+      ...sidebarState,
+      viewpoints: viewpoints.filter((v) => v.id !== id),
+      diagrams: diagrams.map((d) => (d.viewpointId === id ? { ...d, viewpointId: undefined } : d))
+    });
+  }
+
+  async function deleteConnectionRule(id: string) {
+    const rule = connectionRules.find((item) => item.id === id);
+    const name = rule ? connectionTypes.find((type) => type.id === rule.connectionTypeId)?.name ?? "Connection Rule" : "Connection Rule";
+    if (!window.confirm(`Connection Rule "${name}" wirklich loeschen?`)) return;
+    await sidebarApi.deleteConnectionRule(id);
+    onStateChange({ ...sidebarState, connectionRules: connectionRules.filter((ruleItem) => ruleItem.id !== id) });
+  }
+
   async function deleteComponent(id: string) {
     const name = components.find((c) => c.id === id)?.name ?? "Komponente";
     if (!window.confirm(`Komponente „${name}“ löschen? Zugehörige Verbindungen werden mit entfernt.`)) return;
@@ -372,6 +438,12 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     } else if (kind === "connectionType") {
       const u = await sidebarApi.updateConnectionType(id, { name });
       onStateChange({ ...sidebarState, connectionTypes: connectionTypes.map((c) => (c.id === id ? u : c)) });
+    } else if (kind === "connectionRule") {
+      const u = await sidebarApi.updateConnectionRule(id, { description: name });
+      onStateChange({ ...sidebarState, connectionRules: connectionRules.map((rule) => (rule.id === id ? u : rule)) });
+    } else if (kind === "viewpoint") {
+      const u = await sidebarApi.updateViewpoint(id, { name });
+      onStateChange({ ...sidebarState, viewpoints: viewpoints.map((v) => (v.id === id ? u : v)) });
     } else if (kind === "component") {
       const u = await sidebarApi.updateComponent(id, { name });
       onStateChange({ ...sidebarState, components: components.map((c) => (c.id === id ? u : c)) });
@@ -396,6 +468,8 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     setContextMenu(null);
     if (menu.kind === "componentType") deleteComponentType(menu.id);
     else if (menu.kind === "connectionType") deleteConnectionType(menu.id);
+    else if (menu.kind === "connectionRule") deleteConnectionRule(menu.id);
+    else if (menu.kind === "viewpoint") deleteViewpoint(menu.id);
     else if (menu.kind === "component") deleteComponent(menu.id);
     else if (menu.kind === "connection") deleteConnection(menu.id);
     else deleteDiagram(menu.id);
@@ -577,6 +651,72 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
       </Folder>
 
       {/* ── Section 2: Architekturverwaltung ─────────────────────────────── */}
+      <Folder
+        label="Connection Rules"
+        icon={<GitBranch size={14} />}
+        open={isOpen("connectionRules")}
+        onToggle={() => toggle("connectionRules")}
+        onAdd={addConnectionRule}
+        addTitle={componentTypes.length < 2 || connectionTypes.length === 0 ? "Benotigt Component Types und Connection Types" : "Neue Connection Rule"}
+        active={isActive({ kind: "connectionRules" })}
+        count={connectionRules.length}
+      >
+        {visibleConnectionRules.map((rule) => {
+          const source = componentTypes.find((type) => type.id === rule.sourceComponentTypeId);
+          const connectionType = connectionTypes.find((type) => type.id === rule.connectionTypeId);
+          const target = componentTypes.find((type) => type.id === rule.targetComponentTypeId);
+          const label = rule.description || `${source?.name ?? "?"} ${connectionType?.name ?? "?"} ${target?.name ?? "?"}`;
+          return (
+            <Row
+              key={rule.id}
+              label={label}
+              color={connectionType?.color}
+              active={isActive({ kind: "connectionRule", id: rule.id })}
+              onClick={() => onSelect({ kind: "connectionRule", id: rule.id })}
+              onDelete={() => deleteConnectionRule(rule.id)}
+              onContextMenu={(e) => openContextMenu(e, "connectionRule", rule.id, label)}
+              renaming={isRenaming("connectionRule", rule.id)}
+              onRenameSubmit={(name) => renameItem("connectionRule", rule.id, name)}
+              onRenameCancel={() => setRenaming(null)}
+            />
+          );
+        })}
+        {connectionRules.length === 0 && (
+          <EmptyHint text="Noch keine Connection Rules definiert." actionLabel="Rule anlegen" onAction={addConnectionRule} />
+        )}
+        {connectionRules.length > 0 && visibleConnectionRules.length === 0 && <EmptyHint text="Keine Treffer." />}
+      </Folder>
+
+      <Folder
+        label="Viewpoints"
+        icon={<Eye size={14} />}
+        open={isOpen("viewpoints")}
+        onToggle={() => toggle("viewpoints")}
+        onAdd={addViewpoint}
+        addTitle="Neuer Viewpoint"
+        active={isActive({ kind: "viewpoints" })}
+        count={viewpoints.length}
+      >
+        {visibleViewpoints.map((vp) => (
+          <Row
+            key={vp.id}
+            label={vp.name}
+            icon={<Eye size={13} />}
+            active={isActive({ kind: "viewpoint", id: vp.id })}
+            onClick={() => onSelect({ kind: "viewpoint", id: vp.id })}
+            onDelete={() => deleteViewpoint(vp.id)}
+            onContextMenu={(e) => openContextMenu(e, "viewpoint", vp.id, vp.name)}
+            renaming={isRenaming("viewpoint", vp.id)}
+            onRenameSubmit={(name) => renameItem("viewpoint", vp.id, name)}
+            onRenameCancel={() => setRenaming(null)}
+          />
+        ))}
+        {viewpoints.length === 0 && (
+          <EmptyHint text="Noch keine Viewpoints definiert." actionLabel="Viewpoint anlegen" onAction={addViewpoint} />
+        )}
+        {viewpoints.length > 0 && visibleViewpoints.length === 0 && <EmptyHint text="Keine Treffer." />}
+      </Folder>
+
       <div className="sb-section-header sb-section-header--mgmt">
         <Layers size={14} />
         <span>Architekturverwaltung</span>

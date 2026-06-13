@@ -42,3 +42,23 @@ Status:
 | Auth/Deployment | 0 | Nicht umgesetzt | Bewusst ausserhalb des MVP. |
 | Automatisierte Tests | 2 | Teilweise funktional | Minimale Vitest-Unit-Tests fuer Metamodell, Validierung, Impact-Modi, Zyklusvermeidung, Portfolio-Scoring, Normalisierung und Bubble-Groessen. Keine UI-E2E-Tests. |
 | Forschungsbezug | 3 | Tatsaechlich funktional | Prompt, Annahmen, Grenzen und Bewertung dokumentiert. |
+| Metamodel Rule Builder | 3 | Tatsaechlich funktional | Component Types, Connection Types, Source-/Target-Regeln und Viewpoints sind in Sidebar-Datenmodell, Backend-Routen und UI editierbar. |
+| Stakeholder Viewpoints | 3 | Tatsaechlich funktional | Management, Business Owner, Application Owner, IT Operations und Full Architecture View werden mit erlaubten und verpflichtenden Typen bereitgestellt. |
+| Diagram Validation | 3 | Tatsaechlich funktional | Reine Validierungslogik prueft Verbindungskombinationen, Viewpoint-Regeln und Pflichtregeln; Backend lehnt harte Regelverstoesse ab. |
+| Metamodel Visualization | 3 | Tatsaechlich funktional | Neue Metamodel-Ansicht zeigt Regeluebersicht und SVG-Grafik mit Viewpoint-Filter. |
+| Explicit ConnectionRule model | 3 | Tatsaechlich funktional | ConnectionRule ist als eigene Struktur implementiert und primaere Quelle fuer Verbindungsvalidierung. |
+| Class-diagram-like metamodel documentation | 3 | Tatsaechlich funktional | `docs/METAMODEL_CLASS_MODEL.md` dokumentiert Klassen, Beziehungen und Mermaid-Klassendiagramm. |
+| Stakeholder as model element | 3 | Tatsaechlich funktional | Stakeholder bleibt ComponentType; Regeln fuer `responsible_for` und `interested_in` sind explizit modelliert. |
+| Viewpoint-aware validation | 3 | Tatsaechlich funktional | Validierung prueft erlaubte Component Types, Connection Types und ConnectionRules je Viewpoint. |
+| ViewpointRule | 3 | Tatsaechlich funktional | ViewpointRule trennt Sichtbeschreibung von erlaubten und verpflichtenden Regelmengen; alte Viewpoint-Felder bleiben Legacy. |
+| ValidationRule | 3 | Tatsaechlich funktional | Typbezogene Mindestbeziehungen werden als strukturierte Regeln geprueft und als Warnungen/Fehler ausgegeben. |
+| Diagram-to-Metamodel conformance | 3 | Tatsaechlich funktional | Diagramme erhalten `metamodelId`; fehlende Bestandswerte werden gegen das aktive Metamodel normalisiert. |
+| Structured ValidationResult | 3 | Tatsaechlich funktional | ValidationResult wird pro Lauf erzeugt und Meldungen enthalten Severity, Scope und RuleType. |
+| Fachliche Diagramme | 3 | Tatsaechlich funktional | Mermaid-Quellen und erklaerende Markdown-Dateien liegen unter `docs/diagrams`; SVG/PNG-Export ist wegen fehlendem Mermaid-Renderer bewusst nur als Render-Hinweis dokumentiert. |
+| Metamodel UI usability | 3 | Tatsaechlich funktional | Metamodel-Ansicht ist in Header, Filter und Tabs gegliedert; Typen, Regeln, Viewpoints und ValidationRules sind getrennt sichtbar. |
+| Rule Graph readability | 3 | Teilweise funktional | Rule Graph nutzt Simplified/Detailed/Viewpoint-Modi, gruppierte Kantenlabels, BPMN-Ausblendung, berechenbares Layout und Regel-Limit; keine automatische Layout-Engine. |
+| Diagram export/readme | 3 | Tatsaechlich funktional | `docs/diagrams/README.md` dokumentiert Quellen, Zwecke und Rendering-Optionen. |
+| Metamodel JSON export/import | 3 | Tatsaechlich funktional | Backend exportiert und importiert das Regelwerk als eine JSON-Struktur; Import validiert Pflichtfelder, IDs und Referenzen. |
+| Reproduzierbarkeit | 3 | Tatsaechlich funktional | Default-EAM-Metamodell liegt als JSON-Datei vor und kann ueber die UI heruntergeladen werden. |
+| Kundenspezifische Anpassbarkeit | 3 | Teilweise funktional | Kunden koennen Metamodel JSON importieren; MVP nutzt Replace statt Merge und hat noch keinen vollstaendigen visuellen JSON-Preview. |
+| Metamodel JSON format documentation | 3 | Tatsaechlich funktional | `docs/METAMODEL_JSON_FORMAT.md` beschreibt Struktur, Pflichtfelder, Referenzregeln und Importmodus. |

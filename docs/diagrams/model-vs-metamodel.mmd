@@ -1,0 +1,37 @@
+flowchart TB
+  subgraph L1["Level 1: Metamodel / rules"]
+    CT["ComponentType\nApplication, Business Process"]
+    CNT["ConnectionType\nserves"]
+    CR["ConnectionRule\nApplication --serves--> Business Process"]
+    VPR["ViewpointRule\nBusiness Owner View allows this rule"]
+    VR["ValidationRule\nEvery Application should serve a Business Process"]
+  end
+
+  subgraph L2["Level 2: Model / concrete diagram"]
+    D["Diagram\nOrder Management Demo"]
+    CI1["ComponentInstance\nERP System : Application"]
+    CI2["ComponentInstance\nOrder to Cash : Business Process"]
+    CNI["ConnectionInstance\nERP System --serves--> Order to Cash"]
+  end
+
+  subgraph L3["Level 3: Validation"]
+    VS["ValidationService\nchecks model against metamodel"]
+    RESULT["ValidationResult\nvalid / errors / warnings"]
+    MSG["ValidationMessage\nseverity + scope + message"]
+  end
+
+  CT --> CI1
+  CT --> CI2
+  CNT --> CNI
+  CR -. "allows type combination" .-> CNI
+  VPR -. "filters allowed rules" .-> D
+  VR -. "checks minimum quality" .-> D
+  D --> CI1
+  D --> CI2
+  D --> CNI
+  VS --> D
+  VS --> CR
+  VS --> VPR
+  VS --> VR
+  VS --> RESULT
+  RESULT --> MSG

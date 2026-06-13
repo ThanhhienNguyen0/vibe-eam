@@ -1,11 +1,16 @@
 import type {
   ComponentInstance,
+  ConnectionRule,
   ComponentType,
   ConnectionInstance,
   ConnectionType,
   Diagram,
-  SidebarState
+  MetamodelDefinition,
+  MetamodelImportResult,
+  SidebarState,
+  Viewpoint
 } from "./sidebarTypes";
+import type { DiagramValidationResult } from "./metamodelRules";
 
 const BASE = "/api/sidebar";
 
@@ -25,6 +30,13 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export const sidebarApi = {
   getAll: () => request<SidebarState>(`${BASE}/`),
 
+  exportMetamodel: () =>
+    request<MetamodelDefinition>(`${BASE}/metamodel/export`),
+  getDefaultMetamodel: () =>
+    request<MetamodelDefinition>(`${BASE}/metamodel/default`),
+  importMetamodel: (data: unknown) =>
+    request<MetamodelImportResult>(`${BASE}/metamodel/import`, { method: "POST", body: JSON.stringify(data) }),
+
   // Component Types
   createComponentType: (data: Omit<ComponentType, "id">) =>
     request<ComponentType>(`${BASE}/component-types`, { method: "POST", body: JSON.stringify(data) }),
@@ -40,6 +52,22 @@ export const sidebarApi = {
     request<ConnectionType>(`${BASE}/connection-types/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteConnectionType: (id: string) =>
     request<void>(`${BASE}/connection-types/${id}`, { method: "DELETE" }),
+
+  // Connection Rules
+  createConnectionRule: (data: Omit<ConnectionRule, "id">) =>
+    request<ConnectionRule>(`${BASE}/connection-rules`, { method: "POST", body: JSON.stringify(data) }),
+  updateConnectionRule: (id: string, data: Partial<ConnectionRule>) =>
+    request<ConnectionRule>(`${BASE}/connection-rules/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteConnectionRule: (id: string) =>
+    request<void>(`${BASE}/connection-rules/${id}`, { method: "DELETE" }),
+
+  // Viewpoints
+  createViewpoint: (data: Omit<Viewpoint, "id">) =>
+    request<Viewpoint>(`${BASE}/viewpoints`, { method: "POST", body: JSON.stringify(data) }),
+  updateViewpoint: (id: string, data: Partial<Viewpoint>) =>
+    request<Viewpoint>(`${BASE}/viewpoints/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteViewpoint: (id: string) =>
+    request<void>(`${BASE}/viewpoints/${id}`, { method: "DELETE" }),
 
   // Components
   createComponent: (data: Omit<ComponentInstance, "id">) =>
@@ -62,6 +90,8 @@ export const sidebarApi = {
     request<Diagram>(`${BASE}/diagrams`, { method: "POST", body: JSON.stringify(data) }),
   updateDiagram: (id: string, data: Partial<Diagram>) =>
     request<Diagram>(`${BASE}/diagrams/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  validateDiagram: (id: string) =>
+    request<DiagramValidationResult>(`${BASE}/diagrams/${id}/validate`),
   deleteDiagram: (id: string) =>
     request<void>(`${BASE}/diagrams/${id}`, { method: "DELETE" })
 };

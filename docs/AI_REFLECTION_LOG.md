@@ -103,3 +103,120 @@
 - Seed-Daten sind fiktiv und nicht aus einer realen Unternehmensarchitektur abgeleitet.
 - EAM-Begriffe sind jetzt in einem kleinen lokalen Metamodell verankert, aber nicht in einem verbindlichen Standard wie ArchiMate.
 - Die Evaluation Matrix ist eine technische Selbsteinschaetzung nach Smoke-Tests und Codepruefung, keine unabhaengige Qualitaetssicherung.
+
+## Vierter Entwicklungszyklus: Metamodel Rule Builder
+
+### Annahmen ueber KMU-Kunden
+
+- KMU-Kunden brauchen eher wenige, verstaendliche Modellierungsregeln als einen vollstaendigen Architekturstandard.
+- Unterschiedliche Stakeholder brauchen reduzierte Sichten, damit Diagramme nicht zu technisch oder zu breit werden.
+- Pflichtregeln sollten pruefbar sein, aber den iterativen Diagrammaufbau nicht bei jedem Zwischenschritt blockieren.
+
+### Fachlich vereinfachte Regeln
+
+- Viewpoints enthalten einfache Allow-/Require-Listen statt einer komplexen Regel-DSL.
+- `allowedSourceTypeIds` und `allowedTargetTypeIds` modellieren Typkombinationen grob und ohne Kardinalitaeten.
+- Pflichtverbindungen werden als mindestens einmal vorkommender Verbindungstyp geprueft, nicht als vollstaendige Pattern-Regel.
+- Das Metamodell ist EAM-inspiriert, aber keine vollstaendige ArchiMate-Implementierung.
+
+### Weiterhin noetige menschliche Review
+
+- Ob die initialen Viewpoints fuer die Ziel-KMU fachlich passen.
+- Ob `Application serves Business Capability` direkt erlaubt bleiben soll oder nur ueber Business Process laufen darf.
+- Ob Pflichtregeln je Viewpoint zu streng oder zu locker sind.
+- Ob die Metamodel-Visualisierung bei groesseren Kundenmetamodellen ausreichend lesbar bleibt.
+
+## Fuenfter Entwicklungszyklus: Explizite ConnectionRules
+
+### Warum Das Vorherige Modell Fachlich Grob War
+
+- `allowedSourceTypeIds` und `allowedTargetTypeIds` am ConnectionType vermischten Beziehungstyp und Beziehungserlaubnis.
+- Eine einzelne erlaubte Verbindung hatte keine eigene Begruendung, Severity, Pflichtmarkierung oder Viewpoint-Einschraenkung.
+- Die Visualisierung zeigte abgeleitete Kombinationslisten statt expliziter fachlicher Regeln.
+
+### Warum ConnectionRule Eingefuehrt Wurde
+
+ConnectionRule modelliert die eigentliche fachliche Aussage: Source Component Type + Connection Type + Target Component Type. Dadurch kann eine Regel begruendet, als required/optional markiert, einem Viewpoint zugeordnet und in Validierungsergebnissen referenziert werden.
+
+### Bewusste Stakeholder-Entscheidung
+
+Stakeholder wurden bewusst als normale Diagrammelemente erhalten. Ein Stakeholder-Knoten kann direkt Beziehungen wie `responsible_for Application` oder `interested_in Business Capability` tragen. Viewpoints bleiben dagegen Rollenfilter und ersetzen Stakeholder nicht.
+
+### Weiterhin Bestehende Annahmen
+
+- Das Metamodell bleibt ein MVP und kein vollstaendiger ArchiMate-Standard.
+- ConnectionRules bilden keine komplexe Regel-DSL mit Pfadbedingungen oder Vererbung ab.
+- Legacy-Felder bleiben fuer Migration und Kompatibilitaet erhalten.
+- Menschliche Fachreview ist noetig, um direkte Regeln wie `Application serves Business Capability` je Kunde zu bestaetigen.
+
+## Sechster Entwicklungszyklus: Trennung Der Regelarten
+
+### Fachliche Nachschaerfung
+
+- `ValidationResult` wird nun bewusst als erzeugtes Ergebnis eines Validierungslaufs verstanden, nicht als persistiertes Diagramm-Bestandteilobjekt.
+- `ViewpointRule` trennt die konkrete Regelmenge von der Viewpoint-Beschreibung. Der Viewpoint bleibt Rolle/Zweck, die ViewpointRule enthaelt Allow-/Require-Listen.
+- Diagramme werden ueber `metamodelId` gegen das aktive Metamodel eingeordnet; fehlende Bestandswerte werden beim Laden normalisiert.
+- `ValidationRule` ergaenzt typbezogene Mindestbeziehungen, zum Beispiel Application braucht verantwortliche Stakeholder-Beziehung.
+
+### Weiterhin Bestehende MVP-Grenzen
+
+- Zusammengesetzte OR-Regeln sind noch nicht implementiert. Die daten- oder technologiebezogene Application-Pflicht ist im MVP eine einfache Technology-Dependency-Warnregel.
+- Es gibt noch keinen vollstaendigen UI-Editor fuer ValidationRules.
+- Viewpoint-Legacy-Felder bleiben vorhanden, koennen aber fachlich von ViewpointRules abweichen. Primaer ist nun ViewpointRule.
+- Menschliche Review bleibt noetig, um die Severity der neuen Pflichtbeziehungsregeln je KMU festzulegen.
+
+## Siebter Entwicklungszyklus: Kritische Pruefung
+
+### Pruefergebnis
+
+- Die vier Nachschaerfungen sind im Code implementiert und nicht nur dokumentiert.
+- Kleine Testluecken wurden gefunden und geschlossen.
+- `ValidationResult`, `ViewpointRule`, `Diagram.metamodelId` und `ValidationRule` sind als Strukturen und in der Validierungslogik vorhanden.
+
+### Kritische Restpunkte
+
+- Die OR-Regel fuer daten- oder technologiebezogene Application-Abhaengigkeit bleibt eine MVP-Vereinfachung.
+- Legacy-Felder `allowedSourceTypeIds` und `allowedTargetTypeIds` koennen fuer Migration in explizite ConnectionRules umgewandelt werden. Das ist technisch nachvollziehbar, sollte bei echten Kundendaten aber reviewt werden.
+- Die UI zeigt ViewpointRules und ValidationRules, bietet aber noch keinen vollstaendigen dedizierten Editor fuer diese neuen Regelarten.
+
+## Achter Entwicklungszyklus: Praesentationsfaehige Metamodel-Sicht
+
+### Kritische Ausgangslage
+
+- Die vorherige Metamodel-Ansicht war funktional, aber fuer PO, Teamleitung und KMU-Kunden zu unstrukturiert.
+- EAM- und BPMN-Typen wurden gemeinsam dargestellt, wodurch der Rule Graph schnell ueberladen und schwer erklaerbar wurde.
+- Die Visualisierung zeigte zu viele Regeln gleichzeitig und hatte starke Ueberlappungen.
+
+### Umgesetzte Verbesserung
+
+- Fachliche Mermaid-Diagramme wurden als Primaerquellen unter `docs/diagrams` angelegt.
+- Die Metamodel-UI wurde in Summary, Filter und Tabs gegliedert.
+- Der Rule Graph zeigt standardmaessig eine reduzierte EAM-Kernansicht und blendet BPMN aus, bis BPMN explizit gefiltert wird.
+- ConnectionRules, ViewpointRules und ValidationRules sind getrennt sichtbar.
+
+### Weiterhin MVP
+
+- Es gibt keine automatische Graph-Layout-Engine; das Layout ist bewusst einfach berechnet.
+- Mermaid-Exporte als SVG/PNG wurden nicht erzeugt, weil kein Renderer im Projekt vorhanden ist und keine neue Doku-Dependency eingefuehrt wurde.
+- Die UI ist besser praesentierbar, aber noch kein vollstaendiger Governance-Editor.
+
+## Neunter Entwicklungszyklus: Metamodel JSON Und Lesbarerer Rule Graph
+
+### Warum JSON-Konfiguration Wichtig Ist
+
+- Ein KMU-Metamodell sollte nicht nur als verstreuter Seed-Code existieren, sondern als versionierbares Kundenartefakt.
+- Eine einzelne JSON-Datei macht Regeln reproduzierbar, reviewbar und kundenspezifisch anpassbar.
+- Export/Import trennt fachliches Regelwerk von konkreten Diagramminstanzen.
+
+### Umgesetzte Hardcoding-Reduktion
+
+- Eine Default-EAM-Definition wurde als `backend/src/data/default-metamodel.json` angelegt.
+- Backend-Endpunkte exportieren/importieren nur das Metamodell: ComponentTypes, ConnectionTypes, ConnectionRules, Viewpoints, ViewpointRules und ValidationRules.
+- Importvalidierung prueft Pflichtfelder, eindeutige IDs und Referenzen, bevor der Store geschrieben wird.
+
+### Weiterhin MVP
+
+- Bestehende Code-Seeds bleiben als technische Rueckfall- und Migrationslogik erhalten, insbesondere fuer Legacy- und BPMN-Daten.
+- Der Import nutzt `replace active metamodel`; ein sicherer Merge-Modus ist noch nicht umgesetzt.
+- Die UI importiert direkt und zeigt das ImportResult, aber noch keine vollstaendige Preview mit manueller Freigabe.
+- Der Rule Graph ist durch Simplified/Detailed/Viewpoint-Modi lesbarer, nutzt aber weiterhin ein einfaches berechnetes SVG-Layout statt einer spezialisierten Graph-Layout-Engine.

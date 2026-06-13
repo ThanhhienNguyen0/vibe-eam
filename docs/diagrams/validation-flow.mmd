@@ -1,0 +1,23 @@
+sequenceDiagram
+  actor User
+  participant UI as DiagramEditor UI
+  participant Diagram
+  participant VS as ValidationService
+  participant MM as Active Metamodel
+  participant CR as ConnectionRules
+  participant VPR as ViewpointRules
+  participant VR as ValidationRules
+  participant Result as ValidationResult
+
+  User->>UI: Create or edit diagram
+  UI->>Diagram: Set/update component and connection instances
+  UI->>Diagram: Ensure metamodelId or use active metamodel
+  User->>UI: Validate diagram
+  UI->>VS: validateDiagram(diagram, state)
+  VS->>MM: Load active metamodel
+  VS->>CR: Check each ConnectionInstance
+  VS->>VPR: Check optional Viewpoint constraints
+  VS->>VR: Check mandatory/quality rules
+  VS->>Result: Produce errors and warnings
+  Result-->>UI: Structured ValidationMessages
+  UI-->>User: Show grouped errors and warnings

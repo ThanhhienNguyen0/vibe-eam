@@ -1,4 +1,13 @@
 {
+  "metamodel": {
+    "id": "mm-sme-eam",
+    "name": "SME EAM Metamodel",
+    "description": "Configurable metamodel for a lightweight SME Enterprise Architecture Management prototype.",
+    "version": "0.2.0",
+    "isActive": true,
+    "createdAt": "2026-06-12T00:00:00.000Z",
+    "updatedAt": "2026-06-12T00:00:00.000Z"
+  },
   "componentTypes": [
     {
       "id": "ct-app",
@@ -9,7 +18,9 @@
       "customPropertyKeys": [
         "version",
         "owner"
-      ]
+      ],
+      "category": "EAM",
+      "layer": "Application"
     },
     {
       "id": "ct-server",
@@ -21,7 +32,8 @@
         "os",
         "cpu",
         "ram"
-      ]
+      ],
+      "layer": "Technology"
     },
     {
       "id": "ct-db",
@@ -33,7 +45,8 @@
         "engine",
         "version"
       ],
-      "shape": "datastore"
+      "shape": "datastore",
+      "layer": "Data"
     },
     {
       "id": "ct-proc",
@@ -45,7 +58,9 @@
         "owner",
         "sla"
       ],
-      "shape": "process"
+      "shape": "process",
+      "category": "EAM",
+      "layer": "Business"
     },
     {
       "id": "ct-svc",
@@ -56,7 +71,8 @@
       "customPropertyKeys": [
         "endpoint",
         "owner"
-      ]
+      ],
+      "layer": "Business"
     },
     {
       "id": "32241ce4-0325-46ad-9242-e8bab8ab7635",
@@ -64,7 +80,8 @@
       "color": "#cdd920",
       "icon": "box",
       "description": "",
-      "customPropertyKeys": []
+      "customPropertyKeys": [],
+      "layer": "Business"
     },
     {
       "id": "a2c5ee60-68fa-4be8-a308-7534c6d03c84",
@@ -76,7 +93,8 @@
         "verantwortlich"
       ],
       "shape": "pool",
-      "category": "BPMN"
+      "category": "BPMN",
+      "layer": "BPMN"
     },
     {
       "id": "4d45b97a-308d-4382-ad67-e82c2440366a",
@@ -88,7 +106,8 @@
         "ereignisart"
       ],
       "shape": "event",
-      "category": "BPMN"
+      "category": "BPMN",
+      "layer": "BPMN"
     },
     {
       "id": "2c40eb50-cf89-47dc-91e3-20b7c10a74a7",
@@ -100,7 +119,8 @@
         "bedingung"
       ],
       "shape": "gateway",
-      "category": "BPMN"
+      "category": "BPMN",
+      "layer": "BPMN"
     },
     {
       "id": "ae8393e0-8b41-46f3-a1cc-7648c44e02f1",
@@ -112,7 +132,8 @@
         "rolle"
       ],
       "shape": "process",
-      "category": "BPMN"
+      "category": "BPMN",
+      "layer": "BPMN"
     },
     {
       "id": "2aadba47-0e18-4cd1-8b3c-8d54cd264591",
@@ -124,7 +145,8 @@
         "ausloeser"
       ],
       "shape": "event-start",
-      "category": "BPMN"
+      "category": "BPMN",
+      "layer": "BPMN"
     },
     {
       "id": "7c060520-dcd7-403c-9b33-b756f7cfea2e",
@@ -136,7 +158,8 @@
         "ergebnis"
       ],
       "shape": "event-end",
-      "category": "BPMN"
+      "category": "BPMN",
+      "layer": "BPMN"
     },
     {
       "id": "e3d00899-4507-4ddc-82db-c1ba0f4aab4f",
@@ -148,7 +171,8 @@
         "bedingung"
       ],
       "shape": "gateway-xor",
-      "category": "BPMN"
+      "category": "BPMN",
+      "layer": "BPMN"
     },
     {
       "id": "1383c7f3-88a0-41b7-b74a-539f6ef2d482",
@@ -158,7 +182,8 @@
       "description": "Paralleles Gateway – alle Pfade werden ausgeführt.",
       "customPropertyKeys": [],
       "shape": "gateway-and",
-      "category": "BPMN"
+      "category": "BPMN",
+      "layer": "BPMN"
     },
     {
       "id": "42785b8a-c314-4e7f-87b8-6a746604ca1e",
@@ -170,7 +195,91 @@
         "bedingung"
       ],
       "shape": "gateway-or",
-      "category": "BPMN"
+      "category": "BPMN",
+      "layer": "BPMN"
+    },
+    {
+      "id": "ct-stakeholder",
+      "name": "Stakeholder",
+      "color": "#0891b2",
+      "icon": "user",
+      "description": "Person or role with an interest in the architecture.",
+      "customPropertyKeys": [
+        "role",
+        "department"
+      ],
+      "shape": "box",
+      "category": "EAM",
+      "layer": "Business"
+    },
+    {
+      "id": "ct-goal",
+      "name": "Goal / Objective",
+      "color": "#16a34a",
+      "icon": "target",
+      "description": "Business goal or measurable objective.",
+      "customPropertyKeys": [
+        "metric",
+        "targetDate"
+      ],
+      "shape": "box",
+      "category": "EAM",
+      "layer": "Motivation"
+    },
+    {
+      "id": "ct-capability",
+      "name": "Business Capability",
+      "color": "#0f766e",
+      "icon": "capability",
+      "description": "Stable business ability that the organization needs.",
+      "customPropertyKeys": [
+        "owner",
+        "criticality"
+      ],
+      "shape": "box",
+      "category": "EAM",
+      "layer": "Business"
+    },
+    {
+      "id": "ct-data-object",
+      "name": "Data Object",
+      "color": "#7c3aed",
+      "icon": "data",
+      "description": "Relevant business or application data object.",
+      "customPropertyKeys": [
+        "dataOwner",
+        "classification"
+      ],
+      "shape": "datastore",
+      "category": "EAM",
+      "layer": "Data"
+    },
+    {
+      "id": "ct-technology-node",
+      "name": "Technology Node",
+      "color": "#475569",
+      "icon": "server",
+      "description": "Infrastructure or runtime node used by applications.",
+      "customPropertyKeys": [
+        "platform",
+        "environment"
+      ],
+      "shape": "box",
+      "category": "EAM",
+      "layer": "Technology"
+    },
+    {
+      "id": "ct-org-unit",
+      "name": "Organizational Unit",
+      "color": "#c2410c",
+      "icon": "org",
+      "description": "Team, department or organizational unit.",
+      "customPropertyKeys": [
+        "manager"
+      ],
+      "shape": "pool",
+      "category": "EAM",
+      "layer": "Business"
     }
   ],
   "connectionTypes": [
@@ -185,16 +294,28 @@
       "allowedTargetTypeIds": [
         "ct-server"
       ],
-      "description": "An application runs on a server."
+      "description": "An application runs on a server.",
+      "requiredForSourceTypes": [],
+      "requiredForTargetTypes": []
     },
     {
       "id": "conn-dep",
-      "name": "depends on",
+      "name": "depends_on",
       "color": "#dc2626",
       "lineStyle": "dashed",
-      "allowedSourceTypeIds": [],
-      "allowedTargetTypeIds": [],
-      "description": "A component depends on another component."
+      "allowedSourceTypeIds": [
+        "ct-app",
+        "ct-data-object",
+        "ct-technology-node"
+      ],
+      "allowedTargetTypeIds": [
+        "ct-app",
+        "ct-server",
+        "ct-db",
+        "ct-technology-node"
+      ],
+      "description": "A component depends on another component.",
+      "directionDescription": "Dependent to provider"
     },
     {
       "id": "conn-comm",
@@ -203,7 +324,9 @@
       "lineStyle": "dotted",
       "allowedSourceTypeIds": [],
       "allowedTargetTypeIds": [],
-      "description": "Two components communicate with each other."
+      "description": "Two components communicate with each other.",
+      "requiredForSourceTypes": [],
+      "requiredForTargetTypes": []
     },
     {
       "id": "230d5cc8-2604-4416-92ca-84cd7601be07",
@@ -212,7 +335,9 @@
       "lineStyle": "solid",
       "allowedSourceTypeIds": [],
       "allowedTargetTypeIds": [],
-      "description": ""
+      "description": "",
+      "requiredForSourceTypes": [],
+      "requiredForTargetTypes": []
     },
     {
       "id": "3b8bc14b-8cbc-456f-ae42-4de38a04bf39",
@@ -221,7 +346,9 @@
       "lineStyle": "solid",
       "allowedSourceTypeIds": [],
       "allowedTargetTypeIds": [],
-      "description": "A verwendet B"
+      "description": "A verwendet B",
+      "requiredForSourceTypes": [],
+      "requiredForTargetTypes": []
     },
     {
       "id": "8487f629-41cd-41f2-b783-f19689eec61b",
@@ -247,7 +374,9 @@
         "42785b8a-c314-4e7f-87b8-6a746604ca1e"
       ],
       "description": "BPMN-Sequenzfluss: Reihenfolge im Prozess. Start hat keinen Eingang, Ende keinen Ausgang, keine Pools.",
-      "category": "BPMN"
+      "category": "BPMN",
+      "requiredForSourceTypes": [],
+      "requiredForTargetTypes": []
     },
     {
       "id": "4a2fbae0-7a4b-44f9-b862-24d65035a13f",
@@ -269,7 +398,9 @@
         "7c060520-dcd7-403c-9b33-b756f7cfea2e"
       ],
       "description": "BPMN-Nachrichtenfluss: Kommunikation zwischen Pools/Teilnehmern.",
-      "category": "BPMN"
+      "category": "BPMN",
+      "requiredForSourceTypes": [],
+      "requiredForTargetTypes": []
     },
     {
       "id": "6d27bf3e-0f94-4612-ad80-e917315c5126",
@@ -279,7 +410,671 @@
       "allowedSourceTypeIds": [],
       "allowedTargetTypeIds": [],
       "description": "BPMN-Assoziation: verknüpft Artefakte/Daten mit Flusselementen.",
-      "category": "BPMN"
+      "category": "BPMN",
+      "requiredForSourceTypes": [],
+      "requiredForTargetTypes": []
+    },
+    {
+      "id": "conn-realizes",
+      "name": "realizes",
+      "color": "#0f766e",
+      "lineStyle": "solid",
+      "allowedSourceTypeIds": [
+        "ct-proc"
+      ],
+      "allowedTargetTypeIds": [
+        "ct-capability"
+      ],
+      "description": "A business process realizes a business capability.",
+      "category": "EAM",
+      "directionDescription": "Process to capability",
+      "requiredForSourceTypes": [],
+      "requiredForTargetTypes": []
+    },
+    {
+      "id": "conn-serves",
+      "name": "serves",
+      "color": "#2563eb",
+      "lineStyle": "solid",
+      "allowedSourceTypeIds": [
+        "ct-app"
+      ],
+      "allowedTargetTypeIds": [
+        "ct-proc",
+        "ct-capability"
+      ],
+      "description": "An application serves a process or capability.",
+      "category": "EAM",
+      "requiredForSourceTypes": [
+        "ct-app"
+      ],
+      "directionDescription": "Application to business need",
+      "requiredForTargetTypes": []
+    },
+    {
+      "id": "conn-uses",
+      "name": "uses",
+      "color": "#7c3aed",
+      "lineStyle": "solid",
+      "allowedSourceTypeIds": [
+        "ct-app"
+      ],
+      "allowedTargetTypeIds": [
+        "ct-data-object"
+      ],
+      "description": "An application uses a data object.",
+      "category": "EAM",
+      "directionDescription": "Application to data",
+      "requiredForSourceTypes": [],
+      "requiredForTargetTypes": []
+    },
+    {
+      "id": "conn-depends-on",
+      "name": "depends_on",
+      "color": "#dc2626",
+      "lineStyle": "dashed",
+      "allowedSourceTypeIds": [
+        "ct-app",
+        "ct-data-object",
+        "ct-technology-node"
+      ],
+      "allowedTargetTypeIds": [
+        "ct-app",
+        "ct-technology-node"
+      ],
+      "description": "A component depends on another application or technology node.",
+      "category": "EAM",
+      "directionDescription": "Dependent to provider",
+      "requiredForSourceTypes": [],
+      "requiredForTargetTypes": []
+    },
+    {
+      "id": "conn-owns",
+      "name": "owns",
+      "color": "#c2410c",
+      "lineStyle": "solid",
+      "allowedSourceTypeIds": [
+        "ct-stakeholder",
+        "ct-org-unit"
+      ],
+      "allowedTargetTypeIds": [
+        "ct-app",
+        "ct-data-object",
+        "ct-capability"
+      ],
+      "description": "A stakeholder or organizational unit owns an architecture object.",
+      "category": "EAM",
+      "directionDescription": "Owner to owned object",
+      "requiredForSourceTypes": [],
+      "requiredForTargetTypes": []
+    },
+    {
+      "id": "conn-responsible-for",
+      "name": "responsible_for",
+      "color": "#ea580c",
+      "lineStyle": "solid",
+      "allowedSourceTypeIds": [
+        "ct-stakeholder",
+        "ct-org-unit"
+      ],
+      "allowedTargetTypeIds": [
+        "ct-app",
+        "ct-proc",
+        "ct-capability"
+      ],
+      "description": "A stakeholder is responsible for an element.",
+      "category": "EAM",
+      "directionDescription": "Responsible role to object",
+      "requiredForSourceTypes": [],
+      "requiredForTargetTypes": []
+    },
+    {
+      "id": "conn-interested-in",
+      "name": "interested_in",
+      "color": "#0891b2",
+      "lineStyle": "dotted",
+      "allowedSourceTypeIds": [
+        "ct-stakeholder"
+      ],
+      "allowedTargetTypeIds": [
+        "ct-capability",
+        "ct-goal",
+        "ct-app"
+      ],
+      "description": "A stakeholder is interested in an architecture object.",
+      "category": "EAM",
+      "directionDescription": "Stakeholder to interest",
+      "requiredForSourceTypes": [],
+      "requiredForTargetTypes": []
+    },
+    {
+      "id": "conn-supports",
+      "name": "supports",
+      "color": "#16a34a",
+      "lineStyle": "solid",
+      "allowedSourceTypeIds": [
+        "ct-goal",
+        "ct-app"
+      ],
+      "allowedTargetTypeIds": [
+        "ct-capability",
+        "ct-goal"
+      ],
+      "description": "A goal or application supports another goal or capability.",
+      "category": "EAM",
+      "directionDescription": "Supporter to supported object",
+      "requiredForSourceTypes": [],
+      "requiredForTargetTypes": []
+    },
+    {
+      "id": "conn-reports-to",
+      "name": "reports_to",
+      "color": "#64748b",
+      "lineStyle": "dashed",
+      "allowedSourceTypeIds": [
+        "ct-stakeholder",
+        "ct-org-unit"
+      ],
+      "allowedTargetTypeIds": [
+        "ct-stakeholder",
+        "ct-org-unit"
+      ],
+      "description": "A reporting relationship between stakeholders or units.",
+      "category": "EAM",
+      "directionDescription": "Reporter to accountable role",
+      "requiredForSourceTypes": [],
+      "requiredForTargetTypes": []
+    }
+  ],
+  "connectionRules": [
+    {
+      "id": "rule-process-realizes-capability",
+      "sourceComponentTypeId": "ct-proc",
+      "connectionTypeId": "conn-realizes",
+      "targetComponentTypeId": "ct-capability",
+      "allowed": true,
+      "required": false,
+      "severity": "error",
+      "description": "Business Process realizes Business Capability.",
+      "rationale": "Capabilities are operationalized through business processes.",
+      "viewpointIds": [
+        "vp-business-owner",
+        "vp-full-architecture"
+      ]
+    },
+    {
+      "id": "rule-application-serves-process",
+      "sourceComponentTypeId": "ct-app",
+      "connectionTypeId": "conn-serves",
+      "targetComponentTypeId": "ct-proc",
+      "allowed": true,
+      "required": true,
+      "severity": "error",
+      "description": "Application serves Business Process.",
+      "rationale": "Applications should be traceable to the business processes they support.",
+      "viewpointIds": [
+        "vp-business-owner",
+        "vp-full-architecture"
+      ],
+      "minOccurrences": 1
+    },
+    {
+      "id": "rule-application-serves-capability",
+      "sourceComponentTypeId": "ct-app",
+      "connectionTypeId": "conn-serves",
+      "targetComponentTypeId": "ct-capability",
+      "allowed": true,
+      "required": false,
+      "severity": "warning",
+      "description": "Application serves Business Capability.",
+      "rationale": "A direct application-to-capability relation is useful in management summaries but less precise than process-level mapping.",
+      "viewpointIds": [
+        "vp-management",
+        "vp-full-architecture"
+      ]
+    },
+    {
+      "id": "rule-application-uses-data-object",
+      "sourceComponentTypeId": "ct-app",
+      "connectionTypeId": "conn-uses",
+      "targetComponentTypeId": "ct-data-object",
+      "allowed": true,
+      "required": true,
+      "severity": "error",
+      "description": "Application uses Data Object.",
+      "rationale": "Application ownership and data dependencies should be visible for SME governance.",
+      "viewpointIds": [
+        "vp-application-owner",
+        "vp-it-operations",
+        "vp-full-architecture"
+      ],
+      "minOccurrences": 1
+    },
+    {
+      "id": "rule-application-depends-technology",
+      "sourceComponentTypeId": "ct-app",
+      "connectionTypeId": "conn-depends-on",
+      "targetComponentTypeId": "ct-technology-node",
+      "allowed": true,
+      "required": false,
+      "severity": "error",
+      "description": "Application depends_on Technology Node.",
+      "rationale": "Operational dependencies connect applications to their runtime or infrastructure.",
+      "viewpointIds": [
+        "vp-application-owner",
+        "vp-it-operations",
+        "vp-full-architecture"
+      ]
+    },
+    {
+      "id": "rule-application-depends-application",
+      "sourceComponentTypeId": "ct-app",
+      "connectionTypeId": "conn-depends-on",
+      "targetComponentTypeId": "ct-app",
+      "allowed": true,
+      "required": false,
+      "severity": "error",
+      "description": "Application depends_on Application.",
+      "rationale": "Application-to-application dependencies are important for impact analysis.",
+      "viewpointIds": [
+        "vp-application-owner",
+        "vp-full-architecture"
+      ]
+    },
+    {
+      "id": "rule-data-depends-technology",
+      "sourceComponentTypeId": "ct-data-object",
+      "connectionTypeId": "conn-depends-on",
+      "targetComponentTypeId": "ct-technology-node",
+      "allowed": true,
+      "required": false,
+      "severity": "error",
+      "description": "Data Object depends_on Technology Node.",
+      "rationale": "Data objects may depend on storage or platform technology.",
+      "viewpointIds": [
+        "vp-it-operations",
+        "vp-full-architecture"
+      ]
+    },
+    {
+      "id": "rule-technology-depends-technology",
+      "sourceComponentTypeId": "ct-technology-node",
+      "connectionTypeId": "conn-depends-on",
+      "targetComponentTypeId": "ct-technology-node",
+      "allowed": true,
+      "required": false,
+      "severity": "error",
+      "description": "Technology Node depends_on Technology Node.",
+      "rationale": "Technology dependencies support operations-focused impact analysis.",
+      "viewpointIds": [
+        "vp-it-operations",
+        "vp-full-architecture"
+      ]
+    },
+    {
+      "id": "rule-stakeholder-responsible-application",
+      "sourceComponentTypeId": "ct-stakeholder",
+      "connectionTypeId": "conn-responsible-for",
+      "targetComponentTypeId": "ct-app",
+      "allowed": true,
+      "required": false,
+      "severity": "error",
+      "description": "Stakeholder responsible_for Application.",
+      "rationale": "Stakeholders are model elements so responsibility is visible in diagrams.",
+      "viewpointIds": [
+        "vp-business-owner",
+        "vp-application-owner",
+        "vp-full-architecture"
+      ]
+    },
+    {
+      "id": "rule-stakeholder-responsible-capability",
+      "sourceComponentTypeId": "ct-stakeholder",
+      "connectionTypeId": "conn-responsible-for",
+      "targetComponentTypeId": "ct-capability",
+      "allowed": true,
+      "required": false,
+      "severity": "error",
+      "description": "Stakeholder responsible_for Business Capability.",
+      "rationale": "Capability accountability helps SMEs assign ownership.",
+      "viewpointIds": [
+        "vp-business-owner",
+        "vp-full-architecture"
+      ]
+    },
+    {
+      "id": "rule-stakeholder-interested-goal",
+      "sourceComponentTypeId": "ct-stakeholder",
+      "connectionTypeId": "conn-interested-in",
+      "targetComponentTypeId": "ct-goal",
+      "allowed": true,
+      "required": false,
+      "severity": "warning",
+      "description": "Stakeholder interested_in Goal / Objective.",
+      "rationale": "Stakeholder interests explain why a goal matters.",
+      "viewpointIds": [
+        "vp-management",
+        "vp-full-architecture"
+      ]
+    },
+    {
+      "id": "rule-stakeholder-interested-capability",
+      "sourceComponentTypeId": "ct-stakeholder",
+      "connectionTypeId": "conn-interested-in",
+      "targetComponentTypeId": "ct-capability",
+      "allowed": true,
+      "required": false,
+      "severity": "warning",
+      "description": "Stakeholder interested_in Business Capability.",
+      "rationale": "Management and business views benefit from explicit stakeholder interest.",
+      "viewpointIds": [
+        "vp-management",
+        "vp-full-architecture"
+      ]
+    },
+    {
+      "id": "rule-org-owns-application",
+      "sourceComponentTypeId": "ct-org-unit",
+      "connectionTypeId": "conn-owns",
+      "targetComponentTypeId": "ct-app",
+      "allowed": true,
+      "required": false,
+      "severity": "error",
+      "description": "Organizational Unit owns Application.",
+      "rationale": "Application ownership should be assigned to a real organizational unit.",
+      "viewpointIds": [
+        "vp-application-owner",
+        "vp-full-architecture"
+      ]
+    },
+    {
+      "id": "rule-org-owns-process",
+      "sourceComponentTypeId": "ct-org-unit",
+      "connectionTypeId": "conn-owns",
+      "targetComponentTypeId": "ct-proc",
+      "allowed": true,
+      "required": false,
+      "severity": "error",
+      "description": "Organizational Unit owns Business Process.",
+      "rationale": "Process ownership helps SMEs keep responsibility explicit.",
+      "viewpointIds": [
+        "vp-business-owner",
+        "vp-full-architecture"
+      ]
+    },
+    {
+      "id": "rule-goal-supports-capability",
+      "sourceComponentTypeId": "ct-goal",
+      "connectionTypeId": "conn-supports",
+      "targetComponentTypeId": "ct-capability",
+      "allowed": true,
+      "required": false,
+      "severity": "warning",
+      "description": "Goal / Objective supports Business Capability.",
+      "rationale": "Goals explain the business intent behind capabilities.",
+      "viewpointIds": [
+        "vp-management",
+        "vp-full-architecture"
+      ]
+    }
+  ],
+  "viewpointRules": [
+    {
+      "id": "vpr-vp-management",
+      "viewpointId": "vp-management",
+      "allowedComponentTypeIds": [
+        "ct-stakeholder",
+        "ct-goal",
+        "ct-capability",
+        "ct-app"
+      ],
+      "allowedConnectionTypeIds": [
+        "conn-interested-in",
+        "conn-supports",
+        "conn-serves"
+      ],
+      "allowedConnectionRuleIds": [
+        "rule-application-serves-capability",
+        "rule-stakeholder-interested-goal",
+        "rule-stakeholder-interested-capability",
+        "rule-goal-supports-capability"
+      ],
+      "requiredComponentTypeIds": [
+        "ct-capability"
+      ],
+      "requiredConnectionTypeIds": [],
+      "requiredConnectionRuleIds": [],
+      "description": "Management View rule set derived from the stakeholder viewpoint definition.",
+      "visibleComponentTypeIds": [
+        "ct-stakeholder",
+        "ct-goal",
+        "ct-capability",
+        "ct-app"
+      ],
+      "severity": "error"
+    },
+    {
+      "id": "vpr-vp-business-owner",
+      "viewpointId": "vp-business-owner",
+      "allowedComponentTypeIds": [
+        "ct-capability",
+        "ct-proc",
+        "ct-app",
+        "ct-stakeholder"
+      ],
+      "allowedConnectionTypeIds": [
+        "conn-realizes",
+        "conn-serves",
+        "conn-responsible-for"
+      ],
+      "allowedConnectionRuleIds": [
+        "rule-process-realizes-capability",
+        "rule-application-serves-process",
+        "rule-stakeholder-responsible-application",
+        "rule-stakeholder-responsible-capability",
+        "rule-org-owns-process"
+      ],
+      "requiredComponentTypeIds": [
+        "ct-capability"
+      ],
+      "requiredConnectionTypeIds": [
+        "conn-serves"
+      ],
+      "requiredConnectionRuleIds": [],
+      "description": "Business Owner View rule set derived from the stakeholder viewpoint definition.",
+      "visibleComponentTypeIds": [
+        "ct-capability",
+        "ct-proc",
+        "ct-app",
+        "ct-stakeholder"
+      ],
+      "severity": "error"
+    },
+    {
+      "id": "vpr-vp-application-owner",
+      "viewpointId": "vp-application-owner",
+      "allowedComponentTypeIds": [
+        "ct-app",
+        "ct-data-object",
+        "ct-technology-node",
+        "ct-stakeholder"
+      ],
+      "allowedConnectionTypeIds": [
+        "conn-uses",
+        "conn-depends-on",
+        "conn-owns",
+        "conn-responsible-for"
+      ],
+      "allowedConnectionRuleIds": [
+        "rule-application-uses-data-object",
+        "rule-application-depends-technology",
+        "rule-application-depends-application",
+        "rule-stakeholder-responsible-application",
+        "rule-org-owns-application"
+      ],
+      "requiredComponentTypeIds": [
+        "ct-app"
+      ],
+      "requiredConnectionTypeIds": [
+        "conn-uses"
+      ],
+      "requiredConnectionRuleIds": [],
+      "description": "Application Owner View rule set derived from the stakeholder viewpoint definition.",
+      "visibleComponentTypeIds": [
+        "ct-app",
+        "ct-data-object",
+        "ct-technology-node",
+        "ct-stakeholder"
+      ],
+      "severity": "error"
+    },
+    {
+      "id": "vpr-vp-it-operations",
+      "viewpointId": "vp-it-operations",
+      "allowedComponentTypeIds": [
+        "ct-app",
+        "ct-technology-node",
+        "ct-data-object"
+      ],
+      "allowedConnectionTypeIds": [
+        "conn-depends-on",
+        "conn-uses"
+      ],
+      "allowedConnectionRuleIds": [
+        "rule-application-uses-data-object",
+        "rule-application-depends-technology",
+        "rule-data-depends-technology",
+        "rule-technology-depends-technology"
+      ],
+      "requiredComponentTypeIds": [
+        "ct-technology-node"
+      ],
+      "requiredConnectionTypeIds": [
+        "conn-depends-on"
+      ],
+      "requiredConnectionRuleIds": [],
+      "description": "IT Operations View rule set derived from the stakeholder viewpoint definition.",
+      "visibleComponentTypeIds": [
+        "ct-app",
+        "ct-technology-node",
+        "ct-data-object"
+      ],
+      "severity": "error"
+    },
+    {
+      "id": "vpr-vp-full-architecture",
+      "viewpointId": "vp-full-architecture",
+      "allowedComponentTypeIds": [
+        "ct-stakeholder",
+        "ct-goal",
+        "ct-capability",
+        "ct-proc",
+        "ct-app",
+        "ct-data-object",
+        "ct-technology-node",
+        "ct-org-unit"
+      ],
+      "allowedConnectionTypeIds": [
+        "conn-realizes",
+        "conn-serves",
+        "conn-uses",
+        "conn-depends-on",
+        "conn-owns",
+        "conn-responsible-for",
+        "conn-interested-in",
+        "conn-supports",
+        "conn-reports-to"
+      ],
+      "allowedConnectionRuleIds": [
+        "rule-process-realizes-capability",
+        "rule-application-serves-process",
+        "rule-application-serves-capability",
+        "rule-application-uses-data-object",
+        "rule-application-depends-technology",
+        "rule-application-depends-application",
+        "rule-data-depends-technology",
+        "rule-technology-depends-technology",
+        "rule-stakeholder-responsible-application",
+        "rule-stakeholder-responsible-capability",
+        "rule-stakeholder-interested-goal",
+        "rule-stakeholder-interested-capability",
+        "rule-org-owns-application",
+        "rule-org-owns-process",
+        "rule-goal-supports-capability"
+      ],
+      "requiredComponentTypeIds": [],
+      "requiredConnectionTypeIds": [],
+      "requiredConnectionRuleIds": [],
+      "description": "Full Architecture View rule set derived from the stakeholder viewpoint definition.",
+      "visibleComponentTypeIds": [
+        "ct-stakeholder",
+        "ct-goal",
+        "ct-capability",
+        "ct-proc",
+        "ct-app",
+        "ct-data-object",
+        "ct-technology-node",
+        "ct-org-unit"
+      ],
+      "severity": "error"
+    }
+  ],
+  "validationRules": [
+    {
+      "id": "vr-application-has-responsible-stakeholder",
+      "name": "Application has responsible stakeholder",
+      "description": "Every application should have an accountable stakeholder modelled explicitly.",
+      "scope": "metamodel",
+      "sourceComponentTypeId": "ct-app",
+      "requiredConnectionTypeId": "conn-responsible-for",
+      "targetComponentTypeId": "ct-stakeholder",
+      "direction": "incoming",
+      "minOccurrences": 1,
+      "severity": "warning",
+      "message": "Application should have at least one responsible Stakeholder.",
+      "active": true
+    },
+    {
+      "id": "vr-capability-realized-by-process",
+      "name": "Business Capability is realized",
+      "description": "Every business capability should be realized by at least one business process.",
+      "scope": "metamodel",
+      "sourceComponentTypeId": "ct-capability",
+      "requiredConnectionTypeId": "conn-realizes",
+      "targetComponentTypeId": "ct-proc",
+      "direction": "incoming",
+      "minOccurrences": 1,
+      "severity": "warning",
+      "message": "Business Capability should be realized by at least one Business Process.",
+      "active": true
+    },
+    {
+      "id": "vr-application-serves-process",
+      "name": "Application serves process",
+      "description": "Every application should be traceable to at least one supported business process.",
+      "scope": "metamodel",
+      "sourceComponentTypeId": "ct-app",
+      "requiredConnectionTypeId": "conn-serves",
+      "targetComponentTypeId": "ct-proc",
+      "direction": "outgoing",
+      "minOccurrences": 1,
+      "severity": "warning",
+      "message": "Application should serve at least one Business Process.",
+      "active": true
+    },
+    {
+      "id": "vr-application-has-technology-dependency",
+      "name": "Application has technology dependency",
+      "description": "MVP approximation for data-or-technology dependency quality checks.",
+      "scope": "metamodel",
+      "sourceComponentTypeId": "ct-app",
+      "requiredConnectionTypeId": "conn-depends-on",
+      "targetComponentTypeId": "ct-technology-node",
+      "direction": "outgoing",
+      "minOccurrences": 1,
+      "severity": "warning",
+      "message": "Application should depend on at least one Technology Node.",
+      "active": true
     }
   ],
   "components": [
@@ -338,6 +1133,69 @@
       "componentTypeId": "ct-proc",
       "properties": {},
       "description": ""
+    },
+    {
+      "id": "comp-head-sales",
+      "name": "Head of Sales",
+      "componentTypeId": "ct-stakeholder",
+      "properties": {
+        "role": "Head of Sales"
+      },
+      "description": "Sales leadership stakeholder."
+    },
+    {
+      "id": "comp-reduce-order-effort",
+      "name": "Reduce manual order effort",
+      "componentTypeId": "ct-goal",
+      "properties": {
+        "metric": "Manual effort"
+      },
+      "description": "Goal to reduce manual effort in order handling."
+    },
+    {
+      "id": "comp-order-management",
+      "name": "Order Management",
+      "componentTypeId": "ct-capability",
+      "properties": {
+        "criticality": "high"
+      },
+      "description": "Capability for handling customer orders."
+    },
+    {
+      "id": "comp-order-to-cash",
+      "name": "Order to Cash",
+      "componentTypeId": "ct-proc",
+      "properties": {
+        "owner": "Sales Operations"
+      },
+      "description": "Business process from order entry to payment."
+    },
+    {
+      "id": "comp-erp-system",
+      "name": "ERP System",
+      "componentTypeId": "ct-app",
+      "properties": {
+        "owner": "IT Applications"
+      },
+      "description": "Core ERP application."
+    },
+    {
+      "id": "comp-invoice-data",
+      "name": "Invoice Data",
+      "componentTypeId": "ct-data-object",
+      "properties": {
+        "dataOwner": "Finance"
+      },
+      "description": "Invoice-related data object."
+    },
+    {
+      "id": "comp-db-cluster",
+      "name": "Database Cluster",
+      "componentTypeId": "ct-technology-node",
+      "properties": {
+        "platform": "PostgreSQL"
+      },
+      "description": "Database cluster for ERP data."
     }
   ],
   "connections": [
@@ -357,6 +1215,191 @@
       "targetComponentId": "952edc04-4303-47d0-baea-8d808d260f76",
       "description": "",
       "properties": {}
+    },
+    {
+      "id": "cx-process-realizes-capability",
+      "name": "",
+      "connectionTypeId": "conn-realizes",
+      "sourceComponentId": "comp-order-to-cash",
+      "targetComponentId": "comp-order-management",
+      "description": ""
+    },
+    {
+      "id": "cx-app-serves-process",
+      "name": "",
+      "connectionTypeId": "conn-serves",
+      "sourceComponentId": "comp-erp-system",
+      "targetComponentId": "comp-order-to-cash",
+      "description": ""
+    },
+    {
+      "id": "cx-app-uses-data",
+      "name": "",
+      "connectionTypeId": "conn-uses",
+      "sourceComponentId": "comp-erp-system",
+      "targetComponentId": "comp-invoice-data",
+      "description": ""
+    },
+    {
+      "id": "cx-app-depends-tech",
+      "name": "",
+      "connectionTypeId": "conn-depends-on",
+      "sourceComponentId": "comp-erp-system",
+      "targetComponentId": "comp-db-cluster",
+      "description": ""
+    },
+    {
+      "id": "cx-stakeholder-interested-capability",
+      "name": "",
+      "connectionTypeId": "conn-interested-in",
+      "sourceComponentId": "comp-head-sales",
+      "targetComponentId": "comp-order-management",
+      "description": ""
+    },
+    {
+      "id": "cx-stakeholder-responsible-app",
+      "name": "",
+      "connectionTypeId": "conn-responsible-for",
+      "sourceComponentId": "comp-head-sales",
+      "targetComponentId": "comp-erp-system",
+      "description": ""
+    },
+    {
+      "id": "cx-goal-supports-capability",
+      "name": "",
+      "connectionTypeId": "conn-supports",
+      "sourceComponentId": "comp-reduce-order-effort",
+      "targetComponentId": "comp-order-management",
+      "description": ""
+    }
+  ],
+  "viewpoints": [
+    {
+      "id": "vp-management",
+      "name": "Management View",
+      "description": "Executive overview of business-critical architecture elements.",
+      "stakeholderRole": "Management",
+      "purpose": "Schnelle Uebersicht ueber geschaeftskritische Architekturteile.",
+      "allowedComponentTypeIds": [
+        "ct-stakeholder",
+        "ct-goal",
+        "ct-capability",
+        "ct-app"
+      ],
+      "allowedConnectionTypeIds": [
+        "conn-interested-in",
+        "conn-supports",
+        "conn-serves"
+      ],
+      "requiredComponentTypeIds": [
+        "ct-capability"
+      ],
+      "requiredConnectionTypeIds": [],
+      "maxVisibleLayers": 2
+    },
+    {
+      "id": "vp-business-owner",
+      "name": "Business Owner View",
+      "description": "Business processes, capabilities and supporting applications.",
+      "stakeholderRole": "Business Owner",
+      "purpose": "Geschaeftsprozesse, Capabilities und unterstuetzende Anwendungen verstehen.",
+      "allowedComponentTypeIds": [
+        "ct-capability",
+        "ct-proc",
+        "ct-app",
+        "ct-stakeholder"
+      ],
+      "allowedConnectionTypeIds": [
+        "conn-realizes",
+        "conn-serves",
+        "conn-responsible-for"
+      ],
+      "requiredComponentTypeIds": [
+        "ct-capability"
+      ],
+      "requiredConnectionTypeIds": [
+        "conn-serves"
+      ],
+      "maxVisibleLayers": 2
+    },
+    {
+      "id": "vp-application-owner",
+      "name": "Application Owner View",
+      "description": "Application, data and technology dependencies.",
+      "stakeholderRole": "Application Owner",
+      "purpose": "Anwendungsabhaengigkeiten und Datenabhaengigkeiten verstehen.",
+      "allowedComponentTypeIds": [
+        "ct-app",
+        "ct-data-object",
+        "ct-technology-node",
+        "ct-stakeholder"
+      ],
+      "allowedConnectionTypeIds": [
+        "conn-uses",
+        "conn-depends-on",
+        "conn-owns",
+        "conn-responsible-for"
+      ],
+      "requiredComponentTypeIds": [
+        "ct-app"
+      ],
+      "requiredConnectionTypeIds": [
+        "conn-uses"
+      ],
+      "maxVisibleLayers": 3
+    },
+    {
+      "id": "vp-it-operations",
+      "name": "IT Operations View",
+      "description": "Operational dependencies between applications, data and technology.",
+      "stakeholderRole": "IT Operations",
+      "purpose": "Technische Betriebsabhaengigkeiten analysieren.",
+      "allowedComponentTypeIds": [
+        "ct-app",
+        "ct-technology-node",
+        "ct-data-object"
+      ],
+      "allowedConnectionTypeIds": [
+        "conn-depends-on",
+        "conn-uses"
+      ],
+      "requiredComponentTypeIds": [
+        "ct-technology-node"
+      ],
+      "requiredConnectionTypeIds": [
+        "conn-depends-on"
+      ],
+      "maxVisibleLayers": 3
+    },
+    {
+      "id": "vp-full-architecture",
+      "name": "Full Architecture View",
+      "description": "Complete architecture view for architects.",
+      "stakeholderRole": "Architect",
+      "purpose": "Vollstaendige Sicht fuer Architekt:innen.",
+      "allowedComponentTypeIds": [
+        "ct-stakeholder",
+        "ct-goal",
+        "ct-capability",
+        "ct-proc",
+        "ct-app",
+        "ct-data-object",
+        "ct-technology-node",
+        "ct-org-unit"
+      ],
+      "allowedConnectionTypeIds": [
+        "conn-realizes",
+        "conn-serves",
+        "conn-uses",
+        "conn-depends-on",
+        "conn-owns",
+        "conn-responsible-for",
+        "conn-interested-in",
+        "conn-supports",
+        "conn-reports-to"
+      ],
+      "requiredComponentTypeIds": [],
+      "requiredConnectionTypeIds": []
     }
   ],
   "diagrams": [
@@ -389,10 +1432,13 @@
           "y": -195.57622811661588
         },
         "2ea8dfed-92ef-4a7c-b08b-abbdbca01da7": {
-          "x": 132.3082317643309,
-          "y": -88.15567635974287
+          "x": -389.6917682356691,
+          "y": -216.15567635974287,
+          "width": 120,
+          "height": 100
         }
-      }
+      },
+      "metamodelId": "mm-sme-eam"
     },
     {
       "id": "cfe20825-f106-4817-8115-5bfb19b6b2ef",
@@ -425,7 +1471,75 @@
           "x": -48.45650378940434,
           "y": 43.18842925824467
         }
-      }
+      },
+      "metamodelId": "mm-sme-eam"
+    },
+    {
+      "id": "diagram-order-management-demo",
+      "name": "Order Management Metamodel Demo",
+      "description": "Example diagram for the Metamodel Rule Builder.",
+      "componentIds": [
+        "comp-head-sales",
+        "comp-reduce-order-effort",
+        "comp-order-management",
+        "comp-order-to-cash",
+        "comp-erp-system",
+        "comp-invoice-data",
+        "comp-db-cluster"
+      ],
+      "connectionIds": [
+        "cx-process-realizes-capability",
+        "cx-app-serves-process",
+        "cx-app-uses-data",
+        "cx-app-depends-tech",
+        "cx-stakeholder-interested-capability",
+        "cx-stakeholder-responsible-app",
+        "cx-goal-supports-capability"
+      ],
+      "viewpointId": "vp-full-architecture",
+      "positions": {
+        "comp-head-sales": {
+          "x": -420,
+          "y": -120
+        },
+        "comp-reduce-order-effort": {
+          "x": 165.7288016818501,
+          "y": -111.35949544498953,
+          "width": 160,
+          "height": 72
+        },
+        "comp-order-management": {
+          "x": 388.06587245970576,
+          "y": -209.3973370707779,
+          "width": 160,
+          "height": 72
+        },
+        "comp-order-to-cash": {
+          "x": 168.51786965662228,
+          "y": -287.5613174491941,
+          "width": 160,
+          "height": 72
+        },
+        "comp-erp-system": {
+          "x": -151.741415557113,
+          "y": -247.47722494744224,
+          "width": 160,
+          "height": 72
+        },
+        "comp-invoice-data": {
+          "x": 180.3679046951646,
+          "y": -380.5466012613876,
+          "width": 140,
+          "height": 80
+        },
+        "comp-db-cluster": {
+          "x": 172.85213735108607,
+          "y": -469.1520672740015,
+          "width": 160,
+          "height": 72
+        }
+      },
+      "metamodelId": "mm-sme-eam"
     }
   ]
 }
