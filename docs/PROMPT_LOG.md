@@ -203,3 +203,15 @@ Umgesetzt wurde:
 - Dokumentation für Pipeline, GitHub Secrets und manuellen Code-/DB-Rollback.
 - Bestätigte Live-Domains konsistent auf `.com` korrigiert.
 - Kein Auth-System, kein automatisches Backup und kein automatisches Push-Deployment ergänzt.
+
+## Robustere manuelle Deployments
+
+Der Folgeprompt meldet einen nur in GitHub Actions fehlschlagenden Staging-Healthcheck, während derselbe Remote-Ablauf auf dem Server erfolgreich ist.
+
+Umgesetzt wurde:
+
+- Die nicht auf jeder Server-Curl-Version verfügbare Option `--retry-all-errors` wurde aus Staging und Produktion entfernt.
+- Beide internen Healthchecks verwenden nun eine portable Schleife mit zwölf Versuchen und fünf Sekunden Pause.
+- Sichere Diagnoseausgaben zeigen Arbeitsverzeichnis, Git-Revision/-Status, Docker-/Compose-Version und Containerstatus, aber weder Env-Inhalte noch gerenderte Compose-Werte.
+- Bei Fehlern von `docker compose up` oder beim Healthcheck werden automatisch Status sowie die letzten 100 Backend- und PostgreSQL-Logzeilen ausgegeben.
+- Alle manuellen Trigger, Produktionsbestätigungen, serverseitigen Env-Prüfungen, Worktree-Schutzregeln und das Deployment des exakt geprüften Commit-SHA bleiben erhalten.

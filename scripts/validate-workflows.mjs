@@ -66,6 +66,15 @@ for (const [label, document, envFile, composeFile, port, pathSecret] of [
   check(scripts.includes(`docker compose --env-file ${envFile} -f ${composeFile} config --quiet`), `${label} target Compose config check missing`);
   check(scripts.includes(`docker compose --env-file ${envFile} -f ${composeFile} up -d --build`), `${label} target Compose deployment missing`);
   check(scripts.includes(`http://127.0.0.1:${port}/api/health`), `${label} internal healthcheck missing`);
+  check(scripts.includes("for i in $(seq 1 12)"), `${label} portable healthcheck retry loop missing`);
+  check(scripts.includes("sleep 5"), `${label} healthcheck retry delay missing`);
+  check(!scripts.includes("--retry-all-errors"), `${label} must not use non-portable curl --retry-all-errors`);
+  check(scripts.includes("pwd") && scripts.includes("git status --short") && scripts.includes("git rev-parse --short HEAD || true"), `${label} safe Git deployment diagnostics missing`);
+  check(scripts.includes("docker --version") && scripts.includes("docker compose version"), `${label} Docker version diagnostics missing`);
+  check(scripts.includes(`docker compose --env-file ${envFile} -f ${composeFile} logs --tail=100 backend`), `${label} backend failure diagnostics missing`);
+  check(scripts.includes(`docker compose --env-file ${envFile} -f ${composeFile} logs --tail=100 postgres`), `${label} postgres failure diagnostics missing`);
+  check(!scripts.includes(`docker compose --env-file ${envFile} -f ${composeFile} config\n`), `${label} must not print rendered Compose config`);
+  check(!scripts.includes(`cat ${envFile}`), `${label} must not print the server-side env file`);
   check(document.raw.includes("needs.verify.outputs.verified_sha"), `${label} must deploy the exact verified commit SHA`);
   check(!document.raw.includes("git reset --hard"), `${label} must not hard-reset the server worktree`);
   check(!document.raw.includes("docker.exe compose"), `${label} GitHub workflow must use Linux 'docker compose'`);

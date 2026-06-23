@@ -54,9 +54,11 @@ Ein Containerstart mit Datenbank ist nicht Teil jedes CI-Laufs. Echte DB-Cascade
 5. Deployment bei getrackten Serveränderungen oder Platzhaltersecret abbrechen.
 6. Git-Refs aktualisieren und exakt den verifizierten SHA detached auschecken.
 7. Staging-Compose validieren und mit `up -d --build` aktualisieren.
-8. Containerstatus anzeigen und internen Healthcheck auf `127.0.0.1:4400` mit Retries ausführen.
+8. Containerstatus anzeigen und den internen Healthcheck auf `127.0.0.1:4400` in einer portablen Shell-Schleife bis zu zwölfmal im Abstand von fünf Sekunden ausführen.
 
 Der externe Healthcheck ist wegen aktivem Basic Auth nicht zuverlässig ohne zusätzliche Credentials. Der interne Backend-Healthcheck ist deshalb maßgeblich.
+
+Der Remote-Ablauf protokolliert vor dem Deployment ausschließlich sichere Diagnosewerte: Arbeitsverzeichnis, kurzen Git-Status und Commit, Docker-/Compose-Version sowie `docker compose ps`. Env-Inhalte und die gerenderte Compose-Konfiguration werden nicht ausgegeben. Schlägt `docker compose up` oder der Healthcheck fehl, folgen automatisch der Compose-Status und jeweils die letzten 100 Logzeilen von Backend und PostgreSQL. Die Retry-Schleife verwendet nur `curl --fail --silent --show-error`, `seq` und `sleep`; die versionsabhängige Curl-Option `--retry-all-errors` wird nicht verwendet.
 
 ## Produktions-Deployment
 
@@ -69,7 +71,7 @@ Der externe Healthcheck ist wegen aktivem Basic Auth nicht zuverlässig ohne zus
 - erfolgreichen Verify-Job.
 - optionalen GitHub-Environment-Schutz für `production` mit Required Reviewers.
 
-Der SSH-Ablauf entspricht Staging, verwendet aber `/var/www/eam`, `.env.prod`, `docker-compose.prod.yml` und `127.0.0.1:4401/api/health`.
+Der SSH-Ablauf entspricht Staging, verwendet aber `/var/www/eam`, `.env.prod`, `docker-compose.prod.yml` und `127.0.0.1:4401/api/health`. Auch hier laufen portable Healthcheck-Retries und dieselben secretfreien Fehlerdiagnosen.
 
 ## Benötigte GitHub Secrets und Environments
 

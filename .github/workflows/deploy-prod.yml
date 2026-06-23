@@ -130,17 +130,52 @@ jobs:
           cd "$DEPLOY_PATH"
           test -f .env.prod || { echo "Server-side .env.prod is missing." >&2; exit 1; }
           ! grep -q 'replace-with-' .env.prod || { echo "Placeholder secret remains in .env.prod." >&2; exit 1; }
+
+          echo "Deployment context (no environment values):"
+          pwd
+          git status --short
+          git rev-parse --short HEAD || true
+          docker --version
+          docker compose version
+          docker compose --env-file .env.prod -f docker-compose.prod.yml ps || true
+
           [[ -z "$(git status --porcelain --untracked-files=no)" ]] || { echo "Tracked server worktree changes block deployment." >&2; exit 1; }
 
           git fetch --all --prune --tags
           RESOLVED_REF=$(git rev-parse --verify "$DEPLOY_REF^{commit}")
           git checkout --detach "$RESOLVED_REF"
+          git rev-parse --short HEAD
+
+          show_compose_diagnostics() {
+            echo "Compose status:"
+            docker compose --env-file .env.prod -f docker-compose.prod.yml ps || true
+            echo "Backend logs (last 100 lines):"
+            docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=100 backend || true
+            echo "Postgres logs (last 100 lines):"
+            docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=100 postgres || true
+          }
 
           docker compose --env-file .env.prod -f docker-compose.prod.yml config --quiet
-          docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+          if ! docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build; then
+            echo "docker compose up failed." >&2
+            show_compose_diagnostics
+            exit 1
+          fi
           docker compose --env-file .env.prod -f docker-compose.prod.yml ps
-          curl --fail --silent --show-error --retry 12 --retry-delay 5 --retry-all-errors \
-            http://127.0.0.1:4401/api/health
+
+          for i in $(seq 1 12); do
+            if curl --fail --silent --show-error http://127.0.0.1:4401/api/health; then
+              echo
+              echo "Healthcheck succeeded."
+              exit 0
+            fi
+            echo "Healthcheck failed, retry $i/12"
+            sleep 5
+          done
+
+          echo "Healthcheck failed after retries" >&2
+          show_compose_diagnostics
+          exit 1
           REMOTE
 
       - name: Remove SSH key
