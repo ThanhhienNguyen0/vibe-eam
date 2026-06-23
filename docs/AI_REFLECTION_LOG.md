@@ -220,3 +220,46 @@ Stakeholder wurden bewusst als normale Diagrammelemente erhalten. Ein Stakeholde
 - Der Import nutzt `replace active metamodel`; ein sicherer Merge-Modus ist noch nicht umgesetzt.
 - Die UI importiert direkt und zeigt das ImportResult, aber noch keine vollstaendige Preview mit manueller Freigabe.
 - Der Rule Graph ist durch Simplified/Detailed/Viewpoint-Modi lesbarer, nutzt aber weiterhin ein einfaches berechnetes SVG-Layout statt einer spezialisierten Graph-Layout-Engine.
+
+## Zehnter Entwicklungszyklus: PostgreSQL und Docker
+
+### Entscheidung und Nutzen
+
+- PostgreSQL plus Prisma balanciert relationale Integrität und flexible JSONB-Attribute besser als der bisherige gemeinsame JSON-State.
+- Die Store-Abstraktion hält die bestehenden fachlichen Strukturen stabil; dadurch mussten DiagramEditor, ConnectionRule-Validierung und Metamodel-Import/-Export nicht neu geschrieben werden.
+- Datenbankseitige Cascades sind robuster als ausschließlich anwendungsseitiges Aufräumen von ConnectionInstances.
+
+### Kritische Grenzen
+
+- Der Legacy-Pfad `/api/model` bleibt als klar benannte Restgrenze JSON-basiert.
+- Der kompatible Full-State-Write ist für das MVP verständlich und transaktional, aber nicht die endgültige Lösung für große Datenbestände oder parallele Benutzer.
+- Nullable `diagramId` ist eine bewusste Anpassung an den bestehenden zweistufigen Editor-Ablauf. Ein späterer API-Schnitt sollte Diagrammzuordnung bereits beim Erstellen verlangen.
+- Docker automatisiert lokalen Betrieb, ist aber weder Deployment- noch Security-Konzept. Beispiel-Credentials müssen außerhalb lokaler Entwicklung ersetzt werden.
+
+## Elfter Entwicklungszyklus: Umgebungen und Hosting-Vorbereitung
+
+### Trennungsentscheidung
+
+- Staging und Produktion werden als eigenständige Compose-Projekte betrieben, nicht als schwer nachvollziehbare Kombination vieler Overrides.
+- Eigene DB-Namen, Benutzer, Named Volumes und Loopback-Ports reduzieren das Risiko, Testdaten mit Produktion zu vermischen.
+- Die lokale `docker-compose.yml` bleibt bestehen; Windows verwendet auf diesem Rechner `docker.exe compose`, Linux üblicherweise `docker compose`.
+
+### Hosting-Entscheidung
+
+- Die bestehende Hauptdomain bleibt unangetastet. Produktion nutzt `eam.messers-cardio-club.de`, Staging `eam-test.messers-cardio-club.de`.
+- TLS endet am bereits servernah gedachten Host-Nginx. Containerports bleiben auf `127.0.0.1`; PostgreSQL wird nicht veröffentlicht.
+- Certbot/Let's Encrypt ist vorbereitet, aber DNS, Zertifikate und Serverkonfiguration wurden nicht extern verändert.
+
+### Kritische Grenzen
+
+- Ohne Auth ist eine öffentliche Live-Schaltung mit sensiblen EAM-Daten nicht verantwortbar; Issue #21 ist deshalb nur vorbereitet.
+- Persistente Volumes ersetzen kein Backup. `pg_dump` und Restore müssen vor Live-Betrieb getestet werden.
+- Deployment und Rollback bleiben ohne CI/CD manuell und können kurze Unterbrechungen verursachen.
+- Automatische Deploy-Skripte wurden bewusst nicht erstellt, weil Serverpfad, Backup-Ziel und Freigabeprozess noch fehlen.
+
+### Hosting-Readiness-Nachschärfung
+
+- Der Erststart vor Certbot ist nun explizit von der finalen HTTPS-Konfiguration getrennt; dadurch werden Nginx-Fehler wegen noch fehlender Zertifikatspfade vermieden.
+- Eine Readiness-Checkliste definiert Stop-/Go-Kriterien für lokal, Server-Staging und Server-Produktion. Ein separates Protokoll verhindert, dass „dokumentiert“ mit „tatsächlich abgenommen“ verwechselt wird.
+- Fehlendes Auth wird nicht kleingeredet: Demo-Daten, serverweites Basic Auth oder Verschiebung sind die einzigen dokumentierten Übergangsoptionen.
+- Backup, Restore und Rollback sind manuell beschrieben. Ein persistentes Volume allein bleibt ausdrücklich kein Backup.

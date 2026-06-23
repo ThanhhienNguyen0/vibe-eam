@@ -5,3 +5,10 @@ frontend/dist/
 backend/data/
 *.log
 .env
+.env.local
+.env.staging
+.env.staging.local
+.env.prod
+.env.prod.local
+backend/.env
+frontend/.env

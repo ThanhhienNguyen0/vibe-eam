@@ -12,6 +12,7 @@ Voraussetzungen:
 
 - Node.js 20 oder neuer empfohlen
 - npm
+- PostgreSQL (lokal) oder Docker Compose
 
 Installation:
 
@@ -43,6 +44,15 @@ Standard-URLs:
 
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:4000`
+
+Docker-Start mit PostgreSQL:
+
+```powershell
+Copy-Item .env.example .env
+docker.exe compose up --build
+```
+
+Auf Linux normalerweise `docker compose up --build`. Getrennte Staging-/Produktionsumgebungen und das geplante Hosting über `eam.messers-cardio-club.de` sind in `docs/DOCKER_SETUP.md`, `docs/HOSTING_SETUP.md` und `docs/ENVIRONMENT_AND_HOSTING_PLAN.md` beschrieben.
 
 Build und Typecheck:
 
@@ -82,7 +92,7 @@ npm run build
 ## Bekannte Grenzen
 
 - Keine Authentifizierung.
-- JSON-Datei statt produktiver Datenbank.
+- Der aktuelle Sidebar-/Diagramm-Pfad nutzt mit `DATABASE_URL` PostgreSQL; nur der historische `/api/model`-Pfad und der explizite Offline-Fallback bleiben JSON-basiert.
 - Keine kollaborative Bearbeitung.
 - Keine vollstaendige ArchiMate-, TOGAF- oder BPMN-Konformitaet.
 - Impact-Analyse ist bewusst einfach und betrachtet nur ausgehende `uses` und `depends_on`.

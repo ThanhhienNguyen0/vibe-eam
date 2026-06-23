@@ -21,6 +21,15 @@ import {
   extractMetamodelDefinition,
   validateMetamodelDefinition
 } from "./metamodelConfig.js";
+import {
+  databasePersistenceEnabled,
+  databaseSidebarRepository
+} from "../persistence/databaseSidebarRepository.js";
+import {
+  assertValidConnectionEndpoints,
+  diagramWithContents,
+  removeComponentWithConnections
+} from "../persistence/stateOperations.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.resolve(__dirname, "../data");
@@ -893,11 +902,29 @@ function normalizeSidebarState(raw: Partial<SidebarState>): SidebarState {
 
 export async function readSidebarState(): Promise<SidebarState> {
   if (cached) return structuredClone(cached);
-  await ensureFile();
-  const raw = await fs.readFile(sidebarFile, "utf-8");
-  cached = normalizeSidebarState(JSON.parse(raw) as Partial<SidebarState>);
+  if (databasePersistenceEnabled()) {
+    const persisted = await databaseSidebarRepository().read();
+    if (persisted) {
+      cached = persisted;
+      return structuredClone(cached);
+    }
+
+    // Safe first-start migration: copy the legacy JSON state into an empty DB.
+    // The source file is deliberately retained as a rollback/reference artifact.
+    cached = await readLegacySidebarState();
+    cached = await databaseSidebarRepository().write(cached);
+    return structuredClone(cached);
+  }
+
+  cached = await readLegacySidebarState();
   await writeSidebarState(cached);
   return structuredClone(cached);
+}
+
+export async function readLegacySidebarState(): Promise<SidebarState> {
+  await ensureFile();
+  const raw = await fs.readFile(sidebarFile, "utf-8");
+  return normalizeSidebarState(JSON.parse(raw) as Partial<SidebarState>);
 }
 
 async function readJsonFile(filePath: string): Promise<unknown> {
@@ -931,6 +958,22 @@ export async function importMetamodelDefinition(input: unknown): Promise<Metamod
     return validation;
   }
   const state = await readSidebarState();
+  const importedComponentTypeIds = new Set(validation.definition.componentTypes.map((item) => item.id));
+  const importedConnectionTypeIds = new Set(validation.definition.connectionTypes.map((item) => item.id));
+  const incompatibleComponents = state.components.filter((item) => !importedComponentTypeIds.has(item.componentTypeId));
+  const incompatibleConnections = state.connections.filter((item) => !importedConnectionTypeIds.has(item.connectionTypeId));
+  if (incompatibleComponents.length > 0 || incompatibleConnections.length > 0) {
+    return {
+      success: false,
+      errors: [{
+        code: "IMPORT_WOULD_ORPHAN_INSTANCES",
+        message: `Import rejected because it would orphan ${incompatibleComponents.length} component instance(s) and ${incompatibleConnections.length} connection instance(s).`,
+        path: "metamodel"
+      }],
+      warnings: validation.warnings,
+      importedCounts: validation.importedCounts
+    };
+  }
   await writeSidebarState(applyMetamodelDefinition(state, validation.definition));
   return {
     success: true,
@@ -942,6 +985,10 @@ export async function importMetamodelDefinition(input: unknown): Promise<Metamod
 
 export async function writeSidebarState(state: SidebarState): Promise<SidebarState> {
   cached = structuredClone(state);
+  if (databasePersistenceEnabled()) {
+    cached = await databaseSidebarRepository().write(cached);
+    return structuredClone(cached);
+  }
   await fs.mkdir(dataDir, { recursive: true });
   await fs.writeFile(sidebarFile, JSON.stringify(cached, null, 2), "utf-8");
   return structuredClone(cached);
@@ -1150,22 +1197,8 @@ export async function updateComponent(id: string, patch: Partial<ComponentInstan
 
 export async function deleteComponent(id: string): Promise<boolean> {
   const state = await readSidebarState();
-  const before = state.components.length;
-  state.components = state.components.filter((c) => c.id !== id);
-  state.connections = state.connections.filter(
-    (c) => c.sourceComponentId !== id && c.targetComponentId !== id
-  );
-  state.diagrams = state.diagrams.map((d) => ({
-    ...d,
-    componentIds: d.componentIds.filter((cid) => cid !== id),
-    connectionIds: d.connectionIds.filter((cid) => {
-      const conn = state.connections.find((c) => c.id === cid);
-      return conn !== undefined;
-    }),
-    positions: Object.fromEntries(Object.entries(d.positions).filter(([k]) => k !== id))
-  }));
-  if (state.components.length === before) return false;
-  await writeSidebarState(state);
+  if (!state.components.some((component) => component.id === id)) return false;
+  await writeSidebarState(removeComponentWithConnections(state, id));
   return true;
 }
 
@@ -1177,6 +1210,7 @@ export async function getConnections(): Promise<ConnectionInstance[]> {
 
 export async function addConnection(conn: ConnectionInstance): Promise<ConnectionInstance> {
   const state = await readSidebarState();
+  assertValidConnectionEndpoints(state, conn);
   state.connections.push(conn);
   await writeSidebarState(state);
   return conn;
@@ -1208,6 +1242,14 @@ export async function deleteConnection(id: string): Promise<boolean> {
 
 export async function getDiagrams(): Promise<Diagram[]> {
   return (await readSidebarState()).diagrams;
+}
+
+export async function getDiagramWithContents(id: string): Promise<{
+  diagram: Diagram;
+  components: ComponentInstance[];
+  connections: ConnectionInstance[];
+} | null> {
+  return diagramWithContents(await readSidebarState(), id);
 }
 
 export async function addDiagram(diagram: Diagram): Promise<Diagram> {

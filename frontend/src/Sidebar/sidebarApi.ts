@@ -12,7 +12,7 @@ import type {
 } from "./sidebarTypes";
 import type { DiagramValidationResult } from "./metamodelRules";
 
-const BASE = "/api/sidebar";
+const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "/api/sidebar";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {

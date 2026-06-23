@@ -132,3 +132,59 @@ Umgesetzt wurde:
 - Frontend-Aktionen fuer Export, Import und Download des Default-EAM-Metamodells.
 - Rule Graph mit `Simplified`, `Detailed` und `Viewpoint`-Modus, gruppierten Kantenlabels und verbessertem Detailpanel.
 - Dokumentation des JSON-Formats, der MVP-Grenzen und der verbliebenen Code-Fallbacks.
+
+## Zehnter Entwicklungszyklus
+
+Der zehnte Prompt fasst Issue #17 (Datenbank) und Issue #19 (Docker) zu einem ersten Infrastruktur-Schritt zusammen.
+
+Umgesetzt wurde:
+
+- Analyse der beiden bestehenden JSON-Stores, Sidebar-API, Frontend-Aufrufe, Scripts, Tests und Metamodel-Import/-Export-Funktion.
+- Entscheidung für PostgreSQL, Prisma und JSONB.
+- Prisma-Modell und initiale SQL-Migration für Metamodel, Typen, Regeln, Viewpoints, Diagramme und Instanzen.
+- Store-Abstraktion mit DB-primärem Sidebar-Pfad, sicherer Erstkopie und dokumentiertem Legacy-Fallback.
+- Cascade Delete für ConnectionInstances und Aggregate-Laden eines Diagramms.
+- Idempotenter Default-Seed sowie geschützte JSON-Migration ohne Löschen der Quelle.
+- Dockerfiles, Nginx-Konfiguration, Docker Compose, persistentes PostgreSQL-Volume und `.env.example`.
+- Repository-/Datenmodelltests und Infrastruktur-Dokumentation.
+- Bewusst nicht umgesetzt: Auth, CI/CD, Live-Deployment und Rewrite des historischen `/api/model`-Stores.
+
+## Elfter Entwicklungszyklus
+
+Der elfte Prompt fordert für Issue #20 getrennte lokale, Staging- und Produktionsumgebungen und bereitet Issue #21 als manuelles Serverhosting vor.
+
+Umgesetzt wurde:
+
+- Lokale Compose-Datei unverändert als Entwicklungsweg beibehalten.
+- Eigene Compose-Projekte `eam-staging` und `eam-prod` mit getrennten DB-Namen, Benutzern, Volumes und Ports.
+- `.env.staging.example` und `.env.prod.example` ohne echte Secrets sowie Gitignore-Schutz für reale Env-Dateien.
+- Host-Nginx-Beispiele für `eam.messers-cardio-club.de` und `eam-test.messers-cardio-club.de` mit HTTPS-Redirect und Let's-Encrypt-Pfaden.
+- Manuelle Hosting-Anleitung für DNS, Docker, Nginx, Certbot, Logs, Backup und Rollback.
+- Windows-Hinweis für `docker.exe compose`; Linux verwendet normalerweise `docker compose`.
+- Alle drei Compose-Konfigurationen mit Docker Compose validiert; lokaler Stack mit drei laufenden Diensten und HTTP-/DB-Readiness bestätigt.
+- Bewusst nicht umgesetzt: Live-Schaltung, Auth, CI/CD, automatische Backups und Zero-Downtime-Deployment.
+
+## Korrekturprüfung der Server-Compose-Dateien
+
+Eine manuelle Prüfung ohne `--env-file` zeigte lokale Werte in Staging/Produktion und ließ die gerenderte Service-/Volume-Zuordnung missverständlich wirken.
+
+Geprüft und korrigiert wurde:
+
+- Beide Compose-Dateien enthalten korrekt `postgres`, `backend` und `frontend`; das DB-Volume war bereits ausschließlich PostgreSQL zugeordnet.
+- Ursache der lokalen Werte war Docker Composes automatisches Laden der lokalen `.env` beim verkürzten `-f`-Aufruf.
+- `--env-file .env.staging` beziehungsweise `--env-file .env.prod` ist nun als verpflichtend dokumentiert und als Kommentar in den Compose-Dateien sichtbar.
+- Die vollständigen Docker-Ausgaben bestätigen getrennte Projekte, DB-Namen, Benutzer, Ports, Netzwerke und Volumes.
+- Der statische Validator prüft nun zusätzlich, dass DATABASE_URL-Host, User, Passwort und DB mit der jeweiligen Env-Datei übereinstimmen und dass Backend/Frontend kein DB-Volume mounten.
+
+## Hosting-Readiness für Issue #21
+
+Der nächste Prompt konkretisiert die manuelle, reproduzierbare Vorbereitung des bestehenden Servers, ohne externe Änderungen auszuführen.
+
+Umgesetzt wurde:
+
+- Serveranleitung mit prüfbaren Voraussetzungen, DNS-Fallback über `nslookup`, Secret-Regeln und verpflichtendem Staging-Gate.
+- Lokale Server-Curl-Checks, Nginx-Aktivierung, Certbot, Renewal, Produktion und Betrieb in eindeutiger Reihenfolge.
+- HTTP-only-Nginx-Beispiele für den ersten Certbot-Lauf sowie vollständige HTTPS-Beispiele mit korrekten Subdomains, Ports und Proxy-Headern.
+- Drei explizite Sicherheitsoptionen bis Issue #18: Demo-Daten, Nginx Basic Auth oder Verschiebung der Live-Schaltung.
+- Ausfüllbare Readiness- und Acceptance-Dokumente mit Verantwortlichen, Datum, Ergebnis, Risiken und Freigabeentscheidung.
+- Keine DNS-, Firewall-, Nginx-, Certbot- oder Serverbefehle wurden lokal ausgeführt.

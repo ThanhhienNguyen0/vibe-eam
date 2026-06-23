@@ -40,7 +40,7 @@ Status:
 | Seed-Daten | 3 | Tatsaechlich funktional | 12 Elemente und 12 Relationen vorhanden. |
 | Dokumentation | 3 | Tatsaechlich funktional | Metamodell, Impact-Analyse, Validierung und Reflexion dokumentiert. |
 | Auth/Deployment | 0 | Nicht umgesetzt | Bewusst ausserhalb des MVP. |
-| Automatisierte Tests | 2 | Teilweise funktional | Minimale Vitest-Unit-Tests fuer Metamodell, Validierung, Impact-Modi, Zyklusvermeidung, Portfolio-Scoring, Normalisierung und Bubble-Groessen. Keine UI-E2E-Tests. |
+| Automatisierte Tests | 3 | Teilweise funktional | 44 Vitest-Tests fuer Metamodell, Validierung, Import/Export, Persistenzvertrag, Cascade-State-Verhalten, Impact und Portfolio. Keine echte PostgreSQL-Integration und keine UI-E2E-Tests. |
 | Forschungsbezug | 3 | Tatsaechlich funktional | Prompt, Annahmen, Grenzen und Bewertung dokumentiert. |
 | Metamodel Rule Builder | 3 | Tatsaechlich funktional | Component Types, Connection Types, Source-/Target-Regeln und Viewpoints sind in Sidebar-Datenmodell, Backend-Routen und UI editierbar. |
 | Stakeholder Viewpoints | 3 | Tatsaechlich funktional | Management, Business Owner, Application Owner, IT Operations und Full Architecture View werden mit erlaubten und verpflichtenden Typen bereitgestellt. |
@@ -62,3 +62,12 @@ Status:
 | Reproduzierbarkeit | 3 | Tatsaechlich funktional | Default-EAM-Metamodell liegt als JSON-Datei vor und kann ueber die UI heruntergeladen werden. |
 | Kundenspezifische Anpassbarkeit | 3 | Teilweise funktional | Kunden koennen Metamodel JSON importieren; MVP nutzt Replace statt Merge und hat noch keinen vollstaendigen visuellen JSON-Preview. |
 | Metamodel JSON format documentation | 3 | Tatsaechlich funktional | `docs/METAMODEL_JSON_FORMAT.md` beschreibt Struktur, Pflichtfelder, Referenzregeln und Importmodus. |
+| PostgreSQL/Prisma data model | 3 | Tatsaechlich funktional | Prisma-Schema und Migration bilden alle Hauptentitaeten, Fremdschluessel und JSONB-Felder ab; im laufenden PostgreSQL-Container ist eine abgeschlossene Migration nachgewiesen. |
+| Database persistence | 3 | Tatsaechlich funktional | Der laufende Sidebar-Pfad verwendet Prisma/PostgreSQL; Sidebar-Daten, Diagramm-Aggregat und Metamodel-Export wurden read-only per HTTP geprüft. Destruktive Integrationstests fehlen. |
+| Cascade delete | 3 | Teilweise funktional | Source- und Target-Fremdschluessel deklarieren `ON DELETE CASCADE`; State-Verhalten ist getestet, die echte PostgreSQL-Kaskade noch nicht live provoziert. |
+| Diagram aggregate loading | 3 | Tatsaechlich funktional | `GET /api/sidebar/diagrams/:id` wurde gegen den laufenden DB-Stack erfolgreich aufgerufen und liefert Komponenten und Verbindungen. |
+| Database seed/migration | 3 | Tatsaechlich funktional | Laufender Stack enthält abgeschlossene Prisma-Migration und erwartete Seed-Daten; JSON-Kopie bleibt zusätzlich geschützt verfügbar. |
+| Docker Compose | 3 | Tatsaechlich funktional | Lokaler Stack läuft mit PostgreSQL, Backend und Frontend; alle drei Compose-Dateien bestehen `docker.exe compose config` und 108 zusätzliche statische Checks. |
+| Environment separation | 3 | Tatsaechlich funktional | Staging und Produktion haben eigene Compose-Projekte, DB-Namen, Benutzer, Loopback-Ports und explizit getrennte Named Volumes. Containerstarts wurden bewusst nicht parallel erzwungen. |
+| Production hosting preparation | 2 | Teilweise funktional | Serverpraktische Anleitung, Readiness- und Abnahmecheckliste decken Voraussetzungen, Staging-Gate, Produktion, Betrieb, Backup und Rollback ab; kein externer Server wurde verändert. |
+| HTTPS preparation | 2 | Teilweise funktional | HTTP-only-Erstkonfigurationen und vollständige Nginx-Beispiele für Certbot, Redirect, TLS-Proxying und Basic-Auth-Hooks liegen vor; DNS/Zertifikate sind nicht live eingerichtet. |

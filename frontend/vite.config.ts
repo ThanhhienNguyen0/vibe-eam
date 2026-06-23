@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://localhost:4000"
+      "/api": process.env.VITE_BACKEND_PROXY_TARGET ?? "http://localhost:4000"
     }
   }
 });

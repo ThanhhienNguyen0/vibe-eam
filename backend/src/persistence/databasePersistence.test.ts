@@ -1,0 +1,106 @@
+import { readFile } from "node:fs/promises";
+import { describe, expect, it } from "vitest";
+import { applyMetamodelDefinition, extractMetamodelDefinition } from "../Sidebar/metamodelConfig.js";
+import { validateDiagram } from "../Sidebar/metamodelRules.js";
+import type { SidebarState } from "../Sidebar/sidebarTypes.js";
+import { configuredStorageBackend, type SidebarStateRepository } from "./databaseSidebarRepository.js";
+import {
+  assertValidConnectionEndpoints,
+  diagramWithContents,
+  removeDanglingInstanceReferences,
+  removeComponentWithConnections
+} from "./stateOperations.js";
+
+class MemoryRepository implements SidebarStateRepository {
+  constructor(private state: SidebarState | null = null) {}
+  async read(): Promise<SidebarState | null> { return this.state ? structuredClone(this.state) : null; }
+  async write(state: SidebarState): Promise<SidebarState> { this.state = structuredClone(state); return structuredClone(state); }
+  async disconnect(): Promise<void> {}
+}
+
+const state: SidebarState = {
+  metamodel: { id: "mm", name: "MM", description: "", version: "1", isActive: true, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+  componentTypes: [
+    { id: "ct-app", name: "Application", description: "", color: "#fff", icon: "app", customPropertyKeys: ["owner", "criticality"], layer: "Application" }
+  ],
+  connectionTypes: [
+    { id: "conn-dep", name: "depends_on", description: "", color: "#000", lineStyle: "solid", allowedSourceTypeIds: [], allowedTargetTypeIds: [] }
+  ],
+  connectionRules: [
+    { id: "rule-dep", sourceComponentTypeId: "ct-app", connectionTypeId: "conn-dep", targetComponentTypeId: "ct-app", allowed: true, required: false, severity: "error", description: "Application dependency", rationale: "" }
+  ],
+  viewpoints: [],
+  viewpointRules: [],
+  validationRules: [],
+  components: [
+    { id: "source", name: "Source", componentTypeId: "ct-app", description: "", properties: { owner: "Team A", nestedJson: JSON.stringify({ score: 3 }) } },
+    { id: "target", name: "Target", componentTypeId: "ct-app", description: "", properties: { criticality: "high" } }
+  ],
+  connections: [
+    { id: "connection", name: "", connectionTypeId: "conn-dep", sourceComponentId: "source", targetComponentId: "target", description: "", properties: { protocol: "HTTPS" } }
+  ],
+  diagrams: [
+    { id: "diagram", name: "Diagram", description: "", metamodelId: "mm", componentIds: ["source", "target"], connectionIds: ["connection"], positions: { source: { x: 10, y: 20 }, target: { x: 30, y: 40 } } }
+  ]
+};
+
+describe("database persistence repository contract", () => {
+  it("selects database storage only with DATABASE_URL and rejects an incomplete explicit DB configuration", () => {
+    expect(configuredStorageBackend({ DATABASE_URL: "postgresql://db", STORAGE_BACKEND: "database" })).toBe("database");
+    expect(configuredStorageBackend({ STORAGE_BACKEND: "json" })).toBe("json");
+    expect(configuredStorageBackend({})).toBe("json");
+    expect(() => configuredStorageBackend({ STORAGE_BACKEND: "database" })).toThrow(/DATABASE_URL is required/);
+    expect(() => configuredStorageBackend({ STORAGE_BACKEND: "typo", DATABASE_URL: "postgresql://db" })).toThrow(/STORAGE_BACKEND/);
+  });
+  it("stores and reads ComponentTypes and flexible JSON attributes", async () => {
+    const repository = new MemoryRepository();
+    await repository.write(state);
+    const restored = await repository.read();
+    expect(restored?.componentTypes[0].customPropertyKeys).toEqual(["owner", "criticality"]);
+    expect(restored?.components[0].properties).toEqual(state.components[0].properties);
+    expect(restored?.connections[0].properties).toEqual({ protocol: "HTTPS" });
+  });
+
+  it("loads a diagram together with components, connections and positions", () => {
+    const aggregate = diagramWithContents(state, "diagram");
+    expect(aggregate?.components.map((item) => item.id)).toEqual(["source", "target"]);
+    expect(aggregate?.connections.map((item) => item.id)).toEqual(["connection"]);
+    expect(aggregate?.diagram.positions.source).toEqual({ x: 10, y: 20 });
+  });
+
+  it("rejects invalid connection endpoints", () => {
+    expect(() => assertValidConnectionEndpoints(state, { ...state.connections[0], targetComponentId: "missing" })).toThrow(/valid source and target/);
+  });
+
+  it("cascades component deletion to attached connections and diagram membership", () => {
+    const next = removeComponentWithConnections(state, "source");
+    expect(next.components.some((item) => item.id === "source")).toBe(false);
+    expect(next.connections).toHaveLength(0);
+    expect(next.diagrams[0].connectionIds).toHaveLength(0);
+    expect(next.diagrams[0].positions.source).toBeUndefined();
+  });
+
+  it("keeps ConnectionRules valid and preserves metamodel export/import structure after a repository round trip", async () => {
+    const repository = new MemoryRepository();
+    await repository.write(state);
+    const restored = (await repository.read())!;
+    expect(validateDiagram(restored.diagrams[0], restored, { includeRequiredRules: false }).valid).toBe(true);
+    const exported = extractMetamodelDefinition(restored);
+    expect(extractMetamodelDefinition(applyMetamodelDefinition(restored, exported))).toEqual(exported);
+  });
+
+  it("removes instance references that become invalid after a metamodel import", () => {
+    const imported = removeDanglingInstanceReferences({ ...state, componentTypes: [], connectionTypes: [] });
+    expect(imported.components).toEqual([]);
+    expect(imported.connections).toEqual([]);
+    expect(imported.diagrams[0]).toMatchObject({ componentIds: [], connectionIds: [], positions: {} });
+  });
+
+  it("declares PostgreSQL JSONB fields and database-level endpoint cascades", async () => {
+    const schema = await readFile(new URL("../../prisma/schema.prisma", import.meta.url), "utf-8");
+    expect(schema).toMatch(/customPropertyKeys\s+Json[\s\S]*@db\.JsonB/);
+    expect(schema).toMatch(/properties\s+Json[\s\S]*@db\.JsonB/);
+    expect(schema).toMatch(/sourceComponent\s+ComponentInstance[\s\S]*onDelete: Cascade/);
+    expect(schema).toMatch(/targetComponent\s+ComponentInstance[\s\S]*onDelete: Cascade/);
+  });
+});

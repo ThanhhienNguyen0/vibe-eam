@@ -23,6 +23,7 @@ import {
   getConnectionRules,
   getConnectionTypes,
   getDiagrams,
+  getDiagramWithContents,
   getViewpoints,
   importMetamodelDefinition,
   readDefaultMetamodelDefinition,
@@ -496,6 +497,16 @@ router.post("/diagrams", async (req, res, next) => {
       viewpointId
     });
     res.status(201).json(diagram);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/diagrams/:id", async (req, res, next) => {
+  try {
+    const aggregate = await getDiagramWithContents(req.params.id);
+    if (!aggregate) return res.status(404).json({ error: "Diagram not found." });
+    res.json(aggregate);
   } catch (err) {
     next(err);
   }
