@@ -15,6 +15,8 @@ Diese Checkliste trennt lokale Entwicklungsbereitschaft, Server-Staging und Serv
 - [ ] Beide DATABASE_URLs verwenden Host `postgres`
 - [ ] `.env.staging` und `.env.prod` werden von Git ignoriert
 - [ ] Nginx-Beispiele nennen ausschließlich die EAM-Subdomains, nicht die Hauptdomain als `server_name`
+- [ ] `npm run validate:workflows` erfolgreich
+- [ ] CI-Workflow läuft bei Push und Pull Request ohne Deployment
 
 Lokales Go-Kriterium: Alle Punkte erfüllt. Das bestätigt nur Repository-Readiness, kein Live-Hosting.
 
@@ -33,6 +35,9 @@ Lokales Go-Kriterium: Alle Punkte erfüllt. Das bestätigt nur Repository-Readin
 - [ ] Staging-/Produktionspasswörter sind verschieden
 - [ ] `POSTGRES_PASSWORD` und DATABASE_URL-Passwort stimmen je Umgebung überein
 - [ ] Backup-Ziel außerhalb der Docker-Volumes festgelegt
+- [ ] GitHub Environments `staging` und `production` angelegt
+- [ ] Deployment-SSH-Key und verifizierter Known-Hosts-Eintrag als Secrets hinterlegt
+- [ ] Server-Checkouts können `git fetch` nicht-interaktiv ausführen
 
 Gemeinsames Stop-Kriterium: Bei einem offenen Punkt weder Certbot noch Produktion starten.
 
@@ -58,6 +63,7 @@ Gemeinsames Stop-Kriterium: Bei einem offenen Punkt weder Certbot noch Produktio
 - [ ] Neustart/Volume-Persistenz geprüft
 - [ ] Backup und Restore in Staging geprüft
 - [ ] `HOSTING_ACCEPTANCE_CHECK.md` für Staging ausgefüllt
+- [ ] Manueller Staging-Workflow deployt exakt den im Verify-Job geprüften SHA
 
 Staging-Go-Kriterium: Alle fachlichen, technischen und Sicherheitsprüfungen erfüllt. Erst dann Produktion beginnen.
 
@@ -82,5 +88,6 @@ Staging-Go-Kriterium: Alle fachlichen, technischen und Sicherheitsprüfungen erf
 - [ ] Certbot-Erneuerung mit `renew --dry-run` geprüft
 - [ ] Logs, Verantwortliche und manueller Rollback-Prozess dokumentiert
 - [ ] `HOSTING_ACCEPTANCE_CHECK.md` vollständig ausgefüllt
+- [ ] Produktionsworkflow wurde mit Backup-/Abnahmebestätigung und Required Reviewer freigegeben
 
 Produktions-Go-Kriterium: Alle Punkte erfüllt und Sicherheitsoption ausdrücklich freigegeben. Wegen fehlendem Anwendungs-Auth ist für sensible Daten „Live-Schaltung verschieben“ die Standardentscheidung.

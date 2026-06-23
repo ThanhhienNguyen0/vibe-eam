@@ -10,12 +10,14 @@ Ausfüllbares Abnahmeprotokoll für Issue #21. Statuswerte: `offen`, `bestanden`
 | Geprüfter Git-Commit/Tag |  |
 | Geplantes Freigabedatum |  |
 | Verantwortliche Person |  |
+| CI-Workflowlauf (URL/ID) |  |
+| Deployment-Workflowlauf (URL/ID) |  |
 
 ## Abnahmepunkte
 
 | Nr. | Prüfpunkt | Status | Datum | Prüfer | Ergebnis | Notizen |
 | ---: | --- | --- | --- | --- | --- | --- |
-| 1 | Subdomains: `eam.messers-cardio-club.de` und `eam-test.messers-cardio-club.de` korrekt geplant |  |  |  |  |  |
+| 1 | Subdomains: `eam.messers-cardio-club.com` und `eam-test.messers-cardio-club.com` korrekt geplant |  |  |  |  |  |
 | 2 | DNS-Status beider Subdomains zeigt auf den beabsichtigten Server |  |  |  |  |  |
 | 3 | Staging-Containerstatus: postgres/backend/frontend healthy oder running |  |  |  |  |  |
 | 4 | Staging-Healthcheck `127.0.0.1:4400/api/health` erfolgreich |  |  |  |  |  |
@@ -41,6 +43,18 @@ Ausfüllbares Abnahmeprotokoll für Issue #21. Statuswerte: `offen`, `bestanden`
 | Diagramm inklusive Komponenten und Positionen |  |  |  |  |  |
 | ComponentInstance-Cascade löscht Connections |  |  |  |  |  |
 | Persistenz nach Container-/Serverneustart |  |  |  |  |  |
+
+## CI/CD-Nachweis
+
+| Prüfpunkt | Status | Datum | Prüfer | Ergebnis | Notizen |
+| --- | --- | --- | --- | --- | --- |
+| CI für den deployten Commit: Typecheck, Tests und Build erfolgreich |  |  |  |  |  |
+| Alle drei Compose-Konfigurationen in CI erfolgreich |  |  |  |  |  |
+| Backend-/Frontend-Image-Build in CI erfolgreich |  |  |  |  |  |
+| Deployment erfolgte manuell über `workflow_dispatch` |  |  |  |  |  |
+| Deployment-SHA entspricht geprüftem CI-SHA |  |  |  |  |  |
+| Produktionsbackup vor Deployment bestätigt |  |  |  |  |  |
+| Interner Healthcheck nach Deployment erfolgreich |  |  |  |  |  |
 
 ## Sicherheitsentscheidung
 

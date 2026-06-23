@@ -22,21 +22,21 @@ Abbruchkriterium: Nicht fortfahren, wenn die Hauptdomain-Konfiguration nicht ges
 
 ## 2. DNS prüfen
 
-Folgende Records müssen auf die Server-IP zeigen, ohne die Hauptdomain `messers-cardio-club.de` zu verändern:
+Folgende Records müssen auf die Server-IP zeigen, ohne die Hauptdomain `messers-cardio-club.com` zu verändern:
 
-- Produktion: `eam.messers-cardio-club.de`
-- Staging: `eam-test.messers-cardio-club.de`
+- Produktion: `eam.messers-cardio-club.com`
+- Staging: `eam-test.messers-cardio-club.com`
 
 ```bash
-dig +short eam.messers-cardio-club.de
-dig +short eam-test.messers-cardio-club.de
+dig +short eam.messers-cardio-club.com
+dig +short eam-test.messers-cardio-club.com
 ```
 
 Falls `dig` fehlt:
 
 ```bash
-nslookup eam.messers-cardio-club.de
-nslookup eam-test.messers-cardio-club.de
+nslookup eam.messers-cardio-club.com
+nslookup eam-test.messers-cardio-club.com
 ```
 
 Vor Certbot müssen beide Ergebnisse auf die beabsichtigte Server-IP zeigen. Es wird keine IP im Repository hinterlegt.
@@ -116,29 +116,29 @@ sudo systemctl reload nginx
 
 Kontrollieren:
 
-- `server_name eam-test.messers-cardio-club.de`
+- `server_name eam-test.messers-cardio-club.com`
 - `/` → `127.0.0.1:8081`
 - `/api/` → `127.0.0.1:4400`
-- keine Server-Block-Änderung für `messers-cardio-club.de`
+- keine Server-Block-Änderung für `messers-cardio-club.com`
 
-Vor Certbot muss `http://eam-test.messers-cardio-club.de` erreichbar sein.
+Vor Certbot muss `http://eam-test.messers-cardio-club.com` erreichbar sein.
 
 ## 8. HTTPS für Staging
 
 ```bash
-sudo certbot --nginx -d eam-test.messers-cardio-club.de
+sudo certbot --nginx -d eam-test.messers-cardio-club.com
 sudo certbot renew --dry-run
 ```
 
-Nach erfolgreicher Ausstellung die Certbot-Konfiguration sichern, mit `deploy/nginx/eam.staging.conf.example` abgleichen und die dortigen Proxy-Ziele/Header übernehmen. Die Standardpfade müssen auf `/etc/letsencrypt/live/eam-test.messers-cardio-club.de/` zeigen.
+Nach erfolgreicher Ausstellung die Certbot-Konfiguration sichern, mit `deploy/nginx/eam.staging.conf.example` abgleichen und die dortigen Proxy-Ziele/Header übernehmen. Die Standardpfade müssen auf `/etc/letsencrypt/live/eam-test.messers-cardio-club.com/` zeigen.
 
 Danach:
 
 ```bash
 sudo nginx -t
 sudo systemctl reload nginx
-curl -I https://eam-test.messers-cardio-club.de
-curl https://eam-test.messers-cardio-club.de/api/health
+curl -I https://eam-test.messers-cardio-club.com
+curl https://eam-test.messers-cardio-club.com/api/health
 ```
 
 ## 9. Sicherheitsentscheidung wegen fehlendem Auth
@@ -226,7 +226,7 @@ sudo systemctl reload nginx
 
 Kontrollieren:
 
-- `server_name eam.messers-cardio-club.de`
+- `server_name eam.messers-cardio-club.com`
 - `/` → `127.0.0.1:8080`
 - `/api/` → `127.0.0.1:4401`
 - Hauptdomain bleibt unberührt
@@ -234,15 +234,15 @@ Kontrollieren:
 HTTPS ausstellen und prüfen:
 
 ```bash
-sudo certbot --nginx -d eam.messers-cardio-club.de
+sudo certbot --nginx -d eam.messers-cardio-club.com
 sudo certbot renew --dry-run
 sudo nginx -t
 sudo systemctl reload nginx
-curl -I https://eam.messers-cardio-club.de
-curl https://eam.messers-cardio-club.de/api/health
+curl -I https://eam.messers-cardio-club.com
+curl https://eam.messers-cardio-club.com/api/health
 ```
 
-Anschließend vollständiges Beispiel, Certbot-Ergebnis und ausgewählte Basic-Auth-Option zusammenführen. Zertifikatspfade müssen auf `/etc/letsencrypt/live/eam.messers-cardio-club.de/` zeigen.
+Anschließend vollständiges Beispiel, Certbot-Ergebnis und ausgewählte Basic-Auth-Option zusammenführen. Zertifikatspfade müssen auf `/etc/letsencrypt/live/eam.messers-cardio-club.com/` zeigen.
 
 ## 13. Betrieb
 
@@ -303,11 +303,30 @@ Rollback-Hinweis:
 3. Images neu bauen und Compose starten.
 4. Prisma-Migrationen sind vorwärtsgerichtet. Bei inkompatiblen Schemaänderungen reicht ein Code-Rollback nicht; dann ist ein getesteter DB-Restore nötig.
 
-## 14. Plattformhinweis
+## 14. Deployment über GitHub Actions
+
+Nach Einrichtung der in `GITHUB_SECRETS.md` beschriebenen Secrets stehen zwei ausschließlich manuelle Workflows bereit:
+
+- `Deploy staging`: Ref auswählen; der Workflow prüft Typecheck, Tests, Build und Compose, deployt danach exakt den geprüften Commit nach `/var/www/eam-test` und prüft `127.0.0.1:4400/api/health`.
+- `Deploy production`: freigegebenen Ref eingeben, `DEPLOY_PRODUCTION` wählen sowie Backup und `HOSTING_ACCEPTANCE_CHECK.md` bestätigen. Danach wird exakt der geprüfte Commit nach `/var/www/eam` deployt und `127.0.0.1:4401/api/health` geprüft.
+
+Beide serverseitigen Env-Dateien bleiben unverändert. Die Workflows erzeugen, überschreiben oder loggen sie nicht. Wegen aktivem Basic Auth werden externe Subdomain-Healthchecks nicht automatisch verwendet.
+
+Vor Aktivierung:
+
+1. GitHub Environments `staging` und `production` anlegen.
+2. Für `production` Required Reviewers konfigurieren.
+3. SSH-Key und Host-Key gemäß `GITHUB_SECRETS.md` einrichten.
+4. Sicherstellen, dass `git fetch` im Server-Checkout nicht-interaktiv funktioniert. Bei privaten Repositories benötigt der Server einen eigenen read-only Git-Deploy-Key; dieser ist vom GitHub-Actions-SSH-Key zu trennen.
+5. Ersten Workflowlauf mit Staging durchführen und in `HOSTING_ACCEPTANCE_CHECK.md` dokumentieren.
+
+Der automatische CI-Workflow läuft dagegen bei jedem Push und Pull Request, führt aber kein Deployment aus.
+
+## 15. Plattformhinweis
 
 Auf Linux gilt normalerweise `docker compose ...`. Auf dem bestätigten Windows-System muss `docker.exe compose ...` verwendet werden. Keine der DNS-, Nginx-, Firewall- oder Certbot-Anweisungen dieses Dokuments lokal auf Windows ausführen.
 
-## 15. Bewusste MVP-Grenzen
+## 16. Bewusste MVP-Grenzen
 
 - kein CI/CD
 - kein Anwendungs-Auth
@@ -316,3 +335,4 @@ Auf Linux gilt normalerweise `docker compose ...`. Auf dem bestätigten Windows-
 - kein Zero-Downtime-Deployment
 - kein automatisches Datenbank-Rollback
 - keine Live-Änderung an DNS, Nginx oder Certbot in diesem Schritt
+- kein automatisches Deployment bei Push; Staging und Produktion bleiben workflow_dispatch

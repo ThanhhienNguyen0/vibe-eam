@@ -52,7 +52,7 @@ Copy-Item .env.example .env
 docker.exe compose up --build
 ```
 
-Auf Linux normalerweise `docker compose up --build`. Getrennte Staging-/Produktionsumgebungen und das geplante Hosting über `eam.messers-cardio-club.de` sind in `docs/DOCKER_SETUP.md`, `docs/HOSTING_SETUP.md` und `docs/ENVIRONMENT_AND_HOSTING_PLAN.md` beschrieben.
+Auf Linux normalerweise `docker compose up --build`. Getrennte Staging-/Produktionsumgebungen und das Hosting über `eam.messers-cardio-club.com` sind in `docs/DOCKER_SETUP.md`, `docs/HOSTING_SETUP.md` und `docs/ENVIRONMENT_AND_HOSTING_PLAN.md` beschrieben.
 
 Build und Typecheck:
 

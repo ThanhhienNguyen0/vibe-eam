@@ -23,7 +23,7 @@ Die Trennung gilt nur bei expliziter Auswahl der passenden Env-Datei. Docker Com
 - Linux-Server mit `sudo`-/Administrationszugriff und ausreichendem Speicherplatz.
 - Docker Engine und Compose Plugin sind funktionsfähig.
 - Git, Nginx und Certbot sind installiert.
-- Die bestehende Hauptdomain `messers-cardio-club.de` und ihre Website bleiben unverändert.
+- Die bestehende Hauptdomain `messers-cardio-club.com` und ihre Website bleiben unverändert.
 - DNS-Verwaltung erlaubt neue A-/AAAA-Records.
 - TCP 80 und 443 sind in Firewall und Provider-Firewall geöffnet.
 - Port 5432 bleibt von außen geschlossen.
@@ -32,10 +32,10 @@ Es wird keine konkrete Server-IP, kein Serverpfad und kein Anbieter hardcodiert.
 
 ## Domain- und Subdomain-Konzept
 
-- Produktion: `eam.messers-cardio-club.de`
-- Staging: `eam-test.messers-cardio-club.de`
+- Produktion: `eam.messers-cardio-club.com`
+- Staging: `eam-test.messers-cardio-club.com`
 
-Beide Namen zeigen auf den bestehenden Server, erhalten aber eigene Nginx-Server-Blöcke und eigene Zertifikate. Die Hauptdomain wird weder umgeleitet noch überschrieben. `eam-staging.messers-cardio-club.de` bleibt eine mögliche Alternative, wird aber im Repository nicht parallel verwendet, um Konfigurationsdrift zu vermeiden.
+Beide Namen zeigen auf den bestehenden Server, erhalten aber eigene Nginx-Server-Blöcke und eigene Zertifikate. Die Hauptdomain wird weder umgeleitet noch überschrieben. `eam-staging.messers-cardio-club.com` bleibt eine mögliche Alternative, wird aber im Repository nicht parallel verwendet, um Konfigurationsdrift zu vermeiden.
 
 ## HTTPS-Konzept
 

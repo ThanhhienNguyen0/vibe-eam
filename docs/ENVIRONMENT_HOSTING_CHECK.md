@@ -52,9 +52,9 @@ Die Serverports sind ausschließlich über Host-Nginx erreichbar. Staging und Pr
 
 ## 6. Subdomains und HTTPS
 
-- Produktion: `eam.messers-cardio-club.de`
-- Staging: `eam-test.messers-cardio-club.de`
-- Hauptdomain `messers-cardio-club.de`: bleibt unverändert
+- Produktion: `eam.messers-cardio-club.com`
+- Staging: `eam-test.messers-cardio-club.com`
+- Hauptdomain `messers-cardio-club.com`: bleibt unverändert
 
 Nginx-Beispiele liegen unter `deploy/nginx`. Port 80 ist für ACME und HTTPS-Redirect vorgesehen. Port 443 nutzt die Standardpfade von Let's Encrypt. `/api/` geht an den jeweiligen Backend-Loopback-Port, `/` an das Frontend. WebSockets sind aktuell nicht erforderlich.
 

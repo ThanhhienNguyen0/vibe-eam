@@ -122,8 +122,8 @@ for (const [label, variant, expectedName, expectedVolume, expectedFrontendPort, 
 check(staging.environment.POSTGRES_DB !== production.environment.POSTGRES_DB, "staging and production use different database names");
 check(staging.environment.POSTGRES_USER !== production.environment.POSTGRES_USER, "staging and production use different database users");
 check(!staging.environment.POSTGRES_PASSWORD.includes("production"), "staging example password is not the production placeholder");
-check(staging.environment.CORS_ORIGIN === "https://eam-test.messers-cardio-club.de", "staging CORS uses the staging subdomain");
-check(production.environment.CORS_ORIGIN === "https://eam.messers-cardio-club.de", "production CORS uses the production subdomain");
+check(staging.environment.CORS_ORIGIN === "https://eam-test.messers-cardio-club.com", "staging CORS uses the staging subdomain");
+check(production.environment.CORS_ORIGIN === "https://eam.messers-cardio-club.com", "production CORS uses the production subdomain");
 
 for (const serviceName of ["backend", "frontend"]) {
   const dockerfile = services[serviceName]?.build?.dockerfile;

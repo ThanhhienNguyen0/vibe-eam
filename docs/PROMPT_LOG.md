@@ -158,7 +158,7 @@ Umgesetzt wurde:
 - Lokale Compose-Datei unverändert als Entwicklungsweg beibehalten.
 - Eigene Compose-Projekte `eam-staging` und `eam-prod` mit getrennten DB-Namen, Benutzern, Volumes und Ports.
 - `.env.staging.example` und `.env.prod.example` ohne echte Secrets sowie Gitignore-Schutz für reale Env-Dateien.
-- Host-Nginx-Beispiele für `eam.messers-cardio-club.de` und `eam-test.messers-cardio-club.de` mit HTTPS-Redirect und Let's-Encrypt-Pfaden.
+- Host-Nginx-Beispiele für `eam.messers-cardio-club.com` und `eam-test.messers-cardio-club.com` mit HTTPS-Redirect und Let's-Encrypt-Pfaden.
 - Manuelle Hosting-Anleitung für DNS, Docker, Nginx, Certbot, Logs, Backup und Rollback.
 - Windows-Hinweis für `docker.exe compose`; Linux verwendet normalerweise `docker compose`.
 - Alle drei Compose-Konfigurationen mit Docker Compose validiert; lokaler Stack mit drei laufenden Diensten und HTTP-/DB-Readiness bestätigt.
@@ -188,3 +188,18 @@ Umgesetzt wurde:
 - Drei explizite Sicherheitsoptionen bis Issue #18: Demo-Daten, Nginx Basic Auth oder Verschiebung der Live-Schaltung.
 - Ausfüllbare Readiness- und Acceptance-Dokumente mit Verantwortlichen, Datum, Ergebnis, Risiken und Freigabeentscheidung.
 - Keine DNS-, Firewall-, Nginx-, Certbot- oder Serverbefehle wurden lokal ausgeführt.
+
+## Dreizehnter Entwicklungszyklus: Issue #22 CI/CD
+
+Der Prompt fordert automatische CI bei Push/PR sowie ausschließlich manuelle Deployments für Staging und Produktion.
+
+Umgesetzt wurde:
+
+- CI mit Node 22, `npm ci`, Prisma Generate, Typecheck, Tests, Build, drei Compose-Checks, Repository-Validatoren und Docker-Image-Builds.
+- Staging-Workflow nur über `workflow_dispatch`, serverseitige `.env.staging`, exakter geprüfter Commit-SHA und interner Healthcheck auf Port 4400.
+- Produktionsworkflow nur über `workflow_dispatch` mit expliziter Produktions-, Backup- und Hosting-Abnahmebestätigung sowie internem Healthcheck auf Port 4401.
+- SSH mit temporärem Private Key, StrictHostKeyChecking und vorab verifiziertem Known-Hosts-Secret.
+- Kein `git reset --hard`; Serveränderungen blockieren Deployment.
+- Dokumentation für Pipeline, GitHub Secrets und manuellen Code-/DB-Rollback.
+- Bestätigte Live-Domains konsistent auf `.com` korrigiert.
+- Kein Auth-System, kein automatisches Backup und kein automatisches Push-Deployment ergänzt.

@@ -1,0 +1,148 @@
+name: Deploy production
+
+# Production has no push or schedule trigger. It is deliberately manual only.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Approved Git tag or commit (main is allowed only by conscious choice)
+        required: true
+        type: string
+      confirmation:
+        description: Explicit production confirmation
+        required: true
+        default: ABORT
+        type: choice
+        options:
+          - ABORT
+          - DEPLOY_PRODUCTION
+      backup_confirmed:
+        description: A current PostgreSQL backup exists outside the Docker volume
+        required: true
+        default: false
+        type: boolean
+      acceptance_confirmed:
+        description: HOSTING_ACCEPTANCE_CHECK.md has been reviewed for production
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify approval and selected revision
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      verified_sha: ${{ steps.revision.outputs.sha }}
+    steps:
+      - name: Enforce manual production gates
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          BACKUP_CONFIRMED: ${{ inputs.backup_confirmed }}
+          ACCEPTANCE_CONFIRMED: ${{ inputs.acceptance_confirmed }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$CONFIRMATION" == "DEPLOY_PRODUCTION" ]] || { echo "Production deployment was not confirmed." >&2; exit 1; }
+          [[ "$BACKUP_CONFIRMED" == "true" ]] || { echo "Production backup was not confirmed." >&2; exit 1; }
+          [[ "$ACCEPTANCE_CONFIRMED" == "true" ]] || { echo "Hosting acceptance was not confirmed." >&2; exit 1; }
+
+      - name: Checkout selected revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Capture immutable revision
+        id: revision
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run db:generate --workspace backend
+
+      - name: Verify application
+        run: |
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: Validate production Compose configuration
+        run: docker compose --env-file .env.prod.example -f docker-compose.prod.yml config --quiet
+
+  deploy:
+    name: Deploy to production server
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SERVER_SSH_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$SSH_PRIVATE_KEY"
+          test -n "$SSH_KNOWN_HOSTS"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+
+      - name: Deploy selected revision and run internal healthcheck
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          DEPLOY_PATH: ${{ secrets.PROD_DEPLOY_PATH }}
+          DEPLOY_REF: ${{ needs.verify.outputs.verified_sha }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$SERVER_HOST"
+          test -n "$SERVER_USER"
+          test -n "$DEPLOY_PATH"
+          test -n "$DEPLOY_REF"
+
+          ssh -i "$HOME/.ssh/id_ed25519" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "$SERVER_USER@$SERVER_HOST" \
+            'bash -se' -- "$DEPLOY_PATH" "$DEPLOY_REF" <<'REMOTE'
+          set -Eeuo pipefail
+          DEPLOY_PATH=$1
+          DEPLOY_REF=$2
+
+          [[ "$DEPLOY_PATH" == "/var/www/eam" ]] || { echo "Unexpected production deploy path." >&2; exit 1; }
+          cd "$DEPLOY_PATH"
+          test -f .env.prod || { echo "Server-side .env.prod is missing." >&2; exit 1; }
+          ! grep -q 'replace-with-' .env.prod || { echo "Placeholder secret remains in .env.prod." >&2; exit 1; }
+          [[ -z "$(git status --porcelain --untracked-files=no)" ]] || { echo "Tracked server worktree changes block deployment." >&2; exit 1; }
+
+          git fetch --all --prune --tags
+          RESOLVED_REF=$(git rev-parse --verify "$DEPLOY_REF^{commit}")
+          git checkout --detach "$RESOLVED_REF"
+
+          docker compose --env-file .env.prod -f docker-compose.prod.yml config --quiet
+          docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+          docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 --retry-all-errors \
+            http://127.0.0.1:4401/api/health
+          REMOTE
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -f "$HOME/.ssh/id_ed25519"

@@ -4,8 +4,8 @@ Dieser Ordner enthält absichtlich nur Beispiele und keine automatisch ausführe
 
 Enthalten:
 
-- `nginx/eam.prod.conf.example` für `eam.messers-cardio-club.de`
-- `nginx/eam.staging.conf.example` für `eam-test.messers-cardio-club.de`
+- `nginx/eam.prod.conf.example` für `eam.messers-cardio-club.com`
+- `nginx/eam.staging.conf.example` für `eam-test.messers-cardio-club.com`
 - `nginx/eam.prod.http-only.conf.example` als sichere Erstkonfiguration vor Certbot
 - `nginx/eam.staging.http-only.conf.example` als sichere Erstkonfiguration vor Certbot
 

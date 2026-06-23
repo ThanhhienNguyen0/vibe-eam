@@ -127,3 +127,7 @@ Bewusst nicht enthalten: Auth, CI/CD und Live-Deployment.
 Die serverpraktische Reihenfolge für Staging, DNS, Nginx, Certbot, Basic Auth und Produktion steht in `HOSTING_SETUP.md`. Vor einer Serverfreigabe `HOSTING_READINESS_CHECKLIST.md` abarbeiten und Ergebnisse in `HOSTING_ACCEPTANCE_CHECK.md` dokumentieren.
 
 Ohne Issue #18 dürfen öffentlich nur künstliche Demo-Daten verwendet werden. Alternativ die gesamte Subdomain vorübergehend mit Nginx Basic Auth schützen oder die Live-Schaltung verschieben.
+
+## CI/CD
+
+GitHub Actions verwendet auf Linux immer `docker compose`, nicht den lokalen Windows-Sonderfall `docker.exe compose`. CI validiert alle Compose-Dateien und baut Backend-/Frontend-Images. Staging und Produktion werden niemals bei Push automatisch deployt, sondern ausschließlich manuell über `workflow_dispatch`; Details stehen in `CICD_PLAN.md` und `GITHUB_SECRETS.md`.

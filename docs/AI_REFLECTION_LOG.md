@@ -246,7 +246,7 @@ Stakeholder wurden bewusst als normale Diagrammelemente erhalten. Ein Stakeholde
 
 ### Hosting-Entscheidung
 
-- Die bestehende Hauptdomain bleibt unangetastet. Produktion nutzt `eam.messers-cardio-club.de`, Staging `eam-test.messers-cardio-club.de`.
+- Die bestehende Hauptdomain bleibt unangetastet. Produktion nutzt `eam.messers-cardio-club.com`, Staging `eam-test.messers-cardio-club.com`.
 - TLS endet am bereits servernah gedachten Host-Nginx. Containerports bleiben auf `127.0.0.1`; PostgreSQL wird nicht veröffentlicht.
 - Certbot/Let's Encrypt ist vorbereitet, aber DNS, Zertifikate und Serverkonfiguration wurden nicht extern verändert.
 
@@ -263,3 +263,25 @@ Stakeholder wurden bewusst als normale Diagrammelemente erhalten. Ein Stakeholde
 - Eine Readiness-Checkliste definiert Stop-/Go-Kriterien für lokal, Server-Staging und Server-Produktion. Ein separates Protokoll verhindert, dass „dokumentiert“ mit „tatsächlich abgenommen“ verwechselt wird.
 - Fehlendes Auth wird nicht kleingeredet: Demo-Daten, serverweites Basic Auth oder Verschiebung sind die einzigen dokumentierten Übergangsoptionen.
 - Backup, Restore und Rollback sind manuell beschrieben. Ein persistentes Volume allein bleibt ausdrücklich kein Backup.
+
+## Zwölfter Entwicklungszyklus: Manuelle CI/CD-Pipeline
+
+### Automatisierung mit bewussten Grenzen
+
+- CI automatisiert reproduzierbare Qualitätsprüfungen bei Push und Pull Request, deployt aber nichts.
+- Staging und Produktion bleiben manuelle Workflows. Produktion benötigt zusätzlich explizite Bestätigung, Backup- und Abnahmebestätigung.
+- Der Workflow deployt exakt den im Verify-Job geprüften Commit-SHA. Ein beweglicher Branch kann dadurch nicht zwischen Test und Deployment unbemerkt weiterlaufen.
+
+### Sicherheitsentscheidungen
+
+- SSH-Host-Keys werden vorab verifiziert als Secret hinterlegt; ein ungeprüftes `ssh-keyscan` im Workflow wurde vermieden.
+- Server-Env-Dateien und Basic-Auth-Zugänge bleiben vollständig außerhalb GitHubs.
+- Server-Worktrees mit getrackten Änderungen blockieren das Deployment; ein destruktives `git reset --hard` wird nicht genutzt.
+- Externe Healthchecks hinter Basic Auth werden nicht automatisiert. Der interne Loopback-Healthcheck ist die belastbare Deploymentprüfung.
+
+### Restgrenzen
+
+- Images werden auf dem Zielserver neu gebaut statt über eine signierte Registry promotet.
+- Backup und Restore bleiben manuell; die Pipeline bestätigt nur, dass vor Produktion ein Backup existiert.
+- GitHub Environments, Secrets, Required Reviewers und der erste reale Workflowlauf sind externe Konfigurationsschritte.
+- Kein Zero-Downtime-Deployment und kein automatisches Prisma-Rollback.

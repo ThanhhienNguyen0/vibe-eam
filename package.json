@@ -10,7 +10,8 @@
     "build": "npm run build --workspace backend && npm run build --workspace frontend",
     "typecheck": "npm run typecheck --workspace backend && npm run typecheck --workspace frontend",
     "test": "npm run test --workspace backend",
-    "validate:compose": "node scripts/validate-compose.mjs"
+    "validate:compose": "node scripts/validate-compose.mjs",
+    "validate:workflows": "node scripts/validate-workflows.mjs"
   },
   "workspaces": [
     "backend",
