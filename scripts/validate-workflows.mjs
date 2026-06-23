@@ -71,8 +71,31 @@ for (const [label, document, envFile, composeFile, port, pathSecret] of [
   check(!scripts.includes("--retry-all-errors"), `${label} must not use non-portable curl --retry-all-errors`);
   check(scripts.includes("pwd") && scripts.includes("git status --short") && scripts.includes("git rev-parse --short HEAD || true"), `${label} safe Git deployment diagnostics missing`);
   check(scripts.includes("docker --version") && scripts.includes("docker compose version"), `${label} Docker version diagnostics missing`);
-  check(scripts.includes(`docker compose --env-file ${envFile} -f ${composeFile} logs --tail=100 backend`), `${label} backend failure diagnostics missing`);
-  check(scripts.includes(`docker compose --env-file ${envFile} -f ${composeFile} logs --tail=100 postgres`), `${label} postgres failure diagnostics missing`);
+  for (const marker of [
+    "deploy path",
+    "cd deploy path",
+    "env file exists",
+    "no placeholder secrets",
+    "worktree clean",
+    "git fetch",
+    "resolve deploy ref",
+    "checkout resolved ref",
+    "compose config",
+    "compose up",
+    "compose status",
+    "healthcheck"
+  ]) check(scripts.includes(`CHECK: ${marker}`), `${label} debug marker missing: CHECK: ${marker}`);
+  check(scripts.includes("Requested deploy ref: $DEPLOY_REF"), `${label} requested deploy ref diagnostic missing`);
+  check(scripts.includes("Resolved deploy ref: $RESOLVED_REF"), `${label} resolved deploy ref diagnostic missing`);
+  check(scripts.includes("FAILED: Tracked server worktree changes block deployment"), `${label} worktree failure diagnostic missing`);
+  check(scripts.includes("FAILED: Could not resolve deploy ref: $DEPLOY_REF"), `${label} ref resolution failure diagnostic missing`);
+  check(scripts.includes("FAILED: docker compose config failed"), `${label} Compose config failure diagnostic missing`);
+  check(scripts.includes("FAILED: docker compose up failed"), `${label} Compose up failure diagnostic missing`);
+  check(scripts.includes("FAILED: docker compose ps failed"), `${label} Compose status failure diagnostic missing`);
+  check(scripts.includes("FAILED: healthcheck failed after retries"), `${label} healthcheck failure diagnostic missing`);
+  check(scripts.includes("FAILED: unexpected remote command at line $LINENO"), `${label} unexpected remote command fallback missing`);
+  check(scripts.includes(`docker compose --env-file ${envFile} -f ${composeFile} logs --tail=120 backend`), `${label} backend failure diagnostics missing`);
+  check(scripts.includes(`docker compose --env-file ${envFile} -f ${composeFile} logs --tail=120 postgres`), `${label} postgres failure diagnostics missing`);
   check(!scripts.includes(`docker compose --env-file ${envFile} -f ${composeFile} config\n`), `${label} must not print rendered Compose config`);
   check(!scripts.includes(`cat ${envFile}`), `${label} must not print the server-side env file`);
   check(document.raw.includes("needs.verify.outputs.verified_sha"), `${label} must deploy the exact verified commit SHA`);

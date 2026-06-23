@@ -67,8 +67,11 @@ jobs:
           SSH_KNOWN_HOSTS: ${{ secrets.SERVER_SSH_KNOWN_HOSTS }}
         run: |
           set -Eeuo pipefail
-          test -n "$SSH_PRIVATE_KEY"
-          test -n "$SSH_KNOWN_HOSTS"
+          trap 'rc=$?; echo "FAILED: unexpected SSH setup command at line $LINENO (exit $rc)" >&2' ERR
+          echo "CHECK: SSH secrets"
+          test -n "$SSH_PRIVATE_KEY" || { echo "FAILED: SERVER_SSH_KEY is missing"; exit 1; }
+          test -n "$SSH_KNOWN_HOSTS" || { echo "FAILED: SERVER_SSH_KNOWN_HOSTS is missing"; exit 1; }
+          echo "CHECK: prepare SSH files"
           install -d -m 700 "$HOME/.ssh"
           printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
           printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
@@ -82,11 +85,14 @@ jobs:
           DEPLOY_REF: ${{ needs.verify.outputs.verified_sha }}
         run: |
           set -Eeuo pipefail
-          test -n "$SERVER_HOST"
-          test -n "$SERVER_USER"
-          test -n "$DEPLOY_PATH"
-          test -n "$DEPLOY_REF"
+          trap 'rc=$?; echo "FAILED: unexpected deployment runner command at line $LINENO (exit $rc)" >&2' ERR
+          echo "CHECK: deployment inputs"
+          test -n "$SERVER_HOST" || { echo "FAILED: SERVER_HOST is missing"; exit 1; }
+          test -n "$SERVER_USER" || { echo "FAILED: SERVER_USER is missing"; exit 1; }
+          test -n "$DEPLOY_PATH" || { echo "FAILED: STAGING_DEPLOY_PATH is missing"; exit 1; }
+          test -n "$DEPLOY_REF" || { echo "FAILED: verified deploy SHA is missing"; exit 1; }
 
+          echo "CHECK: SSH remote execution"
           ssh -i "$HOME/.ssh/id_ed25519" \
             -o BatchMode=yes \
             -o IdentitiesOnly=yes \
@@ -94,13 +100,44 @@ jobs:
             "$SERVER_USER@$SERVER_HOST" \
             'bash -se' -- "$DEPLOY_PATH" "$DEPLOY_REF" <<'REMOTE'
           set -Eeuo pipefail
+          trap 'rc=$?; echo "FAILED: unexpected remote command at line $LINENO (exit $rc)" >&2' ERR
           DEPLOY_PATH=$1
           DEPLOY_REF=$2
 
-          [[ "$DEPLOY_PATH" == "/var/www/eam-test" ]] || { echo "Unexpected staging deploy path." >&2; exit 1; }
-          cd "$DEPLOY_PATH"
-          test -f .env.staging || { echo "Server-side .env.staging is missing." >&2; exit 1; }
-          ! grep -q 'replace-with-' .env.staging || { echo "Placeholder secret remains in .env.staging." >&2; exit 1; }
+          echo "CHECK: deploy path"
+          [[ "$DEPLOY_PATH" == "/var/www/eam-test" ]] || {
+            echo "FAILED: Unexpected staging deploy path: $DEPLOY_PATH" >&2
+            exit 1
+          }
+
+          echo "CHECK: cd deploy path"
+          cd "$DEPLOY_PATH" || {
+            echo "FAILED: Could not change to staging deploy path: $DEPLOY_PATH" >&2
+            exit 1
+          }
+
+          echo "CHECK: env file exists"
+          test -f .env.staging || {
+            echo "FAILED: .env.staging missing in $(pwd)" >&2
+            exit 1
+          }
+
+          echo "CHECK: no placeholder secrets"
+          ! grep -q "replace-with-" .env.staging || {
+            echo "FAILED: Placeholder secret remains in .env.staging" >&2
+            exit 1
+          }
+
+          echo "CHECK: worktree clean"
+          STATUS="$(git status --porcelain --untracked-files=no)" || {
+            echo "FAILED: Could not read staging Git worktree status" >&2
+            exit 1
+          }
+          [[ -z "$STATUS" ]] || {
+            echo "FAILED: Tracked server worktree changes block deployment" >&2
+            git status --short
+            exit 1
+          }
 
           echo "Deployment context (no environment values):"
           pwd
@@ -110,30 +147,51 @@ jobs:
           docker compose version
           docker compose --env-file .env.staging -f docker-compose.staging.yml ps || true
 
-          [[ -z "$(git status --porcelain --untracked-files=no)" ]] || { echo "Tracked server worktree changes block deployment." >&2; exit 1; }
-
-          git fetch --all --prune --tags
-          RESOLVED_REF=$(git rev-parse --verify "$DEPLOY_REF^{commit}")
-          git checkout --detach "$RESOLVED_REF"
-          git rev-parse --short HEAD
-
-          show_compose_diagnostics() {
-            echo "Compose status:"
-            docker compose --env-file .env.staging -f docker-compose.staging.yml ps || true
-            echo "Backend logs (last 100 lines):"
-            docker compose --env-file .env.staging -f docker-compose.staging.yml logs --tail=100 backend || true
-            echo "Postgres logs (last 100 lines):"
-            docker compose --env-file .env.staging -f docker-compose.staging.yml logs --tail=100 postgres || true
+          echo "Requested deploy ref: $DEPLOY_REF"
+          echo "CHECK: git fetch"
+          git fetch --all --prune --tags || {
+            echo "FAILED: git fetch failed" >&2
+            exit 1
           }
 
-          docker compose --env-file .env.staging -f docker-compose.staging.yml config --quiet
+          echo "CHECK: resolve deploy ref"
+          RESOLVED_REF="$(git rev-parse --verify "$DEPLOY_REF^{commit}")" || {
+            echo "FAILED: Could not resolve deploy ref: $DEPLOY_REF" >&2
+            git branch -a
+            git log --oneline -5
+            exit 1
+          }
+          echo "Resolved deploy ref: $RESOLVED_REF"
+
+          echo "CHECK: checkout resolved ref"
+          git checkout --detach "$RESOLVED_REF" || {
+            echo "FAILED: Could not checkout resolved deploy ref: $RESOLVED_REF" >&2
+            exit 1
+          }
+          git rev-parse --short HEAD
+
+          echo "CHECK: compose config"
+          docker compose --env-file .env.staging -f docker-compose.staging.yml config --quiet || {
+            echo "FAILED: docker compose config failed" >&2
+            exit 1
+          }
+
+          echo "CHECK: compose up"
           if ! docker compose --env-file .env.staging -f docker-compose.staging.yml up -d --build; then
-            echo "docker compose up failed." >&2
-            show_compose_diagnostics
+            echo "FAILED: docker compose up failed" >&2
+            docker compose --env-file .env.staging -f docker-compose.staging.yml ps || true
+            docker compose --env-file .env.staging -f docker-compose.staging.yml logs --tail=120 backend || true
+            docker compose --env-file .env.staging -f docker-compose.staging.yml logs --tail=120 postgres || true
             exit 1
           fi
-          docker compose --env-file .env.staging -f docker-compose.staging.yml ps
 
+          echo "CHECK: compose status"
+          docker compose --env-file .env.staging -f docker-compose.staging.yml ps || {
+            echo "FAILED: docker compose ps failed" >&2
+            exit 1
+          }
+
+          echo "CHECK: healthcheck"
           for i in $(seq 1 12); do
             if curl --fail --silent --show-error http://127.0.0.1:4400/api/health; then
               echo
@@ -144,8 +202,9 @@ jobs:
             sleep 5
           done
 
-          echo "Healthcheck failed after retries" >&2
-          show_compose_diagnostics
+          echo "FAILED: healthcheck failed after retries" >&2
+          docker compose --env-file .env.staging -f docker-compose.staging.yml ps || true
+          docker compose --env-file .env.staging -f docker-compose.staging.yml logs --tail=120 backend || true
           exit 1
           REMOTE
 
