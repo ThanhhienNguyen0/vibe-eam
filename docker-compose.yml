@@ -25,6 +25,7 @@ services:
       NODE_ENV: production
       PORT: 4000
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       STORAGE_BACKEND: database
       SEED_EXAMPLES: ${SEED_EXAMPLES:-true}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}

@@ -215,3 +215,17 @@ Umgesetzt wurde:
 - Sichere Diagnoseausgaben zeigen Arbeitsverzeichnis, Git-Revision/-Status, Docker-/Compose-Version und Containerstatus, aber weder Env-Inhalte noch gerenderte Compose-Werte.
 - Bei Fehlern von `docker compose up` oder beim Healthcheck werden automatisch Status sowie die letzten 100 Backend- und PostgreSQL-Logzeilen ausgegeben.
 - Alle manuellen Trigger, Produktionsbestätigungen, serverseitigen Env-Prüfungen, Worktree-Schutzregeln und das Deployment des exakt geprüften Commit-SHA bleiben erhalten.
+
+## Issue #18: Authentifizierung und Company-Zugriff
+
+Der Prompt fordert Registrierung, Login und eine harte Company-Isolation für alle EAM-Datenpfade.
+
+Umgesetzt wurde:
+
+- `Company` und `User` mit bcrypt-gehashten Passwörtern sowie verpflichtendem, umgebungsspezifischem `JWT_SECRET`.
+- JWT-Endpunkte für Registrierung, Login, aktuellen Nutzer und stateless Logout.
+- Schutz aller Sidebar-, Diagramm-, Metamodel-, Legacy-Modell- und Audit-Routen durch Bearer-Authentifizierung.
+- Company-Filter im Prisma-Repository sowie company-eigene JSONB-Persistenz für den historischen Architekturmodell-Pfad.
+- Migrationssichere Zuordnung vorhandener Daten zur Default Demo Company ohne Löschen bestehender JSON-Daten.
+- React-Login/-Registrierung, automatische Authorization-Header, 401-Rückführung und Logout.
+- Basic Auth bleibt in Staging/Produktion vorerst als zusätzliche äußere Schutzschicht aktiv.

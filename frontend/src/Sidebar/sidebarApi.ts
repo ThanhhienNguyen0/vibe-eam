@@ -11,14 +11,24 @@ import type {
   Viewpoint
 } from "./sidebarTypes";
 import type { DiagramValidationResult } from "./metamodelRules";
+import { clearAuthToken, getAuthToken } from "../authApi";
 
 const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "/api/sidebar";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const token = getAuthToken();
   const res = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
-    ...init
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init?.headers
+    }
   });
+  if (res.status === 401) {
+    clearAuthToken();
+    window.dispatchEvent(new Event("eam:unauthorized"));
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);

@@ -12,9 +12,10 @@ import {
 } from "./stateOperations.js";
 
 class MemoryRepository implements SidebarStateRepository {
-  constructor(private state: SidebarState | null = null) {}
-  async read(): Promise<SidebarState | null> { return this.state ? structuredClone(this.state) : null; }
-  async write(state: SidebarState): Promise<SidebarState> { this.state = structuredClone(state); return structuredClone(state); }
+  private states = new Map<string, SidebarState>();
+  constructor(state: SidebarState | null = null) { if (state) this.states.set("company-a", structuredClone(state)); }
+  async read(companyId: string): Promise<SidebarState | null> { const state = this.states.get(companyId); return state ? structuredClone(state) : null; }
+  async write(state: SidebarState, companyId: string): Promise<SidebarState> { this.states.set(companyId, structuredClone(state)); return structuredClone(state); }
   async disconnect(): Promise<void> {}
 }
 
@@ -54,8 +55,8 @@ describe("database persistence repository contract", () => {
   });
   it("stores and reads ComponentTypes and flexible JSON attributes", async () => {
     const repository = new MemoryRepository();
-    await repository.write(state);
-    const restored = await repository.read();
+    await repository.write(state, "company-a");
+    const restored = await repository.read("company-a");
     expect(restored?.componentTypes[0].customPropertyKeys).toEqual(["owner", "criticality"]);
     expect(restored?.components[0].properties).toEqual(state.components[0].properties);
     expect(restored?.connections[0].properties).toEqual({ protocol: "HTTPS" });
@@ -82,8 +83,8 @@ describe("database persistence repository contract", () => {
 
   it("keeps ConnectionRules valid and preserves metamodel export/import structure after a repository round trip", async () => {
     const repository = new MemoryRepository();
-    await repository.write(state);
-    const restored = (await repository.read())!;
+    await repository.write(state, "company-a");
+    const restored = (await repository.read("company-a"))!;
     expect(validateDiagram(restored.diagrams[0], restored, { includeRequiredRules: false }).valid).toBe(true);
     const exported = extractMetamodelDefinition(restored);
     expect(extractMetamodelDefinition(applyMetamodelDefinition(restored, exported))).toEqual(exported);
@@ -102,5 +103,15 @@ describe("database persistence repository contract", () => {
     expect(schema).toMatch(/properties\s+Json[\s\S]*@db\.JsonB/);
     expect(schema).toMatch(/sourceComponent\s+ComponentInstance[\s\S]*onDelete: Cascade/);
     expect(schema).toMatch(/targetComponent\s+ComponentInstance[\s\S]*onDelete: Cascade/);
+    expect(schema).toMatch(/model Company[\s\S]*model User/);
+    expect(schema).toMatch(/model Diagram[\s\S]*companyId\s+String/);
+  });
+
+  it("isolates persisted sidebar state by companyId", async () => {
+    const repository = new MemoryRepository();
+    await repository.write(state, "company-a");
+    await repository.write({ ...state, diagrams: [{ ...state.diagrams[0], id: "company-b-diagram" }] }, "company-b");
+    expect((await repository.read("company-a"))?.diagrams[0].id).toBe("diagram");
+    expect((await repository.read("company-b"))?.diagrams[0].id).toBe("company-b-diagram");
   });
 });

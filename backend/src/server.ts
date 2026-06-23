@@ -1,6 +1,14 @@
 import cors from "cors";
 import express from "express";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { PrismaClient } from "@prisma/client";
 import sidebarRouter from "./Sidebar/sidebarRoutes.js";
+import { createAuthRouter } from "./auth/authRoutes.js";
+import { requireAuth } from "./auth/authMiddleware.js";
+import { AuthService, requireJwtSecret } from "./auth/authService.js";
+import { PrismaAuthRepository } from "./auth/prismaAuthRepository.js";
+import type { AuthRepository } from "./auth/authTypes.js";
 import {
   addElement,
   addRelation,
@@ -21,20 +29,29 @@ import {
 } from "./validation.js";
 import type { EamModel } from "./types.js";
 
-const app = express();
-const port = Number(process.env.PORT ?? 4000);
-const corsOrigin = process.env.CORS_ORIGIN?.trim();
+export interface AppOptions {
+  jwtSecret: string;
+  authRepository?: AuthRepository;
+}
 
-app.use(cors(corsOrigin ? { origin: corsOrigin.split(",").map((origin) => origin.trim()) } : undefined));
-app.use(express.json({ limit: "2mb" }));
+export function createApp(options: AppOptions): express.Express {
+  const app = express();
+  const corsOrigin = process.env.CORS_ORIGIN?.trim();
+  const authRepository = options.authRepository ?? new PrismaAuthRepository(new PrismaClient());
+  const authService = new AuthService(authRepository, options.jwtSecret);
 
-app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok" });
-});
+  app.use(cors(corsOrigin ? { origin: corsOrigin.split(",").map((origin) => origin.trim()) } : undefined));
+  app.use(express.json({ limit: "2mb" }));
 
-app.use("/api/sidebar", sidebarRouter);
+  app.get("/api/health", (_req, res) => {
+    res.json({ status: "ok" });
+  });
 
-app.get("/api/model", async (_req, res, next) => {
+  app.use("/api/auth", createAuthRouter(authService, options.jwtSecret));
+  app.use("/api", requireAuth(options.jwtSecret));
+  app.use("/api/sidebar", sidebarRouter);
+
+  app.get("/api/model", async (_req, res, next) => {
   try {
     res.json(await getModel());
   } catch (error) {
@@ -42,7 +59,7 @@ app.get("/api/model", async (_req, res, next) => {
   }
 });
 
-app.post("/api/model/elements", async (req, res, next) => {
+  app.post("/api/model/elements", async (req, res, next) => {
   try {
     const model = await getModel();
     const element = normalizeElement({
@@ -58,7 +75,7 @@ app.post("/api/model/elements", async (req, res, next) => {
   }
 });
 
-app.patch("/api/model/elements/:id", async (req, res, next) => {
+  app.patch("/api/model/elements/:id", async (req, res, next) => {
   try {
     const existing = (await getModel()).elements.find((element) => element.id === req.params.id);
     if (!existing) return res.status(404).json({ error: "Element not found." });
@@ -74,7 +91,7 @@ app.patch("/api/model/elements/:id", async (req, res, next) => {
   }
 });
 
-app.delete("/api/model/elements/:id", async (req, res, next) => {
+  app.delete("/api/model/elements/:id", async (req, res, next) => {
   try {
     const deleted = await deleteElement(req.params.id);
     if (!deleted) return res.status(404).json({ error: "Element not found." });
@@ -84,7 +101,7 @@ app.delete("/api/model/elements/:id", async (req, res, next) => {
   }
 });
 
-app.post("/api/model/relations", async (req, res, next) => {
+  app.post("/api/model/relations", async (req, res, next) => {
   try {
     const model = await getModel();
     const relation = normalizeRelation(req.body);
@@ -97,7 +114,7 @@ app.post("/api/model/relations", async (req, res, next) => {
   }
 });
 
-app.delete("/api/model/relations/:id", async (req, res, next) => {
+  app.delete("/api/model/relations/:id", async (req, res, next) => {
   try {
     const deleted = await deleteRelation(req.params.id);
     if (!deleted) return res.status(404).json({ error: "Relation not found." });
@@ -107,7 +124,7 @@ app.delete("/api/model/relations/:id", async (req, res, next) => {
   }
 });
 
-app.post("/api/model/import", async (req, res, next) => {
+  app.post("/api/model/import", async (req, res, next) => {
   try {
     const model = req.body as EamModel;
     const validation = validateModel(model);
@@ -119,7 +136,7 @@ app.post("/api/model/import", async (req, res, next) => {
   }
 });
 
-app.get("/api/model/export", async (_req, res, next) => {
+  app.get("/api/model/export", async (_req, res, next) => {
   try {
     res.json(await getModel());
   } catch (error) {
@@ -127,7 +144,7 @@ app.get("/api/model/export", async (_req, res, next) => {
   }
 });
 
-app.get("/api/audit-log", async (_req, res, next) => {
+  app.get("/api/audit-log", async (_req, res, next) => {
   try {
     res.json(await getAuditLog());
   } catch (error) {
@@ -135,11 +152,21 @@ app.get("/api/audit-log", async (_req, res, next) => {
   }
 });
 
-app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error(error);
-  res.status(500).json({ error: error instanceof Error ? error.message : "Unexpected server error." });
-});
+  app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error(error instanceof Error ? error.message : "Unexpected server error.");
+    res.status(500).json({ error: "Unexpected server error." });
+  });
 
-app.listen(port, () => {
-  console.log(`EAM backend listening on http://localhost:${port}`);
-});
+  return app;
+}
+
+export function startServer(environment: NodeJS.ProcessEnv = process.env): void {
+  const port = Number(environment.PORT ?? 4000);
+  const jwtSecret = requireJwtSecret(environment);
+  createApp({ jwtSecret }).listen(port, () => {
+    console.log(`EAM backend listening on http://localhost:${port}`);
+  });
+}
+
+const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : "";
+if (invokedPath === fileURLToPath(import.meta.url)) startServer();

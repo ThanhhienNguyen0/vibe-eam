@@ -1,13 +1,41 @@
 import { useEffect, useState } from "react";
-import { GitBranch, LayoutDashboard, Plus } from "lucide-react";
+import { GitBranch, LayoutDashboard, LogOut, Plus } from "lucide-react";
 import Sidebar, { type SidebarSelection } from "./Sidebar/Sidebar";
 import SidebarPanels from "./Sidebar/SidebarPanels";
 import DiagramEditor from "./DiagramEditor";
 import MetamodelView from "./MetamodelView";
 import { sidebarApi } from "./Sidebar/sidebarApi";
 import type { SidebarState } from "./Sidebar/sidebarTypes";
+import { authApi, clearAuthToken, getAuthToken, setAuthToken, type AuthUser } from "./authApi";
 
 export default function App() {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    const unauthorized = () => { clearAuthToken(); setUser(null); setCheckingAuth(false); };
+    window.addEventListener("eam:unauthorized", unauthorized);
+    if (!getAuthToken()) {
+      setCheckingAuth(false);
+    } else {
+      authApi.me().then(setUser).catch(unauthorized).finally(() => setCheckingAuth(false));
+    }
+    return () => window.removeEventListener("eam:unauthorized", unauthorized);
+  }, []);
+
+  if (checkingAuth) return <div className="auth-shell"><div className="auth-card">Anmeldung wird geprüft …</div></div>;
+  if (!user) return <AuthScreen onAuthenticated={(result) => { setAuthToken(result.token); setUser(result.user); }} />;
+
+  async function logout() {
+    try { await authApi.logout(); } catch { /* Stateless logout remains local even if the request fails. */ }
+    clearAuthToken();
+    setUser(null);
+  }
+
+  return <EamWorkspace user={user} onLogout={logout} />;
+}
+
+function EamWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
   const [sidebarState, setSidebarState] = useState<SidebarState>({
     metamodel: {
       id: "",
@@ -84,6 +112,10 @@ export default function App() {
             </button>
           </nav>
         )}
+        <div className="account-menu">
+          <span><strong>{user.name ?? user.email}</strong><small>{user.companyName}</small></span>
+          <button type="button" onClick={onLogout} title="Abmelden"><LogOut size={16} /> Abmelden</button>
+        </div>
       </header>
 
       <div className="app-body">
@@ -152,6 +184,55 @@ export default function App() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function AuthScreen({ onAuthenticated }: { onAuthenticated: (result: { token: string; user: AuthUser }) => void }) {
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      const result = mode === "login"
+        ? await authApi.login({ email, password })
+        : await authApi.register({ email, password, companyName, name: name || undefined });
+      onAuthenticated(result);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Anmeldung fehlgeschlagen.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="auth-shell">
+      <form className="auth-card" onSubmit={submit}>
+        <div className="auth-brand"><GitBranch size={28} /><div><h1>EAM Prototype</h1><p>Unternehmensarchitektur sicher modellieren</p></div></div>
+        <div className="auth-tabs">
+          <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setError(""); }}>Anmelden</button>
+          <button type="button" className={mode === "register" ? "active" : ""} onClick={() => { setMode("register"); setError(""); }}>Registrieren</button>
+        </div>
+        {mode === "register" && (
+          <>
+            <label>Unternehmen<input value={companyName} onChange={(event) => setCompanyName(event.target.value)} required autoComplete="organization" /></label>
+            <label>Name (optional)<input value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" /></label>
+          </>
+        )}
+        <label>E-Mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label>
+        <label>Passwort<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>
+        {error && <div className="auth-error">{error}</div>}
+        <button className="auth-submit" disabled={submitting}>{submitting ? "Bitte warten …" : mode === "login" ? "Anmelden" : "Unternehmen anlegen"}</button>
+        {mode === "register" && <small className="auth-hint">Mit der Registrierung wird ein neues, getrenntes Unternehmen angelegt.</small>}
+      </form>
     </div>
   );
 }

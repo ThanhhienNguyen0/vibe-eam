@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { readLegacySidebarState } from "../src/Sidebar/sidebarStore.js";
 import { PrismaSidebarStateRepository } from "../src/persistence/databaseSidebarRepository.js";
+import { DEFAULT_COMPANY_ID, DEFAULT_COMPANY_NAME } from "../src/tenant.js";
 
 const prisma = new PrismaClient();
 const repository = new PrismaSidebarStateRepository(prisma);
@@ -12,7 +13,12 @@ async function main(): Promise<void> {
   }
 
   const state = await readLegacySidebarState();
-  await repository.write(state);
+  await prisma.company.upsert({
+    where: { id: DEFAULT_COMPANY_ID },
+    create: { id: DEFAULT_COMPANY_ID, name: DEFAULT_COMPANY_NAME },
+    update: {}
+  });
+  await repository.write(state, DEFAULT_COMPANY_ID);
   console.log(`Copied ${state.componentTypes.length} component types, ${state.connectionRules.length} connection rules and ${state.diagrams.length} diagrams from sidebar.json. The JSON source was not changed.`);
 }
 

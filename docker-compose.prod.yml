@@ -27,6 +27,7 @@ services:
       NODE_ENV: production
       PORT: 4000
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env.prod}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env.prod}
       STORAGE_BACKEND: database
       SEED_EXAMPLES: ${SEED_EXAMPLES:-false}
       CORS_ORIGIN: ${CORS_ORIGIN:?Set CORS_ORIGIN in .env.prod}

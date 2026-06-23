@@ -1,16 +1,19 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Prisma, PrismaClient } from "@prisma/client";
+import { databasePersistenceEnabled } from "./persistence/databaseSidebarRepository.js";
 import { seedState } from "./seed.js";
+import { requireCompanyId } from "./tenant.js";
 import type { AuditLogEntry, EamElement, EamModel, EamRelation, PersistedState } from "./types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.resolve(__dirname, "../data");
-const dataFile = path.join(dataDir, "model.json");
+const prisma = new PrismaClient();
 
-let cachedState: PersistedState | null = null;
+const cachedStates = new Map<string, PersistedState>();
 
-async function ensureDataFile(): Promise<void> {
+async function ensureDataFile(dataFile: string): Promise<void> {
   await fs.mkdir(dataDir, { recursive: true });
   try {
     await fs.access(dataFile);
@@ -20,17 +23,51 @@ async function ensureDataFile(): Promise<void> {
 }
 
 export async function readState(): Promise<PersistedState> {
-  if (cachedState) return structuredClone(cachedState);
-  await ensureDataFile();
+  const companyId = requireCompanyId();
+  const cached = cachedStates.get(companyId);
+  if (cached) return structuredClone(cached);
+  if (databasePersistenceEnabled()) {
+    const persisted = await prisma.architectureModel.findUnique({ where: { companyId } });
+    const state: PersistedState = persisted ? {
+      elements: persisted.elements as unknown as EamElement[],
+      relations: persisted.relations as unknown as EamRelation[],
+      auditLog: persisted.auditLog as unknown as AuditLogEntry[]
+    } : structuredClone(seedState);
+    if (!persisted) await writeState(state);
+    cachedStates.set(companyId, state);
+    return structuredClone(state);
+  }
+  const dataFile = path.join(dataDir, `model.${companyId}.json`);
+  await ensureDataFile(dataFile);
   const raw = await fs.readFile(dataFile, "utf-8");
-  cachedState = JSON.parse(raw) as PersistedState;
-  return structuredClone(cachedState);
+  const state = JSON.parse(raw) as PersistedState;
+  cachedStates.set(companyId, state);
+  return structuredClone(state);
 }
 
 export async function writeState(state: PersistedState): Promise<PersistedState> {
-  cachedState = structuredClone(state);
+  const companyId = requireCompanyId();
+  const cachedState = structuredClone(state);
+  cachedStates.set(companyId, cachedState);
+  if (databasePersistenceEnabled()) {
+    await prisma.architectureModel.upsert({
+      where: { companyId },
+      create: {
+        companyId,
+        elements: cachedState.elements as unknown as Prisma.InputJsonValue,
+        relations: cachedState.relations as unknown as Prisma.InputJsonValue,
+        auditLog: cachedState.auditLog as unknown as Prisma.InputJsonValue
+      },
+      update: {
+        elements: cachedState.elements as unknown as Prisma.InputJsonValue,
+        relations: cachedState.relations as unknown as Prisma.InputJsonValue,
+        auditLog: cachedState.auditLog as unknown as Prisma.InputJsonValue
+      }
+    });
+    return structuredClone(cachedState);
+  }
   await fs.mkdir(dataDir, { recursive: true });
-  await fs.writeFile(dataFile, JSON.stringify(cachedState, null, 2), "utf-8");
+  await fs.writeFile(path.join(dataDir, `model.${companyId}.json`), JSON.stringify(cachedState, null, 2), "utf-8");
   return structuredClone(cachedState);
 }
 

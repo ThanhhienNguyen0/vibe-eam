@@ -7,8 +7,47 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Company {
+  id                  String               @id @default(uuid())
+  name                String
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  users               User[]
+  metamodels          Metamodel[]
+  diagrams            Diagram[]
+  componentInstances  ComponentInstance[]
+  connectionInstances ConnectionInstance[]
+  architectureModel   ArchitectureModel?
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  companyId    String
+  role         String   @default("member")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+model ArchitectureModel {
+  id        String   @id @default(uuid())
+  companyId String   @unique
+  elements  Json     @default("[]") @db.JsonB
+  relations Json     @default("[]") @db.JsonB
+  auditLog  Json     @default("[]") @db.JsonB
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
 model Metamodel {
   id              String           @id
+  companyId       String
   name            String
   description     String           @default("")
   version         String
@@ -22,8 +61,10 @@ model Metamodel {
   viewpointRules  ViewpointRule[]
   validationRules ValidationRule[]
   diagrams        Diagram[]
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([isActive])
+  @@index([companyId])
 }
 
 model ComponentType {
@@ -165,6 +206,7 @@ model ValidationRule {
 
 model Diagram {
   id                  String               @id
+  companyId           String
   metamodelId         String
   viewpointId         String?
   name                String
@@ -175,13 +217,16 @@ model Diagram {
   viewpoint           Viewpoint?           @relation(fields: [viewpointId], references: [id], onDelete: SetNull)
   componentInstances  ComponentInstance[]
   connectionInstances ConnectionInstance[]
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
+  @@index([companyId])
   @@index([metamodelId])
   @@index([viewpointId])
 }
 
 model ComponentInstance {
   id                    String               @id
+  companyId             String
   diagramId             String?
   componentTypeId       String
   name                  String
@@ -192,13 +237,16 @@ model ComponentInstance {
   componentType         ComponentType        @relation(fields: [componentTypeId], references: [id], onDelete: Cascade)
   outgoingConnections   ConnectionInstance[] @relation("ConnectionSource")
   incomingConnections   ConnectionInstance[] @relation("ConnectionTarget")
+  company               Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
+  @@index([companyId])
   @@index([diagramId])
   @@index([componentTypeId])
 }
 
 model ConnectionInstance {
   id                   String            @id
+  companyId            String
   diagramId            String?
   connectionTypeId     String
   sourceComponentId    String
@@ -210,7 +258,9 @@ model ConnectionInstance {
   connectionType       ConnectionType    @relation(fields: [connectionTypeId], references: [id], onDelete: Cascade)
   sourceComponent      ComponentInstance @relation("ConnectionSource", fields: [sourceComponentId], references: [id], onDelete: Cascade)
   targetComponent      ComponentInstance @relation("ConnectionTarget", fields: [targetComponentId], references: [id], onDelete: Cascade)
+  company              Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
+  @@index([companyId])
   @@index([diagramId])
   @@index([connectionTypeId])
   @@index([sourceComponentId])

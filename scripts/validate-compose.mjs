@@ -89,6 +89,7 @@ check(Array.isArray(services.postgres?.volumes) && services.postgres.volumes.som
 check(Object.prototype.hasOwnProperty.call(compose?.volumes ?? {}, "postgres_data"), "postgres_data named volume is declared");
 check(String(services.backend?.environment?.DATABASE_URL ?? "").startsWith("postgresql://"), "backend receives a PostgreSQL DATABASE_URL");
 check(services.backend?.environment?.STORAGE_BACKEND === "database", "backend explicitly selects database storage");
+check(services.backend?.environment?.JWT_SECRET === environment.JWT_SECRET, "backend receives JWT_SECRET from environment configuration");
 check(services.frontend?.environment?.BACKEND_UPSTREAM === "http://backend:4000", "frontend receives its backend upstream from environment configuration");
 check(composeRaw.includes("POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}"), "database password is injected, not literal in Compose");
 check(environment.POSTGRES_PASSWORD === "change-me-for-local-development", ".env.example uses an obvious non-production placeholder password");
@@ -109,6 +110,7 @@ for (const [label, variant, expectedName, expectedVolume, expectedFrontendPort, 
   check(variantServices.backend?.ports?.some((item) => String(item).includes(`127.0.0.1:${expectedBackendPort}:4000`)), `${label}: backend port is loopback-only and environment-specific`);
   check(variantServices.frontend?.ports?.some((item) => String(item).includes(`127.0.0.1:${expectedFrontendPort}:80`)), `${label}: frontend port is loopback-only and environment-specific`);
   check(variantServices.backend?.environment?.STORAGE_BACKEND === "database", `${label}: backend forces database storage`);
+  check(variantServices.backend?.environment?.JWT_SECRET === variant.environment.JWT_SECRET, `${label}: backend receives its environment-specific JWT_SECRET`);
   check(String(variantServices.backend?.environment?.DATABASE_URL ?? "").startsWith("postgresql://"), `${label}: backend receives DATABASE_URL`);
   check(["postgres", "backend", "frontend"].every((service) => variantServices[service]?.restart === "unless-stopped"), `${label}: all services use restart unless-stopped`);
 

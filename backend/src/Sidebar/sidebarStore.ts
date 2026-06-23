@@ -30,6 +30,8 @@ import {
   diagramWithContents,
   removeComponentWithConnections
 } from "../persistence/stateOperations.js";
+import { cloneSidebarStateForCompany } from "../persistence/tenantState.js";
+import { requireCompanyId } from "../tenant.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.resolve(__dirname, "../data");
@@ -791,7 +793,7 @@ const defaultState: SidebarState = {
   viewpoints: EAM_VIEWPOINTS
 };
 
-let cached: SidebarState | null = null;
+const cachedByCompany = new Map<string, SidebarState>();
 
 async function ensureFile(): Promise<void> {
   await fs.mkdir(dataDir, { recursive: true });
@@ -901,24 +903,36 @@ function normalizeSidebarState(raw: Partial<SidebarState>): SidebarState {
 }
 
 export async function readSidebarState(): Promise<SidebarState> {
+  const companyId = requireCompanyId();
+  const cached = cachedByCompany.get(companyId);
   if (cached) return structuredClone(cached);
   if (databasePersistenceEnabled()) {
-    const persisted = await databaseSidebarRepository().read();
+    const persisted = await databaseSidebarRepository().read(companyId);
     if (persisted) {
-      cached = persisted;
-      return structuredClone(cached);
+      cachedByCompany.set(companyId, persisted);
+      return structuredClone(persisted);
     }
 
-    // Safe first-start migration: copy the legacy JSON state into an empty DB.
-    // The source file is deliberately retained as a rollback/reference artifact.
-    cached = await readLegacySidebarState();
-    cached = await databaseSidebarRepository().write(cached);
-    return structuredClone(cached);
+    const legacy = await readLegacySidebarState();
+    const initial = cloneSidebarStateForCompany(
+      process.env.SEED_EXAMPLES === "false" ? { ...legacy, components: [], connections: [], diagrams: [] } : legacy,
+      companyId
+    );
+    const stored = await databaseSidebarRepository().write(initial, companyId);
+    cachedByCompany.set(companyId, stored);
+    return structuredClone(stored);
   }
 
-  cached = await readLegacySidebarState();
-  await writeSidebarState(cached);
-  return structuredClone(cached);
+  const companyFile = path.join(dataDir, `sidebar.${companyId}.json`);
+  let state: SidebarState;
+  try {
+    state = normalizeSidebarState(JSON.parse(await fs.readFile(companyFile, "utf-8")) as Partial<SidebarState>);
+  } catch {
+    state = cloneSidebarStateForCompany(await readLegacySidebarState(), companyId);
+  }
+  cachedByCompany.set(companyId, state);
+  await writeSidebarState(state);
+  return structuredClone(state);
 }
 
 export async function readLegacySidebarState(): Promise<SidebarState> {
@@ -984,13 +998,16 @@ export async function importMetamodelDefinition(input: unknown): Promise<Metamod
 }
 
 export async function writeSidebarState(state: SidebarState): Promise<SidebarState> {
-  cached = structuredClone(state);
+  const companyId = requireCompanyId();
+  let cached = structuredClone(state);
   if (databasePersistenceEnabled()) {
-    cached = await databaseSidebarRepository().write(cached);
+    cached = await databaseSidebarRepository().write(cached, companyId);
+    cachedByCompany.set(companyId, cached);
     return structuredClone(cached);
   }
   await fs.mkdir(dataDir, { recursive: true });
-  await fs.writeFile(sidebarFile, JSON.stringify(cached, null, 2), "utf-8");
+  await fs.writeFile(path.join(dataDir, `sidebar.${companyId}.json`), JSON.stringify(cached, null, 2), "utf-8");
+  cachedByCompany.set(companyId, cached);
   return structuredClone(cached);
 }
 
