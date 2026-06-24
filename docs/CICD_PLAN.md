@@ -56,7 +56,7 @@ Ein Containerstart mit Datenbank ist nicht Teil jedes CI-Laufs. Echte DB-Cascade
 7. Staging-Compose validieren und mit `up -d --build` aktualisieren.
 8. Containerstatus anzeigen und den internen Healthcheck auf `127.0.0.1:4400` in einer portablen Shell-Schleife bis zu zwölfmal im Abstand von fünf Sekunden ausführen.
 
-Der externe Healthcheck ist wegen aktivem Basic Auth nicht zuverlässig ohne zusätzliche Credentials. Der interne Backend-Healthcheck ist deshalb maßgeblich.
+Der interne Backend-Healthcheck ist maßgeblich, weil er unabhängig von DNS, TLS, Nginx und externen Netzwerkwegen den gerade aktualisierten Container prüft. Ein externer Check kann ergänzend betrieben werden.
 
 Der Remote-Ablauf protokolliert vor dem Deployment ausschließlich sichere Diagnosewerte: Arbeitsverzeichnis, kurzen Git-Status und Commit, Docker-/Compose-Version sowie `docker compose ps`. Env-Inhalte und die gerenderte Compose-Konfiguration werden nicht ausgegeben. Schlägt `docker compose up` oder der Healthcheck fehl, folgen automatisch der Compose-Status und jeweils die letzten 100 Logzeilen von Backend und PostgreSQL. Die Retry-Schleife verwendet nur `curl --fail --silent --show-error`, `seq` und `sleep`; die versionsabhängige Curl-Option `--retry-all-errors` wird nicht verwendet.
 
@@ -90,7 +90,7 @@ Produktion:
 
 - `PROD_DEPLOY_PATH` = `/var/www/eam`
 
-Optional dokumentiert, aktuell wegen Basic Auth nicht automatisch verwendet:
+Optional dokumentiert, aktuell zugunsten des deterministischen internen Healthchecks nicht automatisch verwendet:
 
 - `STAGING_HEALTH_URL` = `https://eam-test.messers-cardio-club.com/api/health`
 - `PROD_HEALTH_URL` = `https://eam.messers-cardio-club.com/api/health`
@@ -104,8 +104,8 @@ GitHub Environments `staging` und `production` sollten angelegt werden. Für `pr
 - Der Deployment-Benutzer muss dediziert und so knapp wie möglich berechtigt sein. Docker-Gruppenzugriff ist praktisch Root-äquivalent.
 - Workflows geben keine Env-Dateien oder Secrets aus und erzeugen sie nicht.
 - Deployments brechen bei getrackten Änderungen im Server-Worktree ab; es gibt kein `git reset --hard`.
-- Basic Auth bleibt aktiv. Externe Healthchecks benötigen deshalb eigene, sicher verwaltete Credentials und sind im MVP nicht automatisiert.
-- Es wird kein Anwendungsauth-System implementiert.
+- Die Anwendungsauthentifizierung schützt EAM-Routen; die frühere Nginx-Basic-Auth-Schicht ist laut Deployment-Abnahme entfernt und bleibt nur eine optionale zusätzliche Schutzmaßnahme.
+- Externe Healthchecks sind im MVP nicht automatisiert.
 
 ## Rollback-Strategie
 
@@ -123,7 +123,7 @@ Rollback bleibt manuell und ist in `ROLLBACK.md` beschrieben:
 - kein Container-Registry-/Image-Promotion-Modell; Images werden auf dem Zielserver gebaut
 - keine automatische DB-Sicherung oder Wiederherstellung
 - kein Zero-Downtime-Deployment
-- kein automatischer externer Healthcheck hinter Basic Auth
+- kein automatischer externer End-to-End-Healthcheck
 - kein automatisches Datenbank-Rollback
-- kein Anwendungs-Auth
+- keine E-Mail-Verifikation, Passwortwiederherstellung oder serverseitige JWT-Revocation
 - GitHub-hosted Runner und manuelle GitHub-Environment-Freigaben bleiben externe Betriebsabhängigkeiten

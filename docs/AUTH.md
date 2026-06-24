@@ -43,7 +43,7 @@ Fehlt der Wert oder ist er zu kurz, bricht das Backend beim Start mit einer klar
 
 Vor dem nächsten Deployment müssen die serverseitigen `.env.staging` und `.env.prod` jeweils einen eigenen starken `JWT_SECRET` enthalten. Die Pipeline erzeugt oder protokolliert diese Dateien nicht.
 
-Nginx Basic Auth bleibt zunächst als zusätzlicher äußerer Schutz aktiv. Die JWT-basierte App-Authentifizierung ist die eigentliche fachliche Anmeldung und Company-Trennung. Basic Auth ersetzt sie nicht und kann später nach einer bewussten Sicherheitsabnahme entfernt werden.
+Die JWT-basierte App-Authentifizierung ist die fachliche Anmeldung und Company-Trennung. Nach der gemeldeten Deployment-Abnahme wurde die temporäre Nginx-Basic-Auth-Schicht entfernt. Die auskommentierten Beispiel-Direktiven unter `deploy/nginx` bleiben als optionale zusätzliche Schutzschicht verfügbar und enthalten keine Zugangsdaten.
 
 ## MVP-Grenzen
 

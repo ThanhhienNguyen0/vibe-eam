@@ -120,13 +120,13 @@ Sie prüft alle drei Compose-/Env-Paare, getrennte Projekte, Volumes und Ports s
 6. `docker.exe compose down` und erneut `docker.exe compose up`; Daten müssen erhalten bleiben.
 7. Staging und Produktion getrennt starten und prüfen, dass DB-Namen und Volumes nicht übereinstimmen.
 
-Bewusst nicht enthalten: Auth, CI/CD und Live-Deployment.
+Anwendungsauthentifizierung, CI/CD und Live-Hosting wurden in den nachfolgenden Issues ergänzt; Details stehen in `AUTH.md`, `CICD_PLAN.md` und `HOSTING_SETUP.md`.
 
 ## Serverhosting
 
-Die serverpraktische Reihenfolge für Staging, DNS, Nginx, Certbot, Basic Auth und Produktion steht in `HOSTING_SETUP.md`. Vor einer Serverfreigabe `HOSTING_READINESS_CHECKLIST.md` abarbeiten und Ergebnisse in `HOSTING_ACCEPTANCE_CHECK.md` dokumentieren.
+Die serverpraktische Reihenfolge für Staging, DNS, Nginx, Certbot, optionales Basic Auth und Produktion steht in `HOSTING_SETUP.md`. Vor einer Serverfreigabe `HOSTING_READINESS_CHECKLIST.md` abarbeiten und Ergebnisse in `HOSTING_ACCEPTANCE_CHECK.md` dokumentieren.
 
-Ohne Issue #18 dürfen öffentlich nur künstliche Demo-Daten verwendet werden. Alternativ die gesamte Subdomain vorübergehend mit Nginx Basic Auth schützen oder die Live-Schaltung verschieben.
+Issue #18 stellt die eigentliche App-Authentifizierung und Company-Isolation bereit. Nginx Basic Auth bleibt eine optionale zusätzliche äußere Schutzschicht für Demos oder Wartungsphasen.
 
 ## CI/CD
 

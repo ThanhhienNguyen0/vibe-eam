@@ -310,7 +310,7 @@ Nach Einrichtung der in `GITHUB_SECRETS.md` beschriebenen Secrets stehen zwei au
 - `Deploy staging`: Ref auswählen; der Workflow prüft Typecheck, Tests, Build und Compose, deployt danach exakt den geprüften Commit nach `/var/www/eam-test` und prüft `127.0.0.1:4400/api/health`.
 - `Deploy production`: freigegebenen Ref eingeben, `DEPLOY_PRODUCTION` wählen sowie Backup und `HOSTING_ACCEPTANCE_CHECK.md` bestätigen. Danach wird exakt der geprüfte Commit nach `/var/www/eam` deployt und `127.0.0.1:4401/api/health` geprüft.
 
-Beide serverseitigen Env-Dateien bleiben unverändert. Die Workflows erzeugen, überschreiben oder loggen sie nicht. Wegen aktivem Basic Auth werden externe Subdomain-Healthchecks nicht automatisch verwendet.
+Beide serverseitigen Env-Dateien bleiben unverändert. Die Workflows erzeugen, überschreiben oder loggen sie nicht. Sie verwenden bewusst interne Healthchecks, damit Deployment-Erfolg unabhängig von DNS, TLS und Reverse Proxy geprüft wird.
 
 Vor Aktivierung:
 

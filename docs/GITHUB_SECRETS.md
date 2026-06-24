@@ -28,10 +28,10 @@ Die Workflows validieren die beiden Deploy-Pfade zusätzlich gegen diese bestät
 
 | Secret | Vorgesehener Wert | Aktueller Einsatz |
 | --- | --- | --- |
-| `STAGING_HEALTH_URL` | `https://eam-test.messers-cardio-club.com/api/health` | Dokumentiert, nicht automatisch genutzt, weil Basic Auth aktiv ist |
-| `PROD_HEALTH_URL` | `https://eam.messers-cardio-club.com/api/health` | Dokumentiert, nicht automatisch genutzt, weil Basic Auth aktiv ist |
+| `STAGING_HEALTH_URL` | `https://eam-test.messers-cardio-club.com/api/health` | Dokumentiert; der Workflow bevorzugt den internen Containercheck |
+| `PROD_HEALTH_URL` | `https://eam.messers-cardio-club.com/api/health` | Dokumentiert; der Workflow bevorzugt den internen Containercheck |
 
-Die Workflows verwenden stattdessen den zuverlässigen internen Healthcheck über `127.0.0.1:4400` beziehungsweise `127.0.0.1:4401`. Externe Checks hinter Basic Auth würden zusätzliche Zugangsdaten benötigen und könnten diese unnötig in Runner-Prozesse einbringen.
+Die Workflows verwenden den zuverlässigen internen Healthcheck über `127.0.0.1:4400` beziehungsweise `127.0.0.1:4401`. Er ist unabhängig von DNS, TLS und Reverse Proxy. Externe End-to-End-Checks können ergänzend eingerichtet werden, ohne App-Tokens oder andere Zugangsdaten in Workflow-Logs auszugeben.
 
 ## Deployment-Key einrichten
 
