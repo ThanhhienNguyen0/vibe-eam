@@ -15,7 +15,7 @@ Passwörter werden mit bcrypt und Kostenfaktor 12 gehasht. Die Datenbank speiche
 - Metamodelle, Diagramme, ComponentInstances, ConnectionInstances und der historische Architekturmodell-Zustand sind einer Company zugeordnet.
 - Der Prisma-Repository-Layer filtert Lese-, Schreib- und Löschoperationen nach `companyId` beziehungsweise nach dem company-eigenen Metamodell.
 - IDs, die bereits einer anderen Company gehören, werden vor einem Repository-Schreibvorgang abgelehnt.
-- Neue Companies erhalten beim ersten Zugriff eine company-eigene Kopie des Default-Metamodells. Bei `SEED_EXAMPLES=false` werden keine Beispielinstanzen oder -diagramme kopiert.
+- Neue Companies erhalten beim ersten Zugriff unabhängig von bestehenden Demo-Daten eine company-eigene Kopie des Default-Metamodells und vier editierbare Starterdiagramme: EAM-Gesamtarchitektur, Business & Capability, Application/Data/Technology sowie eine ausdrücklich vereinfachte BPMN-Demo.
 
 Die Migration `20260623170000_add_auth_and_company_isolation` ordnet alle bereits vorhandenen Daten der `Default Demo Company` (`company-default-demo`) zu. Sie löscht weder DB- noch JSON-Daten. Für die Default-Company wird bewusst kein festes Demo-Passwort erzeugt.
 

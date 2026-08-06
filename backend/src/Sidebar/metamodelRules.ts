@@ -373,6 +373,8 @@ export function validateValidationRules(
   state: SidebarState
 ): ValidationResult {
   const result = emptyResult();
+  const viewpoint = diagram.viewpointId ? state.viewpoints.find((item) => item.id === diagram.viewpointId) : undefined;
+  const viewpointRule = viewpoint ? ruleForViewpoint(viewpoint, state) : undefined;
   const diagramComponents = diagram.componentIds
     .map((id) => state.components.find((component) => component.id === id))
     .filter((component): component is ComponentInstance => Boolean(component));
@@ -384,6 +386,13 @@ export function validateValidationRules(
     if (!rule.active) continue;
     if (rule.scope === "viewpoint" && rule.viewpointId !== diagram.viewpointId) continue;
     if (!rule.sourceComponentTypeId || !rule.requiredConnectionTypeId || !rule.targetComponentTypeId) continue;
+    if (viewpointRule) {
+      if (viewpointRule.allowedComponentTypeIds.length > 0 && (
+        !viewpointRule.allowedComponentTypeIds.includes(rule.sourceComponentTypeId) ||
+        !viewpointRule.allowedComponentTypeIds.includes(rule.targetComponentTypeId)
+      )) continue;
+      if (viewpointRule.allowedConnectionTypeIds.length > 0 && !viewpointRule.allowedConnectionTypeIds.includes(rule.requiredConnectionTypeId)) continue;
+    }
 
     for (const component of diagramComponents.filter((item) => item.componentTypeId === rule.sourceComponentTypeId)) {
       const count = diagramConnections.filter((connection) => {

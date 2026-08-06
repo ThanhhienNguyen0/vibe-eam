@@ -501,7 +501,7 @@ function buildEdges(
         id: conn.id,
         source: conn.sourceComponentId,
         target: conn.targetComponentId,
-        label: type?.name ?? conn.name,
+        label: conn.name || type?.name || "",
         labelBgPadding: [6, 3] as [number, number],
         labelBgBorderRadius: 4,
         labelStyle: { fill: "#172033", fontWeight: 700, fontSize: 11 },

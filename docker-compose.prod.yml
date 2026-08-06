@@ -29,7 +29,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env.prod}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env.prod}
       STORAGE_BACKEND: database
-      SEED_EXAMPLES: ${SEED_EXAMPLES:-false}
+      SEED_EXAMPLES: ${SEED_EXAMPLES:-true}
       CORS_ORIGIN: ${CORS_ORIGIN:?Set CORS_ORIGIN in .env.prod}
     depends_on:
       postgres:

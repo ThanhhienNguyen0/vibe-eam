@@ -75,7 +75,7 @@ Sichere Kopie des bestehenden Sidebar-JSON in eine leere DB:
 npm run db:migrate-json --workspace backend
 ```
 
-Der Seed ist idempotent und überspringt eine DB, die bereits ein Metamodel enthält. `SEED_EXAMPLES=false` legt nur das Default-Metamodel an. Die JSON-Migration verweigert eine nicht leere DB, solange `FORCE_JSON_MIGRATION=true` nicht bewusst gesetzt wurde. Die JSON-Datei wird nie gelöscht.
+Der Seed ist idempotent und überspringt eine DB, die bereits ein Metamodel enthält. `SEED_EXAMPLES` steuert die Beispieldaten des initialen Datenbank-Seeds. Neu registrierte Companies erhalten unabhängig davon beim ersten Zugriff vier eigene, editierbare EAM-/BPMN-Starterdiagramme. Die JSON-Migration verweigert eine nicht leere DB, solange `FORCE_JSON_MIGRATION=true` nicht bewusst gesetzt wurde. Die JSON-Datei wird nie gelöscht.
 
 ## Umgebungsvariablen
 
@@ -88,7 +88,7 @@ Der Seed ist idempotent und überspringt eine DB, die bereits ein Metamodel enth
 | `VITE_BACKEND_PROXY_TARGET` | Backend-Ziel des lokalen Vite-Dev-Proxys |
 | `BACKEND_UPSTREAM` | Nginx-Upstream im Frontend-Container |
 | `CORS_ORIGIN` | erlaubte Browser-Origin(s), kommasepariert |
-| `SEED_EXAMPLES` | Beispiel-Diagramme beim initialen Seed ein-/ausschalten |
+| `SEED_EXAMPLES` | Beispieldaten beim initialen Datenbank-Seed ein-/ausschalten; neue Companies erhalten ihre Starterdiagramme separat |
 
 ## Compose-Konfiguration prüfen
 

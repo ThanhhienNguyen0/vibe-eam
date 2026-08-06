@@ -410,6 +410,38 @@ const EAM_CONNECTION_RULES: ConnectionRule[] = [
   }
 ];
 
+const BPMN_SEQUENCE_PAIRS: Array<[string, string]> = [
+  ["ct-event-start", "ct-task"],
+  ["ct-task", "ct-task"],
+  ["ct-task", "ct-event"],
+  ["ct-event", "ct-task"],
+  ["ct-task", "ct-gw-xor"],
+  ["ct-task", "ct-gw-and"],
+  ["ct-task", "ct-gw-or"],
+  ["ct-gw-xor", "ct-task"],
+  ["ct-gw-and", "ct-task"],
+  ["ct-gw-or", "ct-task"],
+  ["ct-task", "ct-event-end"]
+];
+
+const BPMN_CONNECTION_RULES: ConnectionRule[] = BPMN_SEQUENCE_PAIRS.map(([sourceComponentTypeId, targetComponentTypeId]) => ({
+  id: `rule-bpmn-sequence-${sourceComponentTypeId.replace("ct-", "")}-${targetComponentTypeId.replace("ct-", "")}`,
+  sourceComponentTypeId,
+  connectionTypeId: "conn-seq",
+  targetComponentTypeId,
+  allowed: true,
+  required: false,
+  severity: "error",
+  description: `Simplified BPMN sequence flow from ${sourceComponentTypeId} to ${targetComponentTypeId}.`,
+  rationale: "The BPMN demo supports a deliberately limited set of common sequence-flow transitions.",
+  viewpointIds: ["vp-bpmn-demo"]
+}));
+
+const DEFAULT_CONNECTION_RULES: ConnectionRule[] = [
+  ...EAM_CONNECTION_RULES,
+  ...BPMN_CONNECTION_RULES
+];
+
 const EAM_VIEWPOINTS: Viewpoint[] = [
   {
     id: "vp-management",
@@ -469,11 +501,22 @@ const EAM_VIEWPOINTS: Viewpoint[] = [
     allowedConnectionTypeIds: EAM_CONNECTION_TYPES.map((type) => type.id),
     requiredComponentTypeIds: [],
     requiredConnectionTypeIds: []
+  },
+  {
+    id: "vp-bpmn-demo",
+    name: "BPMN Demo View (vereinfacht)",
+    description: "Simplified process-flow view for demonstrating BPMN-inspired modelling without claiming full BPMN conformance.",
+    stakeholderRole: "Process Designer",
+    purpose: "Einen vereinfachten End-to-End-Prozess mit Ereignissen, Aufgaben und Gateways demonstrieren.",
+    allowedComponentTypeIds: ["ct-pool", "ct-task", "ct-event-start", "ct-event", "ct-event-end", "ct-gw-xor", "ct-gw-and", "ct-gw-or"],
+    allowedConnectionTypeIds: ["conn-seq"],
+    requiredComponentTypeIds: ["ct-event-start", "ct-task", "ct-event-end"],
+    requiredConnectionTypeIds: ["conn-seq"]
   }
 ];
 
 function connectionRuleIdsForViewpoint(viewpointId: string): string[] {
-  return EAM_CONNECTION_RULES
+  return DEFAULT_CONNECTION_RULES
     .filter((rule) => !rule.viewpointIds || rule.viewpointIds.length === 0 || rule.viewpointIds.includes(viewpointId))
     .map((rule) => rule.id);
 }
@@ -573,6 +616,100 @@ const EAM_CONNECTIONS: ConnectionInstance[] = [
   { id: "cx-stakeholder-interested-capability", name: "", connectionTypeId: "conn-interested-in", sourceComponentId: "comp-head-sales", targetComponentId: "comp-order-management", description: "" },
   { id: "cx-stakeholder-responsible-app", name: "", connectionTypeId: "conn-responsible-for", sourceComponentId: "comp-head-sales", targetComponentId: "comp-erp-system", description: "" },
   { id: "cx-goal-supports-capability", name: "", connectionTypeId: "conn-supports", sourceComponentId: "comp-reduce-order-effort", targetComponentId: "comp-order-management", description: "" }
+];
+
+const BPMN_COMPONENTS: ComponentInstance[] = [
+  { id: "comp-bpmn-order-pool", name: "Order Processing", componentTypeId: "ct-pool", properties: { verantwortlich: "Sales Operations" }, description: "Demo pool for a simplified order approval flow." },
+  { id: "comp-bpmn-order-start", name: "Order received", componentTypeId: "ct-event-start", properties: { ausloeser: "Customer order" }, description: "Starts the demo process." },
+  { id: "comp-bpmn-capture-order", name: "Capture order", componentTypeId: "ct-task", properties: { rolle: "Sales" }, description: "Capture the incoming customer order." },
+  { id: "comp-bpmn-check-limit", name: "Check credit limit", componentTypeId: "ct-task", properties: { rolle: "Finance" }, description: "Check whether automatic approval is possible." },
+  { id: "comp-bpmn-approval-gateway", name: "Automatic approval?", componentTypeId: "ct-gw-xor", properties: { bedingung: "Credit limit sufficient" }, description: "Exclusive decision in the simplified demo flow." },
+  { id: "comp-bpmn-auto-approve", name: "Approve automatically", componentTypeId: "ct-task", properties: { rolle: "System" }, description: "Automatic approval path." },
+  { id: "comp-bpmn-manual-review", name: "Review manually", componentTypeId: "ct-task", properties: { rolle: "Sales Manager" }, description: "Manual review path." },
+  { id: "comp-bpmn-order-end", name: "Order approved", componentTypeId: "ct-event-end", properties: { ergebnis: "Approved order" }, description: "Ends the demo process." }
+];
+
+const BPMN_CONNECTIONS: ConnectionInstance[] = [
+  { id: "cx-bpmn-start-capture", name: "", connectionTypeId: "conn-seq", sourceComponentId: "comp-bpmn-order-start", targetComponentId: "comp-bpmn-capture-order", description: "" },
+  { id: "cx-bpmn-capture-check", name: "", connectionTypeId: "conn-seq", sourceComponentId: "comp-bpmn-capture-order", targetComponentId: "comp-bpmn-check-limit", description: "" },
+  { id: "cx-bpmn-check-gateway", name: "", connectionTypeId: "conn-seq", sourceComponentId: "comp-bpmn-check-limit", targetComponentId: "comp-bpmn-approval-gateway", description: "" },
+  { id: "cx-bpmn-gateway-auto", name: "Credit sufficient", connectionTypeId: "conn-seq", sourceComponentId: "comp-bpmn-approval-gateway", targetComponentId: "comp-bpmn-auto-approve", description: "" },
+  { id: "cx-bpmn-gateway-manual", name: "Manual review", connectionTypeId: "conn-seq", sourceComponentId: "comp-bpmn-approval-gateway", targetComponentId: "comp-bpmn-manual-review", description: "" },
+  { id: "cx-bpmn-auto-end", name: "", connectionTypeId: "conn-seq", sourceComponentId: "comp-bpmn-auto-approve", targetComponentId: "comp-bpmn-order-end", description: "" },
+  { id: "cx-bpmn-manual-end", name: "", connectionTypeId: "conn-seq", sourceComponentId: "comp-bpmn-manual-review", targetComponentId: "comp-bpmn-order-end", description: "" }
+];
+
+const STARTER_COMPONENTS: ComponentInstance[] = [...EAM_COMPONENTS, ...BPMN_COMPONENTS];
+const STARTER_CONNECTIONS: ConnectionInstance[] = [...EAM_CONNECTIONS, ...BPMN_CONNECTIONS];
+
+const STARTER_DIAGRAMS: Diagram[] = [
+  {
+    id: "diagram-eam-overview-demo",
+    name: "Demo – EAM Gesamtarchitektur",
+    description: "End-to-End EAM example connecting stakeholder, goal, capability, process, application, data and technology.",
+    componentIds: EAM_COMPONENTS.map((component) => component.id),
+    connectionIds: EAM_CONNECTIONS.map((connection) => connection.id),
+    metamodelId: DEFAULT_METAMODEL.id,
+    viewpointId: "vp-full-architecture",
+    positions: {
+      "comp-head-sales": { x: -420, y: -120 },
+      "comp-reduce-order-effort": { x: -420, y: 60 },
+      "comp-order-management": { x: -120, y: -20 },
+      "comp-order-to-cash": { x: 160, y: -20 },
+      "comp-erp-system": { x: 440, y: -20 },
+      "comp-invoice-data": { x: 720, y: -120 },
+      "comp-db-cluster": { x: 720, y: 80 }
+    }
+  },
+  {
+    id: "diagram-eam-business-demo",
+    name: "Demo – EAM Business & Capability",
+    description: "Business-oriented variant showing responsibility, process realization and application support.",
+    componentIds: ["comp-head-sales", "comp-order-management", "comp-order-to-cash", "comp-erp-system"],
+    connectionIds: ["cx-process-realizes-capability", "cx-app-serves-process", "cx-stakeholder-responsible-app"],
+    metamodelId: DEFAULT_METAMODEL.id,
+    viewpointId: "vp-business-owner",
+    positions: {
+      "comp-head-sales": { x: -300, y: -120 },
+      "comp-order-management": { x: -40, y: -120 },
+      "comp-order-to-cash": { x: 220, y: -120 },
+      "comp-erp-system": { x: 480, y: -120 }
+    }
+  },
+  {
+    id: "diagram-eam-application-data-demo",
+    name: "Demo – Application, Data & Technology",
+    description: "Application-owner variant showing ownership, data usage and infrastructure dependency.",
+    componentIds: ["comp-head-sales", "comp-erp-system", "comp-invoice-data", "comp-db-cluster"],
+    connectionIds: ["cx-stakeholder-responsible-app", "cx-app-uses-data", "cx-app-depends-tech"],
+    metamodelId: DEFAULT_METAMODEL.id,
+    viewpointId: "vp-application-owner",
+    positions: {
+      "comp-head-sales": { x: -260, y: -100 },
+      "comp-erp-system": { x: 20, y: -100 },
+      "comp-invoice-data": { x: 320, y: -190 },
+      "comp-db-cluster": { x: 320, y: 20 }
+    }
+  },
+  {
+    id: "diagram-bpmn-order-approval-demo",
+    name: "Demo – BPMN Bestellfreigabe (vereinfacht)",
+    description: "Editable BPMN-inspired example with start/end events, tasks and an XOR gateway. It is deliberately not a complete BPMN 2.0 implementation.",
+    componentIds: BPMN_COMPONENTS.map((component) => component.id),
+    connectionIds: BPMN_CONNECTIONS.map((connection) => connection.id),
+    metamodelId: DEFAULT_METAMODEL.id,
+    viewpointId: "vp-bpmn-demo",
+    positions: {
+      "comp-bpmn-order-pool": { x: -80, y: -100, width: 1240, height: 500 },
+      "comp-bpmn-order-start": { x: 20, y: 110 },
+      "comp-bpmn-capture-order": { x: 150, y: 95 },
+      "comp-bpmn-check-limit": { x: 370, y: 95 },
+      "comp-bpmn-approval-gateway": { x: 590, y: 110 },
+      "comp-bpmn-auto-approve": { x: 760, y: 20 },
+      "comp-bpmn-manual-review": { x: 760, y: 210 },
+      "comp-bpmn-order-end": { x: 1040, y: 110 }
+    }
+  }
 ];
 
 const defaultState: SidebarState = {
@@ -766,31 +903,12 @@ const defaultState: SidebarState = {
       category: "BPMN"
     }
   ],
-  connectionRules: EAM_CONNECTION_RULES,
+  connectionRules: DEFAULT_CONNECTION_RULES,
   viewpointRules: EAM_VIEWPOINT_RULES,
   validationRules: EAM_VALIDATION_RULES,
-  components: EAM_COMPONENTS,
-  connections: EAM_CONNECTIONS,
-  diagrams: [
-    {
-      id: "diagram-order-management-demo",
-      name: "Order Management Metamodel Demo",
-      description: "Example diagram for the Metamodel Rule Builder.",
-      componentIds: EAM_COMPONENTS.map((component) => component.id),
-      connectionIds: EAM_CONNECTIONS.map((connection) => connection.id),
-      metamodelId: DEFAULT_METAMODEL.id,
-      viewpointId: "vp-full-architecture",
-      positions: {
-        "comp-head-sales": { x: -420, y: -120 },
-        "comp-reduce-order-effort": { x: -420, y: 60 },
-        "comp-order-management": { x: -120, y: -20 },
-        "comp-order-to-cash": { x: 160, y: -20 },
-        "comp-erp-system": { x: 440, y: -20 },
-        "comp-invoice-data": { x: 720, y: -120 },
-        "comp-db-cluster": { x: 720, y: 80 }
-      }
-    }
-  ],
+  components: STARTER_COMPONENTS,
+  connections: STARTER_CONNECTIONS,
+  diagrams: STARTER_DIAGRAMS,
   viewpoints: EAM_VIEWPOINTS
 };
 
@@ -847,11 +965,11 @@ function normalizeSidebarState(raw: Partial<SidebarState>): SidebarState {
     };
   });
 
-  const components = upsertById(raw.components ?? [], EAM_COMPONENTS);
-  const connections = upsertById(raw.connections ?? [], EAM_CONNECTIONS);
+  const components = upsertById(raw.components ?? [], STARTER_COMPONENTS);
+  const connections = upsertById(raw.connections ?? [], STARTER_CONNECTIONS);
   const viewpoints = upsertById(raw.viewpoints ?? [], EAM_VIEWPOINTS);
   const persistedConnectionRules = (raw.connectionRules ?? []).filter((rule) => !isLegacyConnectionRule(rule));
-  const connectionRules = upsertById(persistedConnectionRules, EAM_CONNECTION_RULES);
+  const connectionRules = upsertById(persistedConnectionRules, DEFAULT_CONNECTION_RULES);
   const derivedViewpointRules = viewpoints.map((viewpoint) => ({
     ...viewpointRuleFromViewpoint(viewpoint),
     allowedConnectionRuleIds: connectionRules
@@ -861,11 +979,10 @@ function normalizeSidebarState(raw: Partial<SidebarState>): SidebarState {
   const persistedViewpointRules = (raw.viewpointRules ?? []).map(withoutLegacyConnectionRuleRefs);
   const viewpointRules = upsertById(upsertById(persistedViewpointRules, EAM_VIEWPOINT_RULES), derivedViewpointRules);
   const validationRules = upsertById(raw.validationRules ?? [], EAM_VALIDATION_RULES);
-  const diagrams = (raw.diagrams ?? []).map((diagram) => ({
+  const diagrams = upsertById((raw.diagrams ?? []).map((diagram) => ({
     ...diagram,
     metamodelId: diagram.metamodelId ?? metamodel.id
-  }));
-  const demoDiagramExists = diagrams.some((diagram) => diagram.id === "diagram-order-management-demo");
+  })), STARTER_DIAGRAMS.map((diagram) => ({ ...diagram, metamodelId: metamodel.id })));
 
   return {
     metamodel,
@@ -877,30 +994,15 @@ function normalizeSidebarState(raw: Partial<SidebarState>): SidebarState {
     components,
     connections,
     viewpoints,
-    diagrams: demoDiagramExists
-      ? diagrams
-      : [
-          ...diagrams,
-          {
-            id: "diagram-order-management-demo",
-            name: "Order Management Metamodel Demo",
-            description: "Example diagram for the Metamodel Rule Builder.",
-            componentIds: EAM_COMPONENTS.map((component) => component.id),
-            connectionIds: EAM_CONNECTIONS.map((connection) => connection.id),
-            metamodelId: metamodel.id,
-            viewpointId: "vp-full-architecture",
-            positions: {
-              "comp-head-sales": { x: -420, y: -120 },
-              "comp-reduce-order-effort": { x: -420, y: 60 },
-              "comp-order-management": { x: -120, y: -20 },
-              "comp-order-to-cash": { x: 160, y: -20 },
-              "comp-erp-system": { x: 440, y: -20 },
-              "comp-invoice-data": { x: 720, y: -120 },
-              "comp-db-cluster": { x: 720, y: 80 }
-            }
-          }
-        ]
+    diagrams
   };
+}
+
+export function buildInitialSidebarStateForCompany(companyId: string, includeExamples = true): SidebarState {
+  const source = includeExamples
+    ? defaultState
+    : { ...defaultState, components: [], connections: [], diagrams: [] };
+  return cloneSidebarStateForCompany(source, companyId);
 }
 
 export async function readSidebarState(): Promise<SidebarState> {
@@ -914,11 +1016,7 @@ export async function readSidebarState(): Promise<SidebarState> {
       return structuredClone(persisted);
     }
 
-    const legacy = await readLegacySidebarState();
-    const initial = cloneSidebarStateForCompany(
-      process.env.SEED_EXAMPLES === "false" ? { ...legacy, components: [], connections: [], diagrams: [] } : legacy,
-      companyId
-    );
+    const initial = buildInitialSidebarStateForCompany(companyId);
     const stored = await databaseSidebarRepository().write(initial, companyId);
     cachedByCompany.set(companyId, stored);
     return structuredClone(stored);
@@ -929,7 +1027,7 @@ export async function readSidebarState(): Promise<SidebarState> {
   try {
     state = normalizeSidebarState(JSON.parse(await fs.readFile(companyFile, "utf-8")) as Partial<SidebarState>);
   } catch {
-    state = cloneSidebarStateForCompany(await readLegacySidebarState(), companyId);
+    state = buildInitialSidebarStateForCompany(companyId);
   }
   cachedByCompany.set(companyId, state);
   await writeSidebarState(state);

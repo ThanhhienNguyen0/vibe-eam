@@ -297,6 +297,12 @@ describe("Sidebar metamodel connection rules", () => {
     expect(result.warnings.map((item) => item.message)).toContain("ERP System: Application should depend on at least one Technology Node.");
   });
 
+  it("does not apply a ValidationRule whose target type is excluded by the selected viewpoint", () => {
+    const diagram = { id: "d-app-view", name: "Application", description: "", viewpointId: "vp-application-owner", componentIds: ["stakeholder", "app", "data", "tech"], connectionIds: ["stakeholder-responsible-app"], positions: {} };
+    const result = validateDiagram(diagram, state, { includeRequiredRules: false });
+    expect(result.warnings.map((item) => item.message)).not.toContain("ERP System: Application should serve at least one Business Process.");
+  });
+
   it("filters allowed connection types by ConnectionRule and ViewpointRule", () => {
     const allowed = getAllowedConnectionTypes(state, "ct-app", "ct-proc", "vp-business-owner");
     expect(allowed.map((type) => type.id)).toEqual(["conn-serves"]);
