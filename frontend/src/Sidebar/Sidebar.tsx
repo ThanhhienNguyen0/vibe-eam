@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -51,6 +51,12 @@ interface TreeContextMenu {
   kind: ItemKind;
   id: string;
   label: string;
+}
+
+interface ConnectionDraft {
+  sourceComponentId: string;
+  connectionTypeId: string;
+  targetComponentId: string;
 }
 
 interface FolderProps {
@@ -209,6 +215,9 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
 
   const [contextMenu, setContextMenu] = useState<TreeContextMenu | null>(null);
   const [renaming, setRenaming] = useState<{ kind: ItemKind; id: string } | null>(null);
+  const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
+  const [connectionCreateError, setConnectionCreateError] = useState("");
+  const [connectionCreating, setConnectionCreating] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Kontextmenü bei Klick außerhalb schließen
@@ -221,6 +230,17 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     };
     window.addEventListener("pointerdown", handler);
     return () => window.removeEventListener("pointerdown", handler);
+  }, [contextMenu]);
+
+  useLayoutEffect(() => {
+    if (!contextMenu || !menuRef.current) return;
+    const margin = 8;
+    const rect = menuRef.current.getBoundingClientRect();
+    const x = Math.max(margin, Math.min(contextMenu.x, window.innerWidth - rect.width - margin));
+    const y = Math.max(margin, Math.min(contextMenu.y, window.innerHeight - rect.height - margin));
+    if (x !== contextMenu.x || y !== contextMenu.y) {
+      setContextMenu((current) => current ? { ...current, x, y } : null);
+    }
   }, [contextMenu]);
 
   const [openTypeGroups, setOpenTypeGroups] = useState<Record<string, boolean>>({});
@@ -347,17 +367,73 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     setRenaming({ kind: "component", id: comp.id });
   }
 
-  async function addConnection() {
-    if (components.length < 2 || connectionTypes.length === 0) return;
-    const conn = await sidebarApi.createConnection({
-      name: "",
-      connectionTypeId: connectionTypes[0].id,
-      sourceComponentId: components[0].id,
-      targetComponentId: components[1].id,
-      description: ""
+  function allowedConnectionTypesFor(sourceComponentId: string, targetComponentId: string) {
+    const source = components.find((component) => component.id === sourceComponentId);
+    const target = components.find((component) => component.id === targetComponentId);
+    if (!source || !target || source.id === target.id) return [];
+    const allowedTypeIds = new Set(connectionRules
+      .filter((rule) => rule.allowed && rule.sourceComponentTypeId === source.componentTypeId && rule.targetComponentTypeId === target.componentTypeId)
+      .map((rule) => rule.connectionTypeId));
+    return connectionTypes.filter((type) => allowedTypeIds.has(type.id));
+  }
+
+  function updateConnectionDraft(patch: Partial<ConnectionDraft>) {
+    setConnectionDraft((current) => {
+      if (!current) return current;
+      const next = { ...current, ...patch };
+      const allowed = allowedConnectionTypesFor(next.sourceComponentId, next.targetComponentId);
+      if (!allowed.some((type) => type.id === next.connectionTypeId)) {
+        next.connectionTypeId = allowed[0]?.id ?? "";
+      }
+      return next;
     });
-    onStateChange({ ...sidebarState, connections: [...connections, conn] });
-    onSelect({ kind: "connection", id: conn.id });
+    setConnectionCreateError("");
+  }
+
+  function addConnection() {
+    if (components.length < 2 || connectionTypes.length === 0) return;
+    let draft: ConnectionDraft | null = null;
+    for (const source of components) {
+      for (const target of components) {
+        const allowed = allowedConnectionTypesFor(source.id, target.id);
+        if (allowed.length > 0) {
+          draft = { sourceComponentId: source.id, connectionTypeId: allowed[0].id, targetComponentId: target.id };
+          break;
+        }
+      }
+      if (draft) break;
+    }
+    setConnectionDraft(draft ?? {
+      sourceComponentId: components[0].id,
+      connectionTypeId: "",
+      targetComponentId: components[1].id
+    });
+    setConnectionCreateError(draft ? "" : "Für die vorhandenen Komponenten ist keine erlaubte ConnectionRule definiert.");
+  }
+
+  async function submitConnection() {
+    if (!connectionDraft || connectionCreating) return;
+    const allowed = allowedConnectionTypesFor(connectionDraft.sourceComponentId, connectionDraft.targetComponentId);
+    if (!allowed.some((type) => type.id === connectionDraft.connectionTypeId)) {
+      setConnectionCreateError("Für diese Kombination erlaubt keine ConnectionRule eine Verbindung.");
+      return;
+    }
+    setConnectionCreating(true);
+    setConnectionCreateError("");
+    try {
+      const conn = await sidebarApi.createConnection({
+        name: "",
+        ...connectionDraft,
+        description: ""
+      });
+      onStateChange({ ...sidebarState, connections: [...connections, conn] });
+      onSelect({ kind: "connection", id: conn.id });
+      setConnectionDraft(null);
+    } catch (error) {
+      setConnectionCreateError(error instanceof Error ? error.message : "Verbindung konnte nicht erstellt werden.");
+    } finally {
+      setConnectionCreating(false);
+    }
   }
 
   async function addDiagram() {
@@ -474,6 +550,10 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     else if (menu.kind === "connection") deleteConnection(menu.id);
     else deleteDiagram(menu.id);
   }
+
+  const draftConnectionTypes = connectionDraft
+    ? allowedConnectionTypesFor(connectionDraft.sourceComponentId, connectionDraft.targetComponentId)
+    : [];
 
   return (
     <nav className="sidebar" aria-label="Architektur-Navigation">
@@ -863,6 +943,64 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
         )}
         {diagrams.length > 0 && visibleDiagrams.length === 0 && <EmptyHint text="Keine Treffer." />}
       </Folder>
+
+      {connectionDraft && (
+        <div
+          className="diagram-suggestion-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-connection-title"
+          onKeyDown={(event) => event.key === "Escape" && !connectionCreating && setConnectionDraft(null)}
+        >
+          <div className="diagram-suggestion-card">
+            <div className="diagram-suggestion-header">
+              <strong id="create-connection-title">Neue Verbindung</strong>
+              <button className="sb-close-btn" disabled={connectionCreating} onClick={() => setConnectionDraft(null)}><X size={14} /></button>
+            </div>
+            <div className="sb-form">
+              <label>Quelle
+                <select
+                  value={connectionDraft.sourceComponentId}
+                  onChange={(event) => updateConnectionDraft({ sourceComponentId: event.target.value })}
+                >
+                  {components.map((component) => <option key={component.id} value={component.id}>{component.name}</option>)}
+                </select>
+              </label>
+              <label>Beziehung
+                <select
+                  value={connectionDraft.connectionTypeId}
+                  disabled={draftConnectionTypes.length === 0}
+                  onChange={(event) => updateConnectionDraft({ connectionTypeId: event.target.value })}
+                >
+                  {draftConnectionTypes.length === 0 && <option value="">Keine erlaubte ConnectionRule</option>}
+                  {draftConnectionTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
+                </select>
+              </label>
+              <label>Ziel
+                <select
+                  value={connectionDraft.targetComponentId}
+                  onChange={(event) => updateConnectionDraft({ targetComponentId: event.target.value })}
+                >
+                  {components.map((component) => <option key={component.id} value={component.id}>{component.name}</option>)}
+                </select>
+              </label>
+            </div>
+            <p className="muted">Es werden nur Beziehungen angeboten, die durch eine aktive ConnectionRule erlaubt sind.</p>
+            {connectionCreateError && <div className="error-banner" role="alert">{connectionCreateError}</div>}
+            <div className="diagram-suggestion-actions">
+              <button
+                className="sb-save-btn"
+                style={{ margin: 0 }}
+                disabled={connectionCreating || !connectionDraft.connectionTypeId}
+                onClick={submitConnection}
+              >
+                Verbindung erstellen
+              </button>
+              <button disabled={connectionCreating} onClick={() => setConnectionDraft(null)}>Abbrechen</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Kontextmenü (konsistent zum Diagramm-Editor) ──────────────────── */}
       {contextMenu && (

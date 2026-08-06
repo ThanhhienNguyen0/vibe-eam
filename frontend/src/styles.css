@@ -1996,13 +1996,13 @@ tr.attention td {
 }
 
 .diagram-suggestion-overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
   background: rgba(15, 23, 42, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 20;
+  z-index: 1000;
 }
 
 .diagram-suggestion-card {
@@ -2030,6 +2030,8 @@ tr.attention td {
 .diagram-suggestion-list {
   display: grid;
   gap: 10px;
+  max-height: min(42vh, 360px);
+  overflow-y: auto;
 }
 
 .diagram-suggestion-row {

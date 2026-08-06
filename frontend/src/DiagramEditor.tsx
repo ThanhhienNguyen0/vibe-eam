@@ -728,6 +728,8 @@ function DiagramEditorInner({
   );
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [pendingAdd, setPendingAdd] = useState<PendingAdd | null>(null);
+  const [pendingAddError, setPendingAddError] = useState("");
+  const [pendingAddSaving, setPendingAddSaving] = useState(false);
   const [pendingCreate, setPendingCreate] = useState<{ typeId: string; position: DiagramPosition } | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenu>({ visible: false, x: 0, y: 0, nodeId: "" });
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
@@ -853,12 +855,23 @@ function DiagramEditorInner({
       const conn = connections.find((c) => c.id === id);
       return conn && conn.sourceComponentId !== nodeId && conn.targetComponentId !== nodeId;
     });
-    const updated = await sidebarApi.updateDiagram(diagram.id, {
-      componentIds: newCompIds,
-      connectionIds: newConnIds
-    });
-    onDiagramChange(updated);
-    setContextMenu((m) => ({ ...m, visible: false }));
+    const newPositions = Object.fromEntries(
+      Object.entries(diagram.positions).filter(([componentId]) => componentId !== nodeId)
+    );
+    try {
+      const updated = await sidebarApi.updateDiagram(diagram.id, {
+        componentIds: newCompIds,
+        connectionIds: newConnIds,
+        positions: newPositions
+      });
+      onDiagramChange(updated);
+      setValidationResult(null);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Element konnte nicht aus dem Diagramm entfernt werden.");
+    } finally {
+      setContextMenu((menu) => ({ ...menu, visible: false }));
+    }
   }
 
   // ── Drop aus Sidebar/Palette ────────────────────────────────────────────────
@@ -957,6 +970,7 @@ function DiagramEditorInner({
       return;
     }
 
+    setPendingAddError("");
     setPendingAdd({ compId, suggestions, position });
   }
 
@@ -992,21 +1006,37 @@ function DiagramEditorInner({
   }
 
   async function confirmAdd() {
-    if (!pendingAdd) return;
-    const selected = pendingAdd.suggestions.filter((s) => s.selected);
-    await doAdd(
-      pendingAdd.compId,
-      selected.flatMap((s) => (s.otherComp ? [s.otherComp.id] : [])),
-      selected.map((s) => s.conn.id),
-      pendingAdd.position
-    );
-    setPendingAdd(null);
+    if (!pendingAdd || pendingAddSaving) return;
+    setPendingAddSaving(true);
+    setPendingAddError("");
+    try {
+      const selected = pendingAdd.suggestions.filter((s) => s.selected);
+      await doAdd(
+        pendingAdd.compId,
+        selected.flatMap((s) => (s.otherComp ? [s.otherComp.id] : [])),
+        selected.map((s) => s.conn.id),
+        pendingAdd.position
+      );
+      setPendingAdd(null);
+    } catch (err) {
+      setPendingAddError(err instanceof Error ? err.message : "Auswahl konnte nicht hinzugefuegt werden.");
+    } finally {
+      setPendingAddSaving(false);
+    }
   }
 
   async function addCompOnly() {
-    if (!pendingAdd) return;
-    await doAdd(pendingAdd.compId, [], [], pendingAdd.position);
-    setPendingAdd(null);
+    if (!pendingAdd || pendingAddSaving) return;
+    setPendingAddSaving(true);
+    setPendingAddError("");
+    try {
+      await doAdd(pendingAdd.compId, [], [], pendingAdd.position);
+      setPendingAdd(null);
+    } catch (err) {
+      setPendingAddError(err instanceof Error ? err.message : "Komponente konnte nicht hinzugefuegt werden.");
+    } finally {
+      setPendingAddSaving(false);
+    }
   }
 
   async function runDiagramValidation() {
@@ -1034,6 +1064,11 @@ function DiagramEditorInner({
     { title: "Viewpoint warnings", items: validationResult.warnings.filter((item) => item.scope === "viewpoint") },
     { title: "Other warnings", items: validationResult.warnings.filter((item) => !item.scope || (item.scope !== "required-rule" && item.scope !== "viewpoint")) }
   ].filter((group) => group.items.length > 0) : [];
+  const validationStatus = validationResult
+    ? validationResult.valid
+      ? validationResult.warnings.length > 0 ? "Diagramm gültig mit Warnungen" : "Diagramm gültig"
+      : "Diagramm ungültig"
+    : "";
 
   return (
     <div className="diagram-editor">
@@ -1082,7 +1117,7 @@ function DiagramEditorInner({
       {/* ── Connect mode banner ─────────────────────────────────────────────── */}
       {validationResult && (
         <div className={`diagram-validation-panel${validationResult.valid ? " diagram-validation-panel--valid" : ""}`}>
-          <strong>{validationResult.valid ? "Diagramm gueltig" : "Diagramm ungueltig"}</strong>
+          <strong>{validationStatus}</strong>
           {validationGroups.map((group) => (
             <div key={group.title} className="diagram-validation-group">
               <span className="muted">{group.title}</span>
@@ -1181,11 +1216,11 @@ function DiagramEditorInner({
       {pendingAdd && (() => {
         const comp = components.find((c) => c.id === pendingAdd.compId);
         return (
-          <div className="diagram-suggestion-overlay">
+          <div className="diagram-suggestion-overlay" role="dialog" aria-modal="true" aria-labelledby="diagram-suggestion-title">
             <div className="diagram-suggestion-card">
               <div className="diagram-suggestion-header">
-                <strong>Verbindungen gefunden</strong>
-                <button className="sb-close-btn" onClick={() => setPendingAdd(null)}><X size={14} /></button>
+                <strong id="diagram-suggestion-title">Verbindungen gefunden</strong>
+                <button className="sb-close-btn" disabled={pendingAddSaving} onClick={() => setPendingAdd(null)}><X size={14} /></button>
               </div>
               <p className="muted">
                 <strong style={{ color: "#172033" }}>{comp?.name}</strong> hat bestehende Verbindungen.
@@ -1213,9 +1248,10 @@ function DiagramEditorInner({
                   );
                 })}
               </div>
+              {pendingAddError && <div className="error-banner" role="alert">{pendingAddError}</div>}
               <div className="diagram-suggestion-actions">
-                <button className="sb-save-btn" style={{ margin: 0 }} onClick={confirmAdd}>Mit Auswahl hinzufügen</button>
-                <button onClick={addCompOnly}>Nur Komponente</button>
+                <button className="sb-save-btn" style={{ margin: 0 }} disabled={pendingAddSaving} onClick={confirmAdd}>Mit Auswahl hinzufügen</button>
+                <button disabled={pendingAddSaving} onClick={addCompOnly}>Nur Komponente</button>
               </div>
             </div>
           </div>

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { applyMetamodelDefinition, extractMetamodelDefinition } from "../Sidebar/metamodelConfig.js";
 import { validateDiagram } from "../Sidebar/metamodelRules.js";
 import type { SidebarState } from "../Sidebar/sidebarTypes.js";
-import { configuredStorageBackend, type SidebarStateRepository } from "./databaseSidebarRepository.js";
+import { assertDiagramMemberships, configuredStorageBackend, type SidebarStateRepository } from "./databaseSidebarRepository.js";
 import {
   assertValidConnectionEndpoints,
   diagramWithContents,
@@ -105,6 +105,22 @@ describe("database persistence repository contract", () => {
     expect(schema).toMatch(/targetComponent\s+ComponentInstance[\s\S]*onDelete: Cascade/);
     expect(schema).toMatch(/model Company[\s\S]*model User/);
     expect(schema).toMatch(/model Diagram[\s\S]*companyId\s+String/);
+    expect(schema).toMatch(/model DiagramComponentMembership[\s\S]*position\s+Json[\s\S]*@db\.JsonB/);
+    expect(schema).toMatch(/model DiagramConnectionMembership[\s\S]*connection\s+ConnectionInstance[\s\S]*onDelete: Cascade/);
+  });
+
+  it("allows the same component and connection instances in multiple diagrams", () => {
+    const secondDiagram = {
+      ...state.diagrams[0],
+      id: "diagram-2",
+      name: "Second diagram",
+      positions: { source: { x: 100, y: 120 }, target: { x: 300, y: 120 } }
+    };
+
+    expect(() => assertDiagramMemberships({
+      ...state,
+      diagrams: [...state.diagrams, secondDiagram]
+    })).not.toThrow();
   });
 
   it("isolates persisted sidebar state by companyId", async () => {

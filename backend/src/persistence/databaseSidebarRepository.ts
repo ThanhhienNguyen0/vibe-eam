@@ -2,7 +2,6 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import type {
   ComponentInstance,
   ConnectionInstance,
-  DiagramPosition,
   SidebarState
 } from "../Sidebar/sidebarTypes.js";
 import { removeDanglingInstanceReferences } from "./stateOperations.js";
@@ -19,13 +18,10 @@ const stringArray = (value: Prisma.JsonValue | null | undefined): string[] =>
 const objectValue = <T extends object>(value: Prisma.JsonValue | null | undefined, fallback: T): T =>
   value && typeof value === "object" && !Array.isArray(value) ? value as T : fallback;
 
-function memberships(state: SidebarState): {
-  componentDiagram: Map<string, { diagramId: string; position: DiagramPosition }>;
-  connectionDiagram: Map<string, string>;
-} {
-  const componentDiagram = new Map<string, { diagramId: string; position: DiagramPosition }>();
-  const connectionDiagram = new Map<string, string>();
+export function assertDiagramMemberships(state: SidebarState): void {
   const viewpointIds = new Set(state.viewpoints.map((viewpoint) => viewpoint.id));
+  const componentIds = new Set(state.components.map((component) => component.id));
+  const connections = new Map(state.connections.map((connection) => [connection.id, connection]));
 
   for (const diagram of state.diagrams) {
     if (diagram.metamodelId && diagram.metamodelId !== state.metamodel.id) {
@@ -35,36 +31,27 @@ function memberships(state: SidebarState): {
       throw new Error(`Diagram '${diagram.id}' must reference a viewpoint from the authenticated company.`);
     }
     for (const componentId of diagram.componentIds) {
-      const previous = componentDiagram.get(componentId);
-      if (previous && previous.diagramId !== diagram.id) {
-        throw new Error(`ComponentInstance '${componentId}' belongs to more than one diagram; the database MVP supports one diagram per instance.`);
+      if (!componentIds.has(componentId)) {
+        throw new Error(`Diagram '${diagram.id}' references missing ComponentInstance '${componentId}'.`);
       }
-      componentDiagram.set(componentId, { diagramId: diagram.id, position: diagram.positions[componentId] ?? { x: 0, y: 0 } });
     }
+    const diagramComponentIds = new Set(diagram.componentIds);
     for (const connectionId of diagram.connectionIds) {
-      const previous = connectionDiagram.get(connectionId);
-      if (previous && previous !== diagram.id) {
-        throw new Error(`ConnectionInstance '${connectionId}' belongs to more than one diagram.`);
+      const connection = connections.get(connectionId);
+      if (!connection) {
+        throw new Error(`Diagram '${diagram.id}' references missing ConnectionInstance '${connectionId}'.`);
       }
-      connectionDiagram.set(connectionId, diagram.id);
+      if (!diagramComponentIds.has(connection.sourceComponentId) || !diagramComponentIds.has(connection.targetComponentId)) {
+        throw new Error(`ConnectionInstance '${connectionId}' and both endpoints must belong to diagram '${diagram.id}'.`);
+      }
     }
   }
 
-  const componentIds = new Set(state.components.map((component) => component.id));
   for (const connection of state.connections) {
     if (!componentIds.has(connection.sourceComponentId) || !componentIds.has(connection.targetComponentId)) {
       throw new Error(`ConnectionInstance '${connection.id}' must reference valid source and target ComponentInstances.`);
     }
-    const diagramId = connectionDiagram.get(connection.id);
-    if (diagramId && (
-      componentDiagram.get(connection.sourceComponentId)?.diagramId !== diagramId ||
-      componentDiagram.get(connection.targetComponentId)?.diagramId !== diagramId
-    )) {
-      throw new Error(`ConnectionInstance '${connection.id}' and both endpoints must belong to diagram '${diagramId}'.`);
-    }
   }
-
-  return { componentDiagram, connectionDiagram };
 }
 
 function withoutUndefined<T extends object>(value: T): T {
@@ -88,7 +75,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         tx.validationRule.findMany({ where: { metamodelId: metamodel.id }, orderBy: { id: "asc" } }),
         tx.diagram.findMany({
           where: { companyId, metamodelId: metamodel.id },
-          include: { componentInstances: true, connectionInstances: true },
+          include: { componentMemberships: true, connectionMemberships: true },
           orderBy: { createdAt: "asc" }
         }),
         tx.componentInstance.findMany({ where: { companyId, componentType: { metamodelId: metamodel.id } }, orderBy: { id: "asc" } }),
@@ -213,11 +200,11 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           description: item.description,
           metamodelId: item.metamodelId,
           viewpointId: item.viewpointId ?? undefined,
-          componentIds: item.componentInstances.map((component) => component.id),
-          connectionIds: item.connectionInstances.map((connection) => connection.id),
-          positions: Object.fromEntries(item.componentInstances.map((component) => [
-            component.id,
-            objectValue(component.position, { x: 0, y: 0 })
+          componentIds: item.componentMemberships.map((membership) => membership.componentId),
+          connectionIds: item.connectionMemberships.map((membership) => membership.connectionId),
+          positions: Object.fromEntries(item.componentMemberships.map((membership) => [
+            membership.componentId,
+            objectValue(membership.position, { x: 0, y: 0 })
           ]))
         }))
       };
@@ -244,7 +231,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
 
   async write(state: SidebarState, companyId: string): Promise<SidebarState> {
     state = removeDanglingInstanceReferences(state);
-    const { componentDiagram, connectionDiagram } = memberships(state);
+    assertDiagramMemberships(state);
     const metamodelId = state.metamodel.id;
     await this.assertTenantIdsAvailable(state, companyId);
 
@@ -382,22 +369,18 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         await tx.diagram.upsert({ where: { id: item.id }, create: { id: item.id, ...data }, update: data });
       }
       for (const item of state.components) {
-        const membership = componentDiagram.get(item.id);
         const data = {
           companyId,
-          diagramId: membership?.diagramId,
           componentTypeId: item.componentTypeId,
           name: item.name,
           description: item.description,
-          properties: json(item.properties),
-          position: json(membership?.position ?? {})
+          properties: json(item.properties)
         };
         await tx.componentInstance.upsert({ where: { id: item.id }, create: { id: item.id, ...data }, update: data });
       }
       for (const item of state.connections) {
         const data = {
           companyId,
-          diagramId: connectionDiagram.get(item.id),
           connectionTypeId: item.connectionTypeId,
           sourceComponentId: item.sourceComponentId,
           targetComponentId: item.targetComponentId,
@@ -406,6 +389,25 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           properties: json(item.properties ?? {})
         };
         await tx.connectionInstance.upsert({ where: { id: item.id }, create: { id: item.id, ...data }, update: data });
+      }
+
+      for (const diagram of state.diagrams) {
+        await tx.diagramComponentMembership.deleteMany({ where: { diagramId: diagram.id } });
+        if (diagram.componentIds.length > 0) {
+          await tx.diagramComponentMembership.createMany({
+            data: diagram.componentIds.map((componentId) => ({
+              diagramId: diagram.id,
+              componentId,
+              position: json(diagram.positions[componentId] ?? { x: 0, y: 0 })
+            }))
+          });
+        }
+        await tx.diagramConnectionMembership.deleteMany({ where: { diagramId: diagram.id } });
+        if (diagram.connectionIds.length > 0) {
+          await tx.diagramConnectionMembership.createMany({
+            data: diagram.connectionIds.map((connectionId) => ({ diagramId: diagram.id, connectionId }))
+          });
+        }
       }
 
       const missing = (ids: string[]) => ids.length > 0 ? { id: { notIn: ids } } : {};

@@ -68,156 +68,156 @@ model Metamodel {
 }
 
 model ComponentType {
-  id                      String              @id
-  metamodelId             String
-  name                    String
-  description             String              @default("")
-  layer                   String?
-  category                String?
-  color                   String
-  icon                    String
-  shape                   String?
-  customPropertyKeys      Json                @default("[]") @db.JsonB
-  isRequiredInViewpoint   Boolean?
-  allowedInViewpointIds   Json                @default("[]") @db.JsonB
-  isAbstract              Boolean             @default(false)
-  isStakeholderRelevant   Boolean             @default(false)
-  metamodel               Metamodel           @relation(fields: [metamodelId], references: [id], onDelete: Cascade)
-  sourceConnectionRules   ConnectionRule[]    @relation("ConnectionRuleSourceType")
-  targetConnectionRules   ConnectionRule[]    @relation("ConnectionRuleTargetType")
-  sourceValidationRules   ValidationRule[]    @relation("ValidationRuleSourceType")
-  targetValidationRules   ValidationRule[]    @relation("ValidationRuleTargetType")
-  componentInstances      ComponentInstance[]
+  id                    String              @id
+  metamodelId           String
+  name                  String
+  description           String              @default("")
+  layer                 String?
+  category              String?
+  color                 String
+  icon                  String
+  shape                 String?
+  customPropertyKeys    Json                @default("[]") @db.JsonB
+  isRequiredInViewpoint Boolean?
+  allowedInViewpointIds Json                @default("[]") @db.JsonB
+  isAbstract            Boolean             @default(false)
+  isStakeholderRelevant Boolean             @default(false)
+  metamodel             Metamodel           @relation(fields: [metamodelId], references: [id], onDelete: Cascade)
+  sourceConnectionRules ConnectionRule[]    @relation("ConnectionRuleSourceType")
+  targetConnectionRules ConnectionRule[]    @relation("ConnectionRuleTargetType")
+  sourceValidationRules ValidationRule[]    @relation("ValidationRuleSourceType")
+  targetValidationRules ValidationRule[]    @relation("ValidationRuleTargetType")
+  componentInstances    ComponentInstance[]
 
   @@index([metamodelId])
 }
 
 model ConnectionType {
-  id                       String               @id
-  metamodelId              String
-  name                     String
-  description              String               @default("")
-  directionDescription     String?
-  color                    String
-  lineStyle                String
-  semanticCategory         String?
-  category                 String?
-  allowedSourceTypeIds     Json                 @default("[]") @db.JsonB
-  allowedTargetTypeIds     Json                 @default("[]") @db.JsonB
-  requiredForSourceTypes   Json                 @default("[]") @db.JsonB
-  requiredForTargetTypes   Json                 @default("[]") @db.JsonB
-  metamodel                Metamodel            @relation(fields: [metamodelId], references: [id], onDelete: Cascade)
-  connectionRules          ConnectionRule[]
-  requiredValidationRules  ValidationRule[]     @relation("ValidationRuleConnectionType")
-  connectionInstances      ConnectionInstance[]
+  id                      String               @id
+  metamodelId             String
+  name                    String
+  description             String               @default("")
+  directionDescription    String?
+  color                   String
+  lineStyle               String
+  semanticCategory        String?
+  category                String?
+  allowedSourceTypeIds    Json                 @default("[]") @db.JsonB
+  allowedTargetTypeIds    Json                 @default("[]") @db.JsonB
+  requiredForSourceTypes  Json                 @default("[]") @db.JsonB
+  requiredForTargetTypes  Json                 @default("[]") @db.JsonB
+  metamodel               Metamodel            @relation(fields: [metamodelId], references: [id], onDelete: Cascade)
+  connectionRules         ConnectionRule[]
+  requiredValidationRules ValidationRule[]     @relation("ValidationRuleConnectionType")
+  connectionInstances     ConnectionInstance[]
 
   @@index([metamodelId])
 }
 
 model ConnectionRule {
-  id                    String        @id
+  id                    String         @id
   metamodelId           String
   sourceComponentTypeId String
   connectionTypeId      String
   targetComponentTypeId String
-  allowed               Boolean       @default(true)
-  required              Boolean       @default(false)
+  allowed               Boolean        @default(true)
+  required              Boolean        @default(false)
   severity              String
-  description           String        @default("")
-  rationale             String        @default("")
-  viewpointIds          Json          @default("[]") @db.JsonB
+  description           String         @default("")
+  rationale             String         @default("")
+  viewpointIds          Json           @default("[]") @db.JsonB
   minOccurrences        Int?
   maxOccurrences        Int?
-  metamodel             Metamodel     @relation(fields: [metamodelId], references: [id], onDelete: Cascade)
-  sourceComponentType   ComponentType @relation("ConnectionRuleSourceType", fields: [sourceComponentTypeId], references: [id], onDelete: Cascade)
+  metamodel             Metamodel      @relation(fields: [metamodelId], references: [id], onDelete: Cascade)
+  sourceComponentType   ComponentType  @relation("ConnectionRuleSourceType", fields: [sourceComponentTypeId], references: [id], onDelete: Cascade)
   connectionType        ConnectionType @relation(fields: [connectionTypeId], references: [id], onDelete: Cascade)
-  targetComponentType   ComponentType @relation("ConnectionRuleTargetType", fields: [targetComponentTypeId], references: [id], onDelete: Cascade)
+  targetComponentType   ComponentType  @relation("ConnectionRuleTargetType", fields: [targetComponentTypeId], references: [id], onDelete: Cascade)
 
   @@unique([metamodelId, sourceComponentTypeId, connectionTypeId, targetComponentTypeId])
   @@index([metamodelId])
 }
 
 model Viewpoint {
-  id                         String           @id
-  metamodelId                String
-  name                       String
-  description                String           @default("")
-  stakeholderRole            String           @default("")
-  purpose                    String           @default("")
-  visibleLayerIds            Json             @default("[]") @db.JsonB
-  allowedComponentTypeIds    Json             @default("[]") @db.JsonB
-  allowedConnectionTypeIds   Json             @default("[]") @db.JsonB
-  requiredComponentTypeIds   Json             @default("[]") @db.JsonB
-  requiredConnectionTypeIds  Json             @default("[]") @db.JsonB
-  requiredConnectionRuleIds  Json             @default("[]") @db.JsonB
-  maxVisibleLayers           Int?
-  metamodel                  Metamodel        @relation(fields: [metamodelId], references: [id], onDelete: Cascade)
-  viewpointRules             ViewpointRule[]
-  validationRules            ValidationRule[]
-  diagrams                   Diagram[]
+  id                        String           @id
+  metamodelId               String
+  name                      String
+  description               String           @default("")
+  stakeholderRole           String           @default("")
+  purpose                   String           @default("")
+  visibleLayerIds           Json             @default("[]") @db.JsonB
+  allowedComponentTypeIds   Json             @default("[]") @db.JsonB
+  allowedConnectionTypeIds  Json             @default("[]") @db.JsonB
+  requiredComponentTypeIds  Json             @default("[]") @db.JsonB
+  requiredConnectionTypeIds Json             @default("[]") @db.JsonB
+  requiredConnectionRuleIds Json             @default("[]") @db.JsonB
+  maxVisibleLayers          Int?
+  metamodel                 Metamodel        @relation(fields: [metamodelId], references: [id], onDelete: Cascade)
+  viewpointRules            ViewpointRule[]
+  validationRules           ValidationRule[]
+  diagrams                  Diagram[]
 
   @@index([metamodelId])
 }
 
 model ViewpointRule {
-  id                         String      @id
-  metamodelId                String
-  viewpointId                String
-  allowedComponentTypeIds    Json        @default("[]") @db.JsonB
-  allowedConnectionTypeIds   Json        @default("[]") @db.JsonB
-  allowedConnectionRuleIds   Json        @default("[]") @db.JsonB
-  requiredComponentTypeIds   Json        @default("[]") @db.JsonB
-  requiredConnectionTypeIds  Json        @default("[]") @db.JsonB
-  requiredConnectionRuleIds  Json        @default("[]") @db.JsonB
-  editableComponentTypeIds   Json        @default("[]") @db.JsonB
-  visibleComponentTypeIds    Json        @default("[]") @db.JsonB
-  description                String?
-  severity                   String?
-  metamodel                  Metamodel   @relation(fields: [metamodelId], references: [id], onDelete: Cascade)
-  viewpoint                  Viewpoint   @relation(fields: [viewpointId], references: [id], onDelete: Cascade)
+  id                        String    @id
+  metamodelId               String
+  viewpointId               String
+  allowedComponentTypeIds   Json      @default("[]") @db.JsonB
+  allowedConnectionTypeIds  Json      @default("[]") @db.JsonB
+  allowedConnectionRuleIds  Json      @default("[]") @db.JsonB
+  requiredComponentTypeIds  Json      @default("[]") @db.JsonB
+  requiredConnectionTypeIds Json      @default("[]") @db.JsonB
+  requiredConnectionRuleIds Json      @default("[]") @db.JsonB
+  editableComponentTypeIds  Json      @default("[]") @db.JsonB
+  visibleComponentTypeIds   Json      @default("[]") @db.JsonB
+  description               String?
+  severity                  String?
+  metamodel                 Metamodel @relation(fields: [metamodelId], references: [id], onDelete: Cascade)
+  viewpoint                 Viewpoint @relation(fields: [viewpointId], references: [id], onDelete: Cascade)
 
   @@unique([metamodelId, viewpointId])
   @@index([metamodelId])
 }
 
 model ValidationRule {
-  id                         String          @id
-  metamodelId                String
-  name                       String
-  description                String          @default("")
-  scope                      String
-  viewpointId                String?
-  sourceComponentTypeId      String?
-  requiredConnectionTypeId   String?
-  targetComponentTypeId      String?
-  direction                  String
-  minOccurrences             Int             @default(0)
-  severity                   String
-  message                    String
-  active                     Boolean         @default(true)
-  metamodel                  Metamodel       @relation(fields: [metamodelId], references: [id], onDelete: Cascade)
-  viewpoint                  Viewpoint?      @relation(fields: [viewpointId], references: [id], onDelete: SetNull)
-  sourceComponentType        ComponentType?  @relation("ValidationRuleSourceType", fields: [sourceComponentTypeId], references: [id], onDelete: SetNull)
-  requiredConnectionType     ConnectionType? @relation("ValidationRuleConnectionType", fields: [requiredConnectionTypeId], references: [id], onDelete: SetNull)
-  targetComponentType        ComponentType?  @relation("ValidationRuleTargetType", fields: [targetComponentTypeId], references: [id], onDelete: SetNull)
+  id                       String          @id
+  metamodelId              String
+  name                     String
+  description              String          @default("")
+  scope                    String
+  viewpointId              String?
+  sourceComponentTypeId    String?
+  requiredConnectionTypeId String?
+  targetComponentTypeId    String?
+  direction                String
+  minOccurrences           Int             @default(0)
+  severity                 String
+  message                  String
+  active                   Boolean         @default(true)
+  metamodel                Metamodel       @relation(fields: [metamodelId], references: [id], onDelete: Cascade)
+  viewpoint                Viewpoint?      @relation(fields: [viewpointId], references: [id], onDelete: SetNull)
+  sourceComponentType      ComponentType?  @relation("ValidationRuleSourceType", fields: [sourceComponentTypeId], references: [id], onDelete: SetNull)
+  requiredConnectionType   ConnectionType? @relation("ValidationRuleConnectionType", fields: [requiredConnectionTypeId], references: [id], onDelete: SetNull)
+  targetComponentType      ComponentType?  @relation("ValidationRuleTargetType", fields: [targetComponentTypeId], references: [id], onDelete: SetNull)
 
   @@index([metamodelId])
 }
 
 model Diagram {
-  id                  String               @id
-  companyId           String
-  metamodelId         String
-  viewpointId         String?
-  name                String
-  description         String               @default("")
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  metamodel           Metamodel            @relation(fields: [metamodelId], references: [id], onDelete: Cascade)
-  viewpoint           Viewpoint?           @relation(fields: [viewpointId], references: [id], onDelete: SetNull)
-  componentInstances  ComponentInstance[]
-  connectionInstances ConnectionInstance[]
-  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id                    String                        @id
+  companyId             String
+  metamodelId           String
+  viewpointId           String?
+  name                  String
+  description           String                        @default("")
+  createdAt             DateTime                      @default(now())
+  updatedAt             DateTime                      @updatedAt
+  metamodel             Metamodel                     @relation(fields: [metamodelId], references: [id], onDelete: Cascade)
+  viewpoint             Viewpoint?                    @relation(fields: [viewpointId], references: [id], onDelete: SetNull)
+  componentMemberships  DiagramComponentMembership[]
+  connectionMemberships DiagramConnectionMembership[]
+  company               Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
   @@index([metamodelId])
@@ -225,44 +225,60 @@ model Diagram {
 }
 
 model ComponentInstance {
-  id                    String               @id
-  companyId             String
-  diagramId             String?
-  componentTypeId       String
-  name                  String
-  description           String               @default("")
-  properties            Json                 @default("{}") @db.JsonB
-  position              Json                 @default("{}") @db.JsonB
-  diagram               Diagram?             @relation(fields: [diagramId], references: [id], onDelete: Cascade)
-  componentType         ComponentType        @relation(fields: [componentTypeId], references: [id], onDelete: Cascade)
-  outgoingConnections   ConnectionInstance[] @relation("ConnectionSource")
-  incomingConnections   ConnectionInstance[] @relation("ConnectionTarget")
-  company               Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id                  String                       @id
+  companyId           String
+  componentTypeId     String
+  name                String
+  description         String                       @default("")
+  properties          Json                         @default("{}") @db.JsonB
+  componentType       ComponentType                @relation(fields: [componentTypeId], references: [id], onDelete: Cascade)
+  outgoingConnections ConnectionInstance[]         @relation("ConnectionSource")
+  incomingConnections ConnectionInstance[]         @relation("ConnectionTarget")
+  diagramMemberships  DiagramComponentMembership[]
+  company             Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
-  @@index([diagramId])
   @@index([componentTypeId])
 }
 
 model ConnectionInstance {
-  id                   String            @id
-  companyId            String
-  diagramId            String?
-  connectionTypeId     String
-  sourceComponentId    String
-  targetComponentId    String
-  name                 String            @default("")
-  description          String            @default("")
-  properties           Json              @default("{}") @db.JsonB
-  diagram              Diagram?          @relation(fields: [diagramId], references: [id], onDelete: Cascade)
-  connectionType       ConnectionType    @relation(fields: [connectionTypeId], references: [id], onDelete: Cascade)
-  sourceComponent      ComponentInstance @relation("ConnectionSource", fields: [sourceComponentId], references: [id], onDelete: Cascade)
-  targetComponent      ComponentInstance @relation("ConnectionTarget", fields: [targetComponentId], references: [id], onDelete: Cascade)
-  company              Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id                 String                        @id
+  companyId          String
+  connectionTypeId   String
+  sourceComponentId  String
+  targetComponentId  String
+  name               String                        @default("")
+  description        String                        @default("")
+  properties         Json                          @default("{}") @db.JsonB
+  connectionType     ConnectionType                @relation(fields: [connectionTypeId], references: [id], onDelete: Cascade)
+  sourceComponent    ComponentInstance             @relation("ConnectionSource", fields: [sourceComponentId], references: [id], onDelete: Cascade)
+  targetComponent    ComponentInstance             @relation("ConnectionTarget", fields: [targetComponentId], references: [id], onDelete: Cascade)
+  diagramMemberships DiagramConnectionMembership[]
+  company            Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
-  @@index([diagramId])
   @@index([connectionTypeId])
   @@index([sourceComponentId])
   @@index([targetComponentId])
+}
+
+model DiagramComponentMembership {
+  diagramId   String
+  componentId String
+  position    Json              @default("{}") @db.JsonB
+  diagram     Diagram           @relation(fields: [diagramId], references: [id], onDelete: Cascade)
+  component   ComponentInstance @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@id([diagramId, componentId])
+  @@index([componentId])
+}
+
+model DiagramConnectionMembership {
+  diagramId    String
+  connectionId String
+  diagram      Diagram            @relation(fields: [diagramId], references: [id], onDelete: Cascade)
+  connection   ConnectionInstance @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@id([diagramId, connectionId])
+  @@index([connectionId])
 }

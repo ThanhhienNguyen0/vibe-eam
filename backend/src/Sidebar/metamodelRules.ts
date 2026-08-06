@@ -339,6 +339,35 @@ export function validateRequiredRules(
   return result;
 }
 
+function validateGlobalRequiredConnectionRules(
+  diagram: Diagram,
+  state: SidebarState
+): ValidationResult {
+  const result = emptyResult();
+  const diagramComponents = diagram.componentIds
+    .map((id) => state.components.find((component) => component.id === id))
+    .filter((component): component is ComponentInstance => Boolean(component));
+  const diagramConnections = diagram.connectionIds
+    .map((id) => state.connections.find((connection) => connection.id === id))
+    .filter((connection): connection is ConnectionInstance => Boolean(connection));
+  const presentComponentTypeIds = new Set(diagramComponents.map((component) => component.componentTypeId));
+
+  for (const rule of state.connectionRules.filter((item) => item.required && presentComponentTypeIds.has(item.sourceComponentTypeId))) {
+    const count = diagramConnections.filter((connection) => matchingConnectionRule(connection, state)?.id === rule.id).length;
+    const min = rule.minOccurrences ?? 1;
+    if (count < min) {
+      result.missingRequiredConnectionRuleIds.push(rule.id);
+      add(result, message("error", "REQUIRED_CONNECTION_RULE_MISSING", `The active metamodel requires ${rule.description}.`, diagram.id, rule.id, "required-rule", "connection-rule"));
+    }
+    if (typeof rule.maxOccurrences === "number" && count > rule.maxOccurrences) {
+      add(result, message(rule.severity, "CONNECTION_RULE_MAX_EXCEEDED", `${rule.description} may occur at most ${rule.maxOccurrences} times.`, diagram.id, rule.id, "required-rule", "connection-rule"));
+    }
+  }
+
+  result.valid = result.errors.length === 0;
+  return result;
+}
+
 export function validateValidationRules(
   diagram: Diagram,
   state: SidebarState
@@ -439,6 +468,8 @@ export function validateDiagram(
   if (viewpoint) {
     merge(result, validateViewpointCompliance(diagram, viewpoint, state));
     if (includeRequiredRules) merge(result, validateRequiredRules(diagram, viewpoint, state));
+  } else if (includeRequiredRules) {
+    merge(result, validateGlobalRequiredConnectionRules(diagram, state));
   }
 
   if (includeRequiredRules) merge(result, validateValidationRules(diagram, state));

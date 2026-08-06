@@ -198,6 +198,20 @@ describe("Sidebar metamodel connection rules", () => {
     expect(result.valid).toBe(true);
   });
 
+  it("allows the same connection type from one source to multiple valid targets", () => {
+    const extendedState: SidebarState = {
+      ...state,
+      components: [
+        ...state.components,
+        { id: "data-2", name: "Invoice Data 2", componentTypeId: "ct-data-object", properties: {}, description: "" }
+      ]
+    };
+    const first = validateConnectionInstance({ id: "uses-1", name: "", connectionTypeId: "conn-uses", sourceComponentId: "app", targetComponentId: "data", description: "" }, extendedState);
+    const second = validateConnectionInstance({ id: "uses-2", name: "", connectionTypeId: "conn-uses", sourceComponentId: "app", targetComponentId: "data-2", description: "" }, extendedState);
+    expect(first.valid).toBe(true);
+    expect(second.valid).toBe(true);
+  });
+
   it("rejects Data Object --serves--> Business Capability", () => {
     const result = validateConnectionInstance(state.connections[1], state);
     expect(result.valid).toBe(false);
@@ -252,6 +266,13 @@ describe("Sidebar metamodel connection rules", () => {
     const diagram = { id: "d4a", name: "Application", description: "", componentIds: ["app"], connectionIds: [], positions: {} };
     const result = validateDiagram(diagram, state);
     expect(result.warnings.map((item) => item.message)).toContain("ERP System: Application should serve at least one Business Process.");
+  });
+
+  it("checks required ConnectionRules without a selected viewpoint", () => {
+    const diagram = { id: "d4-required", name: "Application", description: "", componentIds: ["app"], connectionIds: [], positions: {} };
+    const result = validateDiagram(diagram, state);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((item) => item.code === "REQUIRED_CONNECTION_RULE_MISSING" && item.ruleId === "rule-app-serves-proc")).toBe(true);
   });
 
   it("ValidationRule warns when Application has no technology dependency", () => {
