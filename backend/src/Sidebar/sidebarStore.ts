@@ -515,19 +515,32 @@ const EAM_VIEWPOINTS: Viewpoint[] = [
   }
 ];
 
-function connectionRuleIdsForViewpoint(viewpointId: string): string[] {
-  return DEFAULT_CONNECTION_RULES
+function connectionRuleIdsForViewpoint(
+  viewpointId: string,
+  connectionRules: ConnectionRule[] = DEFAULT_CONNECTION_RULES
+): string[] {
+  return connectionRules
     .filter((rule) => !rule.viewpointIds || rule.viewpointIds.length === 0 || rule.viewpointIds.includes(viewpointId))
     .map((rule) => rule.id);
 }
 
-function viewpointRuleFromViewpoint(viewpoint: Viewpoint): ViewpointRule {
+function derivedViewpointRuleId(viewpointId: string): string {
+  const separator = viewpointId.lastIndexOf(":");
+  return separator === -1
+    ? `vpr-${viewpointId}`
+    : `${viewpointId.slice(0, separator + 1)}vpr-${viewpointId.slice(separator + 1)}`;
+}
+
+function viewpointRuleFromViewpoint(
+  viewpoint: Viewpoint,
+  connectionRules: ConnectionRule[] = DEFAULT_CONNECTION_RULES
+): ViewpointRule {
   return {
-    id: `vpr-${viewpoint.id}`,
+    id: derivedViewpointRuleId(viewpoint.id),
     viewpointId: viewpoint.id,
     allowedComponentTypeIds: viewpoint.allowedComponentTypeIds,
     allowedConnectionTypeIds: viewpoint.allowedConnectionTypeIds,
-    allowedConnectionRuleIds: connectionRuleIdsForViewpoint(viewpoint.id),
+    allowedConnectionRuleIds: connectionRuleIdsForViewpoint(viewpoint.id, connectionRules),
     requiredComponentTypeIds: viewpoint.requiredComponentTypeIds,
     requiredConnectionTypeIds: viewpoint.requiredConnectionTypeIds,
     requiredConnectionRuleIds: viewpoint.requiredConnectionRuleIds ?? [],
@@ -537,7 +550,7 @@ function viewpointRuleFromViewpoint(viewpoint: Viewpoint): ViewpointRule {
   };
 }
 
-const EAM_VIEWPOINT_RULES: ViewpointRule[] = EAM_VIEWPOINTS.map(viewpointRuleFromViewpoint);
+const EAM_VIEWPOINT_RULES: ViewpointRule[] = EAM_VIEWPOINTS.map((viewpoint) => viewpointRuleFromViewpoint(viewpoint));
 
 const EAM_VALIDATION_RULES: ValidationRule[] = [
   {
@@ -928,30 +941,34 @@ function upsertById<T extends { id: string }>(items: T[], seeds: T[]): T[] {
   return [...items, ...seeds.filter((seed) => !existingIds.has(seed.id))];
 }
 
+function localId(id: string): string {
+  return id.slice(id.lastIndexOf(":") + 1);
+}
+
 function isLegacyConnectionRule(rule: ConnectionRule): boolean {
-  return rule.id.startsWith("legacy-rule-");
+  return localId(rule.id).startsWith("legacy-rule-");
 }
 
 function withoutLegacyConnectionRuleRefs(rule: ViewpointRule): ViewpointRule {
   return {
     ...rule,
-    allowedConnectionRuleIds: rule.allowedConnectionRuleIds.filter((id) => !id.startsWith("legacy-rule-")),
-    requiredConnectionRuleIds: rule.requiredConnectionRuleIds.filter((id) => !id.startsWith("legacy-rule-"))
+    allowedConnectionRuleIds: rule.allowedConnectionRuleIds.filter((id) => !localId(id).startsWith("legacy-rule-")),
+    requiredConnectionRuleIds: rule.requiredConnectionRuleIds.filter((id) => !localId(id).startsWith("legacy-rule-"))
   };
 }
 
-function normalizeSidebarState(raw: Partial<SidebarState>): SidebarState {
-  const metamodel = { ...DEFAULT_METAMODEL, ...(raw.metamodel ?? {}), updatedAt: raw.metamodel?.updatedAt ?? DEFAULT_METAMODEL.updatedAt };
-  const componentTypes = upsertById(raw.componentTypes ?? [], EAM_COMPONENT_TYPES).map((type) => {
-    if (type.id === "ct-app") return { ...type, category: type.category ?? "EAM", layer: type.layer ?? "Application" };
-    if (type.id === "ct-proc") return { ...type, category: type.category ?? "EAM", layer: type.layer ?? "Business", shape: type.shape ?? "process" };
-    if (type.id === "ct-server") return { ...type, layer: type.layer ?? "Technology" };
-    if (type.id === "ct-db") return { ...type, layer: type.layer ?? "Data" };
+function normalizeSidebarState(raw: Partial<SidebarState>, seeds: SidebarState = defaultState): SidebarState {
+  const metamodel = { ...seeds.metamodel, ...(raw.metamodel ?? {}), updatedAt: raw.metamodel?.updatedAt ?? seeds.metamodel.updatedAt };
+  const componentTypes = upsertById(raw.componentTypes ?? [], seeds.componentTypes).map((type) => {
+    if (localId(type.id) === "ct-app") return { ...type, category: type.category ?? "EAM", layer: type.layer ?? "Application" };
+    if (localId(type.id) === "ct-proc") return { ...type, category: type.category ?? "EAM", layer: type.layer ?? "Business", shape: type.shape ?? "process" };
+    if (localId(type.id) === "ct-server") return { ...type, layer: type.layer ?? "Technology" };
+    if (localId(type.id) === "ct-db") return { ...type, layer: type.layer ?? "Data" };
     return { ...type, layer: type.layer ?? type.category ?? "Business" };
   });
 
-  const connectionTypes = upsertById(raw.connectionTypes ?? [], EAM_CONNECTION_TYPES).map((type) => {
-    if (type.id === "conn-dep") {
+  const connectionTypes = upsertById(raw.connectionTypes ?? [], seeds.connectionTypes).map((type) => {
+    if (localId(type.id) === "conn-dep") {
       return {
         ...type,
         name: type.name === "depends on" ? "depends_on" : type.name,
@@ -965,24 +982,24 @@ function normalizeSidebarState(raw: Partial<SidebarState>): SidebarState {
     };
   });
 
-  const components = upsertById(raw.components ?? [], STARTER_COMPONENTS);
-  const connections = upsertById(raw.connections ?? [], STARTER_CONNECTIONS);
-  const viewpoints = upsertById(raw.viewpoints ?? [], EAM_VIEWPOINTS);
+  const components = upsertById(raw.components ?? [], seeds.components);
+  const connections = upsertById(raw.connections ?? [], seeds.connections);
+  const viewpoints = upsertById(raw.viewpoints ?? [], seeds.viewpoints);
   const persistedConnectionRules = (raw.connectionRules ?? []).filter((rule) => !isLegacyConnectionRule(rule));
-  const connectionRules = upsertById(persistedConnectionRules, DEFAULT_CONNECTION_RULES);
+  const connectionRules = upsertById(persistedConnectionRules, seeds.connectionRules);
   const derivedViewpointRules = viewpoints.map((viewpoint) => ({
-    ...viewpointRuleFromViewpoint(viewpoint),
+    ...viewpointRuleFromViewpoint(viewpoint, connectionRules),
     allowedConnectionRuleIds: connectionRules
       .filter((rule) => !rule.viewpointIds || rule.viewpointIds.length === 0 || rule.viewpointIds.includes(viewpoint.id))
       .map((rule) => rule.id)
   }));
   const persistedViewpointRules = (raw.viewpointRules ?? []).map(withoutLegacyConnectionRuleRefs);
-  const viewpointRules = upsertById(upsertById(persistedViewpointRules, EAM_VIEWPOINT_RULES), derivedViewpointRules);
-  const validationRules = upsertById(raw.validationRules ?? [], EAM_VALIDATION_RULES);
+  const viewpointRules = upsertById(upsertById(persistedViewpointRules, seeds.viewpointRules), derivedViewpointRules);
+  const validationRules = upsertById(raw.validationRules ?? [], seeds.validationRules);
   const diagrams = upsertById((raw.diagrams ?? []).map((diagram) => ({
     ...diagram,
     metamodelId: diagram.metamodelId ?? metamodel.id
-  })), STARTER_DIAGRAMS.map((diagram) => ({ ...diagram, metamodelId: metamodel.id })));
+  })), seeds.diagrams.map((diagram) => ({ ...diagram, metamodelId: metamodel.id })));
 
   return {
     metamodel,
@@ -1005,6 +1022,10 @@ export function buildInitialSidebarStateForCompany(companyId: string, includeExa
   return cloneSidebarStateForCompany(source, companyId);
 }
 
+export function normalizeSidebarStateForCompany(raw: Partial<SidebarState>, companyId: string): SidebarState {
+  return normalizeSidebarState(raw, buildInitialSidebarStateForCompany(companyId));
+}
+
 export async function readSidebarState(): Promise<SidebarState> {
   const companyId = requireCompanyId();
   const cached = cachedByCompany.get(companyId);
@@ -1012,8 +1033,12 @@ export async function readSidebarState(): Promise<SidebarState> {
   if (databasePersistenceEnabled()) {
     const persisted = await databaseSidebarRepository().read(companyId);
     if (persisted) {
-      cachedByCompany.set(companyId, persisted);
-      return structuredClone(persisted);
+      const normalized = normalizeSidebarStateForCompany(persisted, companyId);
+      const stored = JSON.stringify(normalized) === JSON.stringify(persisted)
+        ? persisted
+        : await databaseSidebarRepository().write(normalized, companyId);
+      cachedByCompany.set(companyId, stored);
+      return structuredClone(stored);
     }
 
     const initial = buildInitialSidebarStateForCompany(companyId);
@@ -1025,7 +1050,10 @@ export async function readSidebarState(): Promise<SidebarState> {
   const companyFile = path.join(dataDir, `sidebar.${companyId}.json`);
   let state: SidebarState;
   try {
-    state = normalizeSidebarState(JSON.parse(await fs.readFile(companyFile, "utf-8")) as Partial<SidebarState>);
+    state = normalizeSidebarStateForCompany(
+      JSON.parse(await fs.readFile(companyFile, "utf-8")) as Partial<SidebarState>,
+      companyId
+    );
   } catch {
     state = buildInitialSidebarStateForCompany(companyId);
   }

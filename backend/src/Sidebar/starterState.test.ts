@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { extractMetamodelDefinition, validateMetamodelDefinition } from "./metamodelConfig.js";
 import { validateDiagram } from "./metamodelRules.js";
-import { buildInitialSidebarStateForCompany } from "./sidebarStore.js";
+import { buildInitialSidebarStateForCompany, normalizeSidebarStateForCompany } from "./sidebarStore.js";
 
 describe("new company starter diagrams", () => {
   it("provides four editable EAM and simplified BPMN examples", () => {
@@ -48,5 +48,26 @@ describe("new company starter diagrams", () => {
     expect(state.diagrams).toEqual([]);
     expect(state.connectionRules.some((rule) => rule.connectionTypeId.endsWith(":conn-seq"))).toBe(true);
     expect(state.viewpoints.some((viewpoint) => viewpoint.id.endsWith(":vp-bpmn-demo"))).toBe(true);
+  });
+
+  it("backfills missing starters in an existing company without cross-company IDs", () => {
+    const companyId = "company-existing";
+    const initial = buildInitialSidebarStateForCompany(companyId);
+    const existing = {
+      ...initial,
+      componentTypes: initial.componentTypes.filter((item) => !item.id.includes(":ct-event-") && !item.id.endsWith(":ct-gw-xor")),
+      components: initial.components.filter((item) => !item.id.includes(":bpmn-")),
+      connections: initial.connections.filter((item) => !item.id.includes(":bpmn-")),
+      diagrams: initial.diagrams.slice(0, 1)
+    };
+
+    const normalized = normalizeSidebarStateForCompany(existing, companyId);
+
+    expect(normalized.diagrams).toHaveLength(4);
+    expect(normalized.diagrams.every((diagram) => diagram.id.startsWith(`${companyId}:`))).toBe(true);
+    expect(normalized.componentTypes.every((type) => type.id.startsWith(`${companyId}:`))).toBe(true);
+    expect(normalized.viewpointRules.every((rule) => rule.id.startsWith(`${companyId}:`))).toBe(true);
+    expect(normalized.diagrams.find((diagram) => diagram.name.includes("BPMN"))).toBeDefined();
+    expect(normalizeSidebarStateForCompany(normalized, companyId)).toEqual(normalized);
   });
 });
