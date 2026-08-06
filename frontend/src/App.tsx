@@ -130,6 +130,7 @@ function EamWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => void
           sidebarState={sidebarState}
           onStateChange={setSidebarState}
           onOpenDiagram={openDiagram}
+          activeDiagramId={activeDiagramId}
         />
 
         <main className="workspace workspace--full">

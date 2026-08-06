@@ -275,6 +275,22 @@ describe("Sidebar metamodel connection rules", () => {
     expect(result.errors.some((item) => item.code === "REQUIRED_CONNECTION_RULE_MISSING" && item.ruleId === "rule-app-serves-proc")).toBe(true);
   });
 
+  it("counts a second Data Object connection only after it belongs to the diagram", () => {
+    const data2 = { id: "data-2", name: "Invoice Data 2", componentTypeId: "ct-data-object", properties: {}, description: "" };
+    const usesData2 = { id: "uses-data-2", name: "", connectionTypeId: "conn-uses", sourceComponentId: "app", targetComponentId: "data-2", description: "" };
+    const focusedState: SidebarState = {
+      ...state,
+      connectionRules: [{ ...connectionRules[3], required: true }],
+      validationRules: [],
+      components: [state.components[1], data2],
+      connections: [usesData2]
+    };
+    const hidden = validateDiagram({ id: "data-diagram", name: "Data", description: "", componentIds: ["app", "data-2"], connectionIds: [], positions: {} }, focusedState);
+    const visible = validateDiagram({ id: "data-diagram", name: "Data", description: "", componentIds: ["app", "data-2"], connectionIds: ["uses-data-2"], positions: {} }, focusedState);
+    expect(hidden.errors.some((item) => item.code === "REQUIRED_CONNECTION_RULE_MISSING")).toBe(true);
+    expect(visible.valid).toBe(true);
+  });
+
   it("ValidationRule warns when Application has no technology dependency", () => {
     const diagram = { id: "d4b", name: "Application", description: "", componentIds: ["app", "proc"], connectionIds: ["app-serves-proc"], positions: {} };
     const result = validateDiagram(diagram, state);

@@ -30,6 +30,29 @@ export function assertValidConnectionEndpoints(state: SidebarState, connection: 
   }
 }
 
+export function addConnectionToDiagramState(
+  state: SidebarState,
+  connection: ConnectionInstance,
+  diagramId: string
+): SidebarState {
+  assertValidConnectionEndpoints(state, connection);
+  const diagram = state.diagrams.find((item) => item.id === diagramId);
+  if (!diagram) throw new Error(`Diagram '${diagramId}' does not exist.`);
+  if (!diagram.componentIds.includes(connection.sourceComponentId) || !diagram.componentIds.includes(connection.targetComponentId)) {
+    throw new Error("Connection source and target must both be visible in the diagram.");
+  }
+
+  const connectionExists = state.connections.some((item) => item.id === connection.id);
+  const connectionAlreadyAssigned = diagram.connectionIds.includes(connection.id);
+  return {
+    ...state,
+    connections: connectionExists ? state.connections : [...state.connections, connection],
+    diagrams: state.diagrams.map((item) => item.id === diagramId
+      ? { ...item, connectionIds: connectionAlreadyAssigned ? item.connectionIds : [...item.connectionIds, connection.id] }
+      : item)
+  };
+}
+
 export function removeComponentWithConnections(state: SidebarState, componentId: string): SidebarState {
   const removedConnectionIds = new Set(
     state.connections

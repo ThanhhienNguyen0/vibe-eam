@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { applyMetamodelDefinition, extractMetamodelDefinition, validateMetamodelDefinition } from "./metamodelConfig.js";
 import { validateDiagram } from "./metamodelRules.js";
@@ -110,6 +111,41 @@ const baseState: SidebarState = {
 };
 
 describe("Metamodel JSON configuration", () => {
+  it("keeps the default metamodel references and rule directions consistent", async () => {
+    const input = JSON.parse(await readFile(new URL("../data/default-metamodel.json", import.meta.url), "utf-8"));
+    const result = validateMetamodelDefinition(input);
+    expect(result.success).toBe(true);
+    expect(result.errors).toEqual([]);
+
+    const defaultDefinition = result.definition!;
+    for (const viewpoint of defaultDefinition.viewpoints) {
+      const viewpointRule = defaultDefinition.viewpointRules.find((rule) => rule.viewpointId === viewpoint.id);
+      expect(viewpointRule, `Missing ViewpointRule for ${viewpoint.id}`).toBeDefined();
+      expect([...viewpointRule!.allowedComponentTypeIds].sort()).toEqual([...viewpoint.allowedComponentTypeIds].sort());
+      expect([...viewpointRule!.allowedConnectionTypeIds].sort()).toEqual([...viewpoint.allowedConnectionTypeIds].sort());
+      expect([...viewpointRule!.requiredComponentTypeIds].sort()).toEqual([...viewpoint.requiredComponentTypeIds].sort());
+      expect([...viewpointRule!.requiredConnectionTypeIds].sort()).toEqual([...viewpoint.requiredConnectionTypeIds].sort());
+    }
+
+    for (const validationRule of defaultDefinition.validationRules.filter((rule) => rule.active)) {
+      const sourceTypeId = validationRule.direction === "outgoing" ? validationRule.sourceComponentTypeId : validationRule.targetComponentTypeId;
+      const targetTypeId = validationRule.direction === "outgoing" ? validationRule.targetComponentTypeId : validationRule.sourceComponentTypeId;
+      expect(defaultDefinition.connectionRules.some((rule) =>
+        rule.allowed &&
+        rule.sourceComponentTypeId === sourceTypeId &&
+        rule.connectionTypeId === validationRule.requiredConnectionTypeId &&
+        rule.targetComponentTypeId === targetTypeId
+      ), `ValidationRule ${validationRule.id} has no matching allowed ConnectionRule`).toBe(true);
+    }
+
+    for (const connectionRule of defaultDefinition.connectionRules.filter((rule) => rule.required)) {
+      for (const viewpointId of connectionRule.viewpointIds ?? []) {
+        const viewpointRule = defaultDefinition.viewpointRules.find((rule) => rule.viewpointId === viewpointId);
+        expect(viewpointRule?.allowedConnectionRuleIds, `${connectionRule.id} is not allowed in ${viewpointId}`).toContain(connectionRule.id);
+      }
+    }
+  });
+
   it("exports a complete metamodel JSON structure without diagram instances", () => {
     const exported = extractMetamodelDefinition(baseState);
     expect(exported.metamodel.id).toBe("mm-import-test");

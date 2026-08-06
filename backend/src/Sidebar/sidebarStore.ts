@@ -26,6 +26,7 @@ import {
   databaseSidebarRepository
 } from "../persistence/databaseSidebarRepository.js";
 import {
+  addConnectionToDiagramState,
   assertValidConnectionEndpoints,
   diagramWithContents,
   removeComponentWithConnections
@@ -1231,6 +1232,19 @@ export async function addConnection(conn: ConnectionInstance): Promise<Connectio
   state.connections.push(conn);
   await writeSidebarState(state);
   return conn;
+}
+
+export async function addConnectionToDiagram(
+  conn: ConnectionInstance,
+  diagramId: string
+): Promise<{ connection: ConnectionInstance; diagram: Diagram }> {
+  const state = await readSidebarState();
+  const next = addConnectionToDiagramState(state, conn, diagramId);
+  await writeSidebarState(next);
+  return {
+    connection: conn,
+    diagram: next.diagrams.find((diagram) => diagram.id === diagramId)!
+  };
 }
 
 export async function updateConnection(id: string, patch: Partial<ConnectionInstance>): Promise<ConnectionInstance | null> {

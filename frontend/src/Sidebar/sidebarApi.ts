@@ -98,6 +98,8 @@ export const sidebarApi = {
   // Diagrams
   createDiagram: (data: { name: string; description?: string }) =>
     request<Diagram>(`${BASE}/diagrams`, { method: "POST", body: JSON.stringify(data) }),
+  createDiagramConnection: (diagramId: string, data: Omit<ConnectionInstance, "id">) =>
+    request<{ connection: ConnectionInstance; diagram: Diagram; created: boolean }>(`${BASE}/diagrams/${diagramId}/connections`, { method: "POST", body: JSON.stringify(data) }),
   updateDiagram: (id: string, data: Partial<Diagram>) =>
     request<Diagram>(`${BASE}/diagrams/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   validateDiagram: (id: string) =>

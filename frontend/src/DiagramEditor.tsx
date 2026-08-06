@@ -790,18 +790,15 @@ function DiagramEditorInner({
       }
 
       try {
-        const newConn = await sidebarApi.createConnection({
+        const result = await sidebarApi.createDiagramConnection(diagram.id, {
           name: "",
           connectionTypeId: connType.id,
           sourceComponentId: sourceId,
           targetComponentId: targetId,
           description: ""
         });
-        onConnectionCreated(newConn);
-        const updatedDiagram = await sidebarApi.updateDiagram(diagram.id, {
-          connectionIds: [...diagram.connectionIds, newConn.id]
-        });
-        onDiagramChange(updatedDiagram);
+        if (result.created) onConnectionCreated(result.connection);
+        onDiagramChange(result.diagram);
         setError("");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Verbindung konnte nicht erstellt werden.");

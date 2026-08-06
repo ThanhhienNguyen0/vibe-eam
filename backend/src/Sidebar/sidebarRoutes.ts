@@ -5,6 +5,7 @@ import {
   addComponent,
   addComponentType,
   addConnection,
+  addConnectionToDiagram,
   addConnectionRule,
   addConnectionType,
   addDiagram,
@@ -497,6 +498,51 @@ router.post("/diagrams", async (req, res, next) => {
       viewpointId
     });
     res.status(201).json(diagram);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/diagrams/:id/connections", async (req, res, next) => {
+  try {
+    const { name, connectionTypeId, sourceComponentId, targetComponentId, description, properties } = req.body as {
+      name?: string;
+      connectionTypeId?: string;
+      sourceComponentId?: string;
+      targetComponentId?: string;
+      description?: string;
+      properties?: Record<string, string>;
+    };
+    if (!connectionTypeId) return res.status(400).json({ error: "connectionTypeId is required." });
+    if (!sourceComponentId) return res.status(400).json({ error: "sourceComponentId is required." });
+    if (!targetComponentId) return res.status(400).json({ error: "targetComponentId is required." });
+
+    const state = await readSidebarState();
+    const diagram = state.diagrams.find((item) => item.id === req.params.id);
+    if (!diagram) return res.status(404).json({ error: "Diagram not found." });
+    if (!diagram.componentIds.includes(sourceComponentId) || !diagram.componentIds.includes(targetComponentId)) {
+      return res.status(400).json({ error: "Connection source and target must both be visible in the diagram." });
+    }
+
+    const existing = state.connections.find((connection) =>
+      connection.connectionTypeId === connectionTypeId &&
+      connection.sourceComponentId === sourceComponentId &&
+      connection.targetComponentId === targetComponentId
+    );
+    const candidate = existing ?? {
+      id: crypto.randomUUID(),
+      name: name ?? "",
+      connectionTypeId,
+      sourceComponentId,
+      targetComponentId,
+      description: description ?? "",
+      properties: properties ?? {}
+    };
+    const validation = validateConnectionInstance(candidate, state, diagram);
+    if (!validation.valid) return res.status(400).json({ error: validation.errors[0]?.message ?? "Connection is not valid.", ...validation });
+
+    const result = await addConnectionToDiagram(candidate, diagram.id);
+    res.status(existing ? 200 : 201).json({ ...result, created: !existing });
   } catch (err) {
     next(err);
   }

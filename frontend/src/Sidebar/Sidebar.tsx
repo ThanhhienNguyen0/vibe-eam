@@ -43,6 +43,7 @@ interface Props {
   sidebarState: SidebarState;
   onStateChange: (next: SidebarState) => void;
   onOpenDiagram: (id: string) => void;
+  activeDiagramId: string | null;
 }
 
 interface TreeContextMenu {
@@ -194,7 +195,7 @@ function EmptyHint({ text, actionLabel, onAction }: { text: string; actionLabel?
   );
 }
 
-export default function Sidebar({ onSelect, selection, sidebarState, onStateChange, onOpenDiagram }: Props) {
+export default function Sidebar({ onSelect, selection, sidebarState, onStateChange, onOpenDiagram, activeDiagramId }: Props) {
   const { componentTypes, connectionTypes, connectionRules, viewpoints, components, connections, diagrams } = sidebarState;
 
   const [open, setOpen] = useState({
@@ -219,6 +220,10 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
   const [connectionCreateError, setConnectionCreateError] = useState("");
   const [connectionCreating, setConnectionCreating] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const activeDiagram = activeDiagramId ? diagrams.find((diagram) => diagram.id === activeDiagramId) : undefined;
+  const connectionComponents = activeDiagram
+    ? components.filter((component) => activeDiagram.componentIds.includes(component.id))
+    : components;
 
   // Kontextmenü bei Klick außerhalb schließen
   useEffect(() => {
@@ -368,8 +373,8 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
   }
 
   function allowedConnectionTypesFor(sourceComponentId: string, targetComponentId: string) {
-    const source = components.find((component) => component.id === sourceComponentId);
-    const target = components.find((component) => component.id === targetComponentId);
+    const source = connectionComponents.find((component) => component.id === sourceComponentId);
+    const target = connectionComponents.find((component) => component.id === targetComponentId);
     if (!source || !target || source.id === target.id) return [];
     const allowedTypeIds = new Set(connectionRules
       .filter((rule) => rule.allowed && rule.sourceComponentTypeId === source.componentTypeId && rule.targetComponentTypeId === target.componentTypeId)
@@ -391,10 +396,10 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
   }
 
   function addConnection() {
-    if (components.length < 2 || connectionTypes.length === 0) return;
+    if (connectionComponents.length < 2 || connectionTypes.length === 0) return;
     let draft: ConnectionDraft | null = null;
-    for (const source of components) {
-      for (const target of components) {
+    for (const source of connectionComponents) {
+      for (const target of connectionComponents) {
         const allowed = allowedConnectionTypesFor(source.id, target.id);
         if (allowed.length > 0) {
           draft = { sourceComponentId: source.id, connectionTypeId: allowed[0].id, targetComponentId: target.id };
@@ -404,9 +409,9 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
       if (draft) break;
     }
     setConnectionDraft(draft ?? {
-      sourceComponentId: components[0].id,
+      sourceComponentId: connectionComponents[0].id,
       connectionTypeId: "",
-      targetComponentId: components[1].id
+      targetComponentId: connectionComponents[1].id
     });
     setConnectionCreateError(draft ? "" : "Für die vorhandenen Komponenten ist keine erlaubte ConnectionRule definiert.");
   }
@@ -421,11 +426,23 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     setConnectionCreating(true);
     setConnectionCreateError("");
     try {
-      const conn = await sidebarApi.createConnection({
+      const input = {
         name: "",
         ...connectionDraft,
         description: ""
-      });
+      };
+      if (activeDiagram) {
+        const result = await sidebarApi.createDiagramConnection(activeDiagram.id, input);
+        onStateChange({
+          ...sidebarState,
+          connections: result.created ? [...connections, result.connection] : connections,
+          diagrams: diagrams.map((diagram) => diagram.id === result.diagram.id ? result.diagram : diagram)
+        });
+        onSelect({ kind: "connection", id: result.connection.id });
+        setConnectionDraft(null);
+        return;
+      }
+      const conn = await sidebarApi.createConnection(input);
       onStateChange({ ...sidebarState, connections: [...connections, conn] });
       onSelect({ kind: "connection", id: conn.id });
       setConnectionDraft(null);
@@ -554,6 +571,16 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
   const draftConnectionTypes = connectionDraft
     ? allowedConnectionTypesFor(connectionDraft.sourceComponentId, connectionDraft.targetComponentId)
     : [];
+  const existingDraftConnection = connectionDraft
+    ? connections.find((connection) =>
+        connection.connectionTypeId === connectionDraft.connectionTypeId &&
+        connection.sourceComponentId === connectionDraft.sourceComponentId &&
+        connection.targetComponentId === connectionDraft.targetComponentId
+      )
+    : undefined;
+  const draftConnectionAlreadyInDiagram = Boolean(
+    activeDiagram && existingDraftConnection && activeDiagram.connectionIds.includes(existingDraftConnection.id)
+  );
 
   return (
     <nav className="sidebar" aria-label="Architektur-Navigation">
@@ -884,7 +911,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
         open={isOpen("connections")}
         onToggle={() => toggle("connections")}
         onAdd={addConnection}
-        addTitle={components.length < 2 || connectionTypes.length === 0 ? "Benötigt 2 Komponenten und einen Verbindungs-Typ" : "Neue Verbindung"}
+        addTitle={connectionComponents.length < 2 || connectionTypes.length === 0 ? "Benötigt 2 sichtbare Komponenten und einen Verbindungs-Typ" : "Neue Verbindung"}
         active={isActive({ kind: "connections" })}
         count={connections.length}
       >
@@ -963,7 +990,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
                   value={connectionDraft.sourceComponentId}
                   onChange={(event) => updateConnectionDraft({ sourceComponentId: event.target.value })}
                 >
-                  {components.map((component) => <option key={component.id} value={component.id}>{component.name}</option>)}
+                  {connectionComponents.map((component) => <option key={component.id} value={component.id}>{component.name}</option>)}
                 </select>
               </label>
               <label>Beziehung
@@ -981,20 +1008,31 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
                   value={connectionDraft.targetComponentId}
                   onChange={(event) => updateConnectionDraft({ targetComponentId: event.target.value })}
                 >
-                  {components.map((component) => <option key={component.id} value={component.id}>{component.name}</option>)}
+                  {connectionComponents.map((component) => <option key={component.id} value={component.id}>{component.name}</option>)}
                 </select>
               </label>
             </div>
-            <p className="muted">Es werden nur Beziehungen angeboten, die durch eine aktive ConnectionRule erlaubt sind.</p>
+            <p className="muted">
+              Es werden nur Beziehungen angeboten, die durch eine aktive ConnectionRule erlaubt sind.
+              {activeDiagram
+                ? existingDraftConnection
+                  ? " Diese Verbindung existiert bereits und wird dem geöffneten Diagramm zugeordnet."
+                  : " Die Verbindung wird erstellt und dem geöffneten Diagramm zugeordnet."
+                : " Ohne geöffnetes Diagramm wird sie nur in der Architekturverwaltung gespeichert."}
+            </p>
             {connectionCreateError && <div className="error-banner" role="alert">{connectionCreateError}</div>}
             <div className="diagram-suggestion-actions">
               <button
                 className="sb-save-btn"
                 style={{ margin: 0 }}
-                disabled={connectionCreating || !connectionDraft.connectionTypeId}
+                disabled={connectionCreating || !connectionDraft.connectionTypeId || draftConnectionAlreadyInDiagram}
                 onClick={submitConnection}
               >
-                Verbindung erstellen
+                {draftConnectionAlreadyInDiagram
+                  ? "Bereits im Diagramm"
+                  : existingDraftConnection && activeDiagram
+                    ? "Bestehende Verbindung hinzufügen"
+                    : "Verbindung erstellen"}
               </button>
               <button disabled={connectionCreating} onClick={() => setConnectionDraft(null)}>Abbrechen</button>
             </div>

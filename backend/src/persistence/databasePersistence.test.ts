@@ -5,6 +5,7 @@ import { validateDiagram } from "../Sidebar/metamodelRules.js";
 import type { SidebarState } from "../Sidebar/sidebarTypes.js";
 import { assertDiagramMemberships, configuredStorageBackend, type SidebarStateRepository } from "./databaseSidebarRepository.js";
 import {
+  addConnectionToDiagramState,
   assertValidConnectionEndpoints,
   diagramWithContents,
   removeDanglingInstanceReferences,
@@ -107,6 +108,31 @@ describe("database persistence repository contract", () => {
     expect(schema).toMatch(/model Diagram[\s\S]*companyId\s+String/);
     expect(schema).toMatch(/model DiagramComponentMembership[\s\S]*position\s+Json[\s\S]*@db\.JsonB/);
     expect(schema).toMatch(/model DiagramConnectionMembership[\s\S]*connection\s+ConnectionInstance[\s\S]*onDelete: Cascade/);
+  });
+
+  it("stores a new connection and its diagram membership in one state transition", () => {
+    const secondConnection = { ...state.connections[0], id: "connection-2" };
+    const next = addConnectionToDiagramState(state, secondConnection, "diagram");
+    expect(next.connections.map((item) => item.id)).toContain("connection-2");
+    expect(next.diagrams[0].connectionIds).toContain("connection-2");
+    expect(diagramWithContents(next, "diagram")?.connections.map((item) => item.id)).toEqual(["connection", "connection-2"]);
+  });
+
+  it("attaches an existing global connection without duplicating it", () => {
+    const hiddenConnection = { ...state.connections[0], id: "hidden-connection" };
+    const withHiddenConnection = { ...state, connections: [...state.connections, hiddenConnection] };
+    const next = addConnectionToDiagramState(withHiddenConnection, hiddenConnection, "diagram");
+    expect(next.connections).toHaveLength(withHiddenConnection.connections.length);
+    expect(next.diagrams[0].connectionIds).toContain("hidden-connection");
+  });
+
+  it("rejects diagram connections whose endpoints are not both visible", () => {
+    const diagramWithoutTarget = {
+      ...state,
+      diagrams: [{ ...state.diagrams[0], componentIds: ["source"], connectionIds: [] }]
+    };
+    expect(() => addConnectionToDiagramState(diagramWithoutTarget, { ...state.connections[0], id: "hidden-target" }, "diagram"))
+      .toThrow(/both be visible/);
   });
 
   it("allows the same component and connection instances in multiple diagrams", () => {
