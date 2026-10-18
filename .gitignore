@@ -12,3 +12,4 @@ backend/data/
 .env.prod.local
 backend/.env
 frontend/.env
+.cache/

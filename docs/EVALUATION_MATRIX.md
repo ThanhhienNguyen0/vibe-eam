@@ -1,5 +1,20 @@
 # Evaluation Matrix
 
+## Geltung und REQ-30-Stand vom 18.10.2026
+
+Bewertungen historischer Funktionen gelten für den damals geprüften Legacy-Pfad. Impact, Portfolio, Heatmap, Capability Map und Lifecycle sind keine nachgewiesenen aktuellen Browseransichten. Der aktuelle Browserpfad umfasst Authentifizierung, Sidebar, Diagrammeditor und Metamodel. Funktionale historische Bewertungen werden hier nicht ohne neue fachliche Abnahme aufgewertet.
+
+| REQ-30-Teil | Bewertung / Abnahmegrenze |
+|---|---|
+| Lint, lokaler Gesamtcheck und PR-Qualität | Versionierte Gates vorhanden; tatsächlich beobachtete Resultate und Grenzen in `REQ-30_IMPLEMENTATION_EVIDENCE.md` |
+| Dependencies | Vollständige Audit-Ausgangs-/Endbefunde und begründete Versionsentscheidungen in `security/DEPENDENCY_RISKS.md`; Fail-Schwelle hoch, keine Audit-Suppressions |
+| Secret-Scanning | Repository-Scan mit vollständiger Historie, aktuellem Dateisnapshot und Canarytest; native GitHub Secret Protection/Push Protection unbestätigt |
+| CodeQL | JS/TS-Advanced-Workflow mit PR/main/Schedule; Remote-Ausführung und Alerttriage separat nachweisen |
+| Branch Protection / Review | Offen: klassische Protection nicht lesbar (403), keine Rulesets geliefert; Admin-Nachweis und unabhängige Freigabe erforderlich |
+| Wartbarkeit und KI-Prozess | Belegte Hotspots/Änderungsregeln dokumentiert; keine umfassende Wartbarkeits- oder Produktionsreifeaussage |
+
+## Historische Funktionsbewertung mit gezielt aktualisierten Infrastrukturangaben
+
 Bewertung:
 
 - 0 = nicht umgesetzt
@@ -18,7 +33,7 @@ Status:
 | Anforderung | Bewertung | Status | Kritische Begruendung |
 | --- | ---: | --- | --- |
 | Projektstruktur | 3 | Tatsaechlich funktional | Geforderte Ordner und Root-Dateien existieren. |
-| npm install | 3 | Tatsaechlich funktional | `npm install` erfolgreich, aber nach Phase 2 bleiben 4 moderate npm vulnerabilities. |
+| Installation / Dependencies | 3 | Technisch geprüft, datierter Security-Nachweis erforderlich | `npm ci`; frühere Aussage zu 4 moderaten Meldungen ist überholt. Vorher/Nachher unter `security/DEPENDENCY_RISKS.md`. |
 | TypeScript/Build | 3 | Tatsaechlich funktional | `npm run typecheck` und `npm run build` erfolgreich. Minimale Backend-Unit-Tests existieren. |
 | Backend Start | 3 | Tatsaechlich funktional | Backend antwortet auf `GET /api/model` mit Seed-Modell. |
 | Frontend Start | 3 | Tatsaechlich funktional | Vite-Frontend antwortet mit HTTP 200. Keine automatisierte UI-E2E-Pruefung. |
@@ -39,8 +54,8 @@ Status:
 | REST API | 3 | Tatsaechlich funktional | Alle geforderten Endpunkte wurden mindestens einmal technisch angesprochen. |
 | Seed-Daten | 3 | Tatsaechlich funktional | 12 Elemente und 12 Relationen vorhanden. |
 | Dokumentation | 3 | Tatsaechlich funktional | Metamodell, Impact-Analyse, Validierung und Reflexion dokumentiert. |
-| Auth/Deployment | 0 | Nicht umgesetzt | Bewusst ausserhalb des MVP. |
-| Automatisierte Tests | 3 | Teilweise funktional | 44 Vitest-Tests fuer Metamodell, Validierung, Import/Export, Persistenzvertrag, Cascade-State-Verhalten, Impact und Portfolio. Keine echte PostgreSQL-Integration und keine UI-E2E-Tests. |
+| Auth/Deployment | 3 | Teilweise funktional | JWT/bcrypt und Company-Isolation implementiert; Docker und manuelle Deploymentworkflows vorhanden. Kein vollständiges RBAC; externe Governance/Produktionsfreigabe nicht nachgewiesen. |
+| Automatisierte Tests | 3 | Teilweise funktional | 69 Backendtests; zusätzliche REQ-30-Gateregressionen separat. Keine echte PostgreSQL-Integration und keine UI-E2E-Tests. |
 | Forschungsbezug | 3 | Tatsaechlich funktional | Prompt, Annahmen, Grenzen und Bewertung dokumentiert. |
 | Metamodel Rule Builder | 3 | Tatsaechlich funktional | Component Types, Connection Types, Source-/Target-Regeln und Viewpoints sind in Sidebar-Datenmodell, Backend-Routen und UI editierbar. |
 | Stakeholder Viewpoints | 3 | Tatsaechlich funktional | Management, Business Owner, Application Owner, IT Operations und Full Architecture View werden mit erlaubten und verpflichtenden Typen bereitgestellt. |
@@ -67,10 +82,10 @@ Status:
 | Cascade delete | 3 | Teilweise funktional | Source- und Target-Fremdschluessel deklarieren `ON DELETE CASCADE`; State-Verhalten ist getestet, die echte PostgreSQL-Kaskade noch nicht live provoziert. |
 | Diagram aggregate loading | 3 | Tatsaechlich funktional | `GET /api/sidebar/diagrams/:id` wurde gegen den laufenden DB-Stack erfolgreich aufgerufen und liefert Komponenten und Verbindungen. |
 | Database seed/migration | 3 | Tatsaechlich funktional | Laufender Stack enthält abgeschlossene Prisma-Migration und erwartete Seed-Daten; JSON-Kopie bleibt zusätzlich geschützt verfügbar. |
-| Docker Compose | 3 | Tatsaechlich funktional | Lokaler Stack läuft mit PostgreSQL, Backend und Frontend; alle drei Compose-Dateien bestehen `docker.exe compose config` und 108 zusätzliche statische Checks. |
+| Docker Compose | 3 | Konfiguration geprüft | Drei Compose-Dateien, 111 statische Checks; erneuter Containerstart/DB-Integration unter REQ-30 nicht behauptet. Image-Build bleibt CI-Gate. |
 | Environment separation | 3 | Tatsaechlich funktional | Staging und Produktion haben eigene Compose-Projekte, DB-Namen, Benutzer, Loopback-Ports und explizit getrennte Named Volumes. Containerstarts wurden bewusst nicht parallel erzwungen. |
 | Production hosting preparation | 2 | Teilweise funktional | Serverpraktische Anleitung, Readiness- und Abnahmecheckliste decken Voraussetzungen, Staging-Gate, Produktion, Betrieb, Backup und Rollback ab; kein externer Server wurde verändert. |
 | HTTPS preparation | 2 | Teilweise funktional | HTTP-only-Erstkonfigurationen und vollständige Nginx-Beispiele für Certbot, Redirect, TLS-Proxying und Basic-Auth-Hooks liegen vor; DNS/Zertifikate sind nicht live eingerichtet. |
-| Continuous integration | 3 | Tatsaechlich funktional | GitHub-Workflow läuft bei Push/PR und prüft npm ci, Prisma Generate, Typecheck, 44 Tests, Build, drei Compose-Konfigurationen, Infrastrukturregeln und beide Image-Builds. Er muss noch erstmals auf GitHub beobachtet werden. |
+| Continuous integration / REQ-30 | 3 | Codeprüfungen und externe Governance getrennt | CI enthält Lint, Typecheck, 69 Backendtests, Build, drei Compose-Konfigurationen, Repository-Validatoren, Gate-Regressionen und Image-Builds; zusätzlich Dependency-/Secret-Jobs und separater CodeQL-Workflow. Remote-Ergebnis und externe Required Checks siehe `REQ-30_IMPLEMENTATION_EVIDENCE.md`. |
 | Manual staging deployment | 2 | Teilweise funktional | workflow_dispatch prüft den Ref und deployt anschließend den unveränderlichen geprüften SHA per SSH mit serverseitiger Env-Datei und internem Healthcheck. GitHub Secrets/Environment müssen extern eingerichtet und ein erster Lauf abgenommen werden. |
 | Manual production deployment | 2 | Teilweise funktional | Kein Push-Trigger; Bestätigung, Backup, Hosting-Abnahme, Verify-Job, SSH-Host-Key-Prüfung und interner Healthcheck sind vorgesehen. Kein Produktionslauf wurde aus diesem Schritt ausgelöst. |

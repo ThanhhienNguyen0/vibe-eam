@@ -1,5 +1,16 @@
 # Prompt Log
 
+## REQ-30 – CI, Qualität und Security (18.10.2026)
+
+Auftrag: Issue #62 ab sauberem `main` `3f5e9e40` vollständig und nachvollziehbar umsetzen; Branch `codex/eam/req-30-ci-security`, kein Direktcommit auf main, kein Merge und kein Issueschließen. Gefordert sind ESLint, reproduzierbarer Gesamtcheck, PR-Qualitäts-/Infrastruktur-Gates, Dependency-Probelauf und begründete Korrekturen, Dependabot, CodeQL, Secret-Scan, externe Admin-Abnahme, Beitrags-/KI-Regeln und belegte Wartbarkeitsdokumentation.
+
+Forschungsrahmen: „Ob und inwiefern ein EAM-Tool mittels KI gevibecodet werden kann.“ Der Professor hat Wartbarkeit grundsätzlich infrage gestellt; konkrete Gründe fehlen teilweise. Keine Gründe hinzuerfinden, sondern Repository-Befunde und offene Evidenzlücke trennen.
+
+KI-Arbeit: offizielle Tooldokumentation geprüft; Konfigurationen, Scanner-/Validatorlogik, gezielte Lintkorrekturen, Paket-/Lockdateiupdates und Dokumentation erstellt. Ausdrücklich keine unangemeldete Implementierung weiterer Requirements. Begründete Majorentscheidungen und sämtliche Fehlversuche: `security/DEPENDENCY_RISKS.md`, `REQ-30_IMPLEMENTATION_EVIDENCE.md`.
+
+Kontrollprozess: Requirement → Implementierung → unabhängige Kontrolle → Evidenz → Merge. Eine getrennte Kontrollinstanz ist beauftragt. Selbstprüfung ersetzt ihre Abnahme nicht. Externe Adminschalter bleiben offen; maßgeblich sind konkrete GitHub-Einstellungs-/Laufnachweise, nicht die Existenz von YAML-Dateien. Übergabe enthält Basisdiff, Branch/Commit/PR, Dateiliste, Prüfresultate und offene Governance.
+
+
 ## Startprompt
 
 Der Startprompt fordert einen autonomen Senior-Fullstack-Entwicklungsagenten auf, einen lauffaehigen Web-Prototypen eines EAM-Tools als Forschungsartefakt zu bauen. Gefordert sind React, TypeScript, Vite, React Flow, Node.js, Express, REST API, JSON-Datei oder SQLite, kein echtes Auth-System, einfache lokale Starts, Seed-Daten, Canvas, Eigenschaftenpanel, Validierung, Impact-Analyse, Heatmap, Capability Map, Roadmap, Import/Export, Audit Log und Dokumentation.

@@ -1,16 +1,26 @@
 # Implementation Plan
 
+## Aktueller Qualitätsstand: REQ-30 (18.10.2026)
+
+Die folgenden historischen Architektur-/Komponentenbeschreibungen dokumentieren frühere Iterationen und sind kein aktueller UI-Vertrag. Aktuell: JWT/bcrypt-Authentifizierung, Company-Isolation, Sidebar/Diagramme/Metamodel im Frontend; Prisma/PostgreSQL für Sidebar und Company-bezogene Legacy-JSONB-Aggregate, explizite JSON-Dateifallbacks; getrennte manuelle Staging-/Produktionsworkflows vorhanden. Ein Deployment auf einen externen Server wurde in REQ-30 nicht durchgeführt.
+
+REQ-30 ergänzt ESLint, `npm run check`, einen strikten Dependency-Scan (hoch/kritisch blockierend), Gitleaks-History-/Dateiscan, Dependabot und CodeQL. Die vorhandenen Compose-, Workflow- und Imageprüfungen bleiben in PR-CI. `CONTRIBUTING.md` definiert Requirement → Implementierung → unabhängige Kontrolle → Evidenz → Merge. Hotspots, doppelte Vertragsdefinitionen und Testlücken: `MAINTAINABILITY.md`. Die konkrete Professorenbegründung bleibt offen.
+
+Abnahme-/Ergebnisquelle ist `REQ-30_IMPLEMENTATION_EVIDENCE.md`; Paketentscheidungen stehen in `security/DEPENDENCY_RISKS.md`. Externe GitHub-Schalter, Branch Protection und ein genehmigendes Review sind getrennte Abnahmevoraussetzungen (`security/GITHUB_ADMIN_CHECKLIST.md`). REQ-30 wird durch versionierte Dateien allein nicht vollständig erfüllt.
+
+## Historischer Plan vor Auth-/Datenbank-/REQ-30-Erweiterung (ersetzt durch datierten Stand oben)
+
 ## Technische Architektur
 
 Der Prototyp ist eine lokale Fullstack-Webanwendung.
 
 - Frontend: React, TypeScript, Vite, React Flow
 - Backend: Node.js, Express, TypeScript
-- Persistenz: JSON-Datei im Backend (`backend/data/model.json`)
+- Persistenz im ursprünglichen Plan: JSON-Datei im Backend (`backend/data/model.json`)
 - API: REST unter `/api`
 - Tests: minimale Vitest-Unit-Tests im Backend
-- Authentifizierung: bewusst nicht Bestandteil des MVP
-- Deployment: kein produktives Deployment, lokaler Start ueber npm-Skripte
+- Authentifizierung im ursprünglichen Plan: nicht Bestandteil; durch spätere JWT-/Company-Implementierung überholt
+- Deployment im ursprünglichen Plan: lokaler Start; durch spätere Docker-/manuelle Deploymentworkflows erweitert
 
 Root-Skripte starten Frontend und Backend parallel. Backend und Frontend bleiben getrennt startbar.
 

@@ -2,11 +2,9 @@ import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { runWithPrincipal, type AuthPrincipal } from "../tenant.js";
 
-declare global {
-  namespace Express {
-    interface Request {
-      user?: AuthPrincipal;
-    }
+declare module "express-serve-static-core" {
+  interface Request {
+    user?: AuthPrincipal;
   }
 }
 

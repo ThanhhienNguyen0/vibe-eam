@@ -1,5 +1,28 @@
 # AI Reflection Log
 
+## REQ-30 – belegte Selbstprüfung, 18.10.2026
+
+**Geltung:** Frühere Entwicklungszyklen sind historische Aufzeichnungen. Aktuell sind JWT/bcrypt-Authentifizierung und Company-Isolation implementiert, PostgreSQL wird auch für Company-bezogene Legacy-JSONB-Aggregate verwendet, 69 Backendtests bestehen als zu prüfender Umfang. Frühere Impact-/Portfolio-/Heatmap-/Capability-/Lifecycle-UI-Aussagen sind keine Zusage der heutigen Oberfläche. Der datierte Abschlussbeleg ist `REQ-30_IMPLEMENTATION_EVIDENCE.md`.
+
+### KI-Anteil und Wartbarkeitsentscheidungen
+
+ESLint-Konfiguration, PR-/Security-Workflows, Dependabot, Scannerwrapper, Gate-Regressionen und Dokumentation wurden KI-gestützt erstellt. Bestehender Code wurde nur für konkrete Lintbefunde angepasst: Express-Typerweiterung, eine begründete Error-Middleware-Arity-Ausnahme, vollständige React-Hook-Abhängigkeiten und ungenutzte Definitionen. Eine an dieser Stelle unnötige Memoisierung des Drop-Handlers wurde entfernt; kein flächiges eslint-disable oder UI-Neuaufbau erfolgte.
+
+Securitywerkzeuge wurden mit minimalen Rechten und unveränderlichen Revisionen bzw. geprüften Releasehashes eingeführt. Ein vollständiges Null-Audit wurde durch tatsächliche Updates angestrebt, nicht durch Weglassen von dev-Abhängigkeiten. Die automatische Approval-Prüfung lehnte eine erwogene befristete High-Ausnahme ab. Die finale Lösung enthält keine Audit-Allowlist und belässt die Fail-Schwelle auf hoch/kritisch.
+
+### Fehler und Lernbefunde
+
+Peer-Abhängigkeiten, neue Vitest-Dateisammlung, fehlender Prisma-Client nach Neuinstallation, unvollständig wiederverwendete Workspace-Installationsartefakte und eine unwirksame erste künstliche Secretkennung erzeugten konkrete Fehlversuche. Ein Prüfzwischenlauf während einer Installation war durch fehlende Paketdateien ungültig. Konsequenzen: vollständige sequenzielle Abschlussprüfung, explizite Testdateigrenze, Clientgenerierung im Gesamtcheck und verpflichtender negativer Canarytest. Der historische Secretfehlalarm ist anhand der offiziellen NestJS-Vorlage eingegrenzt; nur ein exakter historischer Fingerprint bleibt ausgenommen.
+
+### Verbleibende Grenzen und erforderliche Kontrolle
+
+Die unabhängige Kontrolle fand anschließend einen konkreten P2-Fehler: widersprüchliche Audit-Counts bzw. unbekannte Severitys konnten den zunächst zu schwachen Parser passieren. Struktur-, Severity- und vollständige Countprüfung wurden ergänzt; der reproduzierte Gegenfall und weitere fehlerhafte Antworten sind jetzt negativ getestet. Zusätzlich wurde als P3 eine falsche Dokumentationsaussage zur Vite-Auflösung korrigiert: Frontend Vite 7/Rollup und Vitest mit Vite 8/Rolldown bilden getrennte Werkzeugbäume. Der separate Kontrollchat entdeckte danach als P1, dass der zunächst eingetragene CodeQL-v4-SHA ein annotiertes Tagobjekt und kein ausführbarer Commit war. Der offizielle Ref wurde bis zum tatsächlichen Commit aufgelöst; ein Negativtest verhindert die Regression. Lint, 15 Security-Regressionsprüfungen, Workflowvalidierung und echter Audit wurden nach dieser letzten Korrektur gezielt wiederholt. Diese Befunde belegen den Nutzen der getrennten Kontrolle an diesem Einzelfall, ohne eine allgemeine Wirksamkeitsquote zu begründen.
+
+Build-/Testwerkzeuge liegen bisher physisch auch im Backend-Image; zwei Datenpfade und mehrere große UI-/Store-Dateien bleiben Wartbarkeitsrisiken. Echte PostgreSQL-/Parallelitäts-/UI-E2E-Tests fehlen. Lint, Testzahl und ein Null-Audit ergeben keinen Nachweis allgemeiner Wartbarkeit oder Security-Resilienz. Die Professorenbegründung ist weiterhin unvollständig; es wurde keine kausale Erklärung erfunden.
+
+Unabhängige Kontrolle muss finalen Diff, Anforderungsabdeckung, scoped Deepmerge-Fix, Secretfehlalarm-Triage, Prüfergebnisse und Dokumentationsgrenzen gegenprüfen. Menschliche Freigabe sowie native Secret-/Push-/Branch-Einstellungen bleiben getrennte Abnahmevoraussetzungen. Es erfolgte kein Merge, kein Schließen von #62 und kein Deployment.
+
+
 ## Erfuellte Anforderungen
 
 - Projektstruktur mit `/frontend`, `/backend`, `/docs`, Root `README.md` und Root `package.json`.

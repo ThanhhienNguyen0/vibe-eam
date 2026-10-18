@@ -1,0 +1,7 @@
+title = "Vibe-EAM secret scanning"
+
+[extend]
+useDefault = true
+
+# No rule, path or secret-value allowlists. One immutable historical finding
+# is triaged in .gitleaksignore; see docs/security/SECRET_SCANNING.md.

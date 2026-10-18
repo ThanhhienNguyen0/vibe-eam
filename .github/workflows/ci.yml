@@ -13,16 +13,16 @@ concurrency:
 
 jobs:
   verify:
-    name: Typecheck, test, build and Docker validation
+    name: Quality and infrastructure
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: npm
@@ -32,6 +32,9 @@ jobs:
 
       - name: Generate Prisma Client
         run: npm run db:generate --workspace backend
+
+      - name: Lint
+        run: npm run lint
 
       - name: Typecheck
         run: npm run typecheck
@@ -55,6 +58,44 @@ jobs:
         run: |
           npm run validate:compose
           npm run validate:workflows
+          npm run test:security
+          npm run validate:prisma-config
 
       - name: Build backend and frontend container images
         run: docker compose --env-file .env.example -f docker-compose.yml build backend frontend
+
+  dependencies:
+    name: Dependency security
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Audit all dependencies, enforce documented risk policy
+        run: npm run scan:dependencies
+      - name: Preserve complete audit even when the gate fails
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dependency-audit
+          path: .cache/security/audit.json
+          if-no-files-found: warn
+
+  secrets:
+    name: Secret security
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+      # No npm install or project lifecycle scripts before the secret scan.
+      - run: npm run scan:secrets

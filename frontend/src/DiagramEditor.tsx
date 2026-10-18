@@ -751,7 +751,7 @@ function DiagramEditorInner({
   useEffect(() => {
     setNodes(buildNodes(diagram, components, componentTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd));
     setEdges(buildEdges(diagram, connections, connectionTypes));
-  }, [diagram, components, componentTypes, connections, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd]);
+  }, [diagram, components, componentTypes, connections, connectionTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, setNodes, setEdges]);
 
   useEffect(() => () => window.clearTimeout(hoverLeaveTimer.current), []);
 
@@ -776,8 +776,6 @@ function DiagramEditorInner({
       if (!srcComp || !tgtComp) return;
 
       const allowed = getAllowedConnectionTypes(sidebarState, srcComp.componentTypeId, tgtComp.componentTypeId, activeViewpoint?.id);
-      const sourceType = componentTypes.find((type) => type.id === srcComp.componentTypeId);
-      const targetType = componentTypes.find((type) => type.id === tgtComp.componentTypeId);
 
       // Spezifischere Typen (mit eingeschränkten Quell-/Ziel-Listen) gewinnen
       // gegenüber Catch-all-Typen ohne Einschränkungen.
@@ -804,7 +802,7 @@ function DiagramEditorInner({
         setError(err instanceof Error ? err.message : "Verbindung konnte nicht erstellt werden.");
       }
     },
-    [activeViewpoint, componentTypes, components, connectionTypes, diagram, onConnectionCreated, onDiagramChange, sidebarState]
+    [activeViewpoint, components, diagram, onConnectionCreated, onDiagramChange, sidebarState]
   );
 
   const onConnect = useCallback(
@@ -888,8 +886,7 @@ function DiagramEditorInner({
     setIsDragOver(false);
   }, []);
 
-  const onCanvasDrop = useCallback(
-    (e: React.DragEvent) => {
+  function onCanvasDrop(e: React.DragEvent) {
       setIsDragOver(false);
       const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
 
@@ -906,9 +903,7 @@ function DiagramEditorInner({
       if (!compId) return;
       e.preventDefault();
       startAddComponent(compId, position);
-    },
-    [screenToFlowPosition, diagram, connections, components]
-  );
+  }
 
   async function createAndPlaceComponent(name: string, properties: Record<string, string>) {
     if (!pendingCreate) return;

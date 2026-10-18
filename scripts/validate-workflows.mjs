@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parse } from "yaml";
+import { securityWorkflowChecks } from "./workflow-security.mjs";
 
 const root = process.cwd();
 const failures = [];
@@ -32,6 +33,12 @@ function allRunScripts(workflow) {
 const ci = await load("ci.yml");
 const staging = await load("deploy-staging.yml");
 const production = await load("deploy-prod.yml");
+const codeql = await load("codeql.yml");
+const dependabot = parse(await readFile(path.join(root, ".github", "dependabot.yml"), "utf8"));
+const pkg = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+for (const result of securityWorkflowChecks(ci.workflow, codeql.workflow, dependabot, pkg)) {
+  check(result.condition, result.message);
+}
 
 const ciTriggers = triggers(ci.workflow);
 check(ciTriggers.includes("push"), "CI must run on push");

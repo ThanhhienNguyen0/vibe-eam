@@ -1,5 +1,7 @@
 # CI/CD Plan
 
+REQ-30-Erweiterung, 18.10.2026: `npm run check` generiert Prisma und bündelt Lint, Typecheck, Tests, Build, Repository- und Security-Gate-Validatoren einschließlich Prisma-Konfigurationskompatibilität. PR-CI enthält diese Prüfungen sowie die bisherigen drei realen Compose-Konfigurationen und beide Image-Builds. Separate Jobs `Dependency security` und `Secret security` blockieren bei Sicherheitsbefunden; `CodeQL JavaScript TypeScript` läuft im eigenen Workflow bei PR, main-Push und wöchentlich. Pflichtcheck-Namen/Administrator-Abnahme: `security/GITHUB_ADMIN_CHECKLIST.md`; tatsächliche Resultate: `REQ-30_IMPLEMENTATION_EVIDENCE.md`. Das Vorhandensein dieser Dateien beweist keine aktivierte Branch Protection.
+
 ## Ziel
 
 Die Pipeline trennt automatische Qualitätsprüfung von bewusster Auslieferung:

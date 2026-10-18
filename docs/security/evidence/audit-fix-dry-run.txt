@@ -1,0 +1,1221 @@
+change yaml 2.8.1 => 2.9.1
+change update-browserslist-db 1.2.3 => 1.3.4
+change source-map-js 1.2.1 => 1.2.2
+change side-channel 1.1.0 => 1.1.1
+change shell-quote 1.8.3 => 1.12.0
+change proxy-addr 2.0.7 => 2.0.8
+change postcss 8.5.12 => 8.5.30
+change node-releases 2.0.38 => 2.0.59
+change nanoid 3.3.11 => 3.3.20
+change electron-to-chromium 1.5.344 => 1.5.459
+change caniuse-lite 1.0.30001791 => 1.0.30001816
+change browserslist 4.28.2 => 4.29.3
+change body-parser 1.20.5 => 1.20.8
+change qs 6.15.1 => 6.16.1
+change baseline-browser-mapping 2.10.23 => 2.11.29
+change @babel/types 7.29.0 => 7.29.8
+change @babel/traverse 7.29.0 => 7.29.10
+change @babel/template 7.28.6 => 7.29.7
+change @babel/parser 7.29.2 => 7.29.9
+change @babel/helpers 7.29.2 => 7.29.10
+change @babel/helper-validator-option 7.27.1 => 7.29.7
+change @babel/helper-validator-identifier 7.28.5 => 7.29.7
+change @babel/helper-string-parser 7.27.1 => 7.29.7
+change @babel/helper-module-transforms 7.28.6 => 7.29.7
+change @babel/helper-module-imports 7.28.6 => 7.29.7
+change @babel/helper-globals 7.28.0 => 7.29.7
+change @babel/helper-compilation-targets 7.28.6 => 7.29.7
+change @babel/generator 7.29.1 => 7.29.8
+change @babel/core 7.29.0 => 7.29.7
+change @babel/compat-data 7.29.0 => 7.29.7
+change @babel/code-frame 7.29.0 => 7.29.7
+{
+  "add": [],
+  "added": 0,
+  "audited": 388,
+  "change": [
+    {
+      "from": {
+        "name": "yaml",
+        "version": "2.8.1",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\yaml"
+      },
+      "to": {
+        "name": "yaml",
+        "version": "2.9.1",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\yaml"
+      }
+    },
+    {
+      "from": {
+        "name": "update-browserslist-db",
+        "version": "1.2.3",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\update-browserslist-db"
+      },
+      "to": {
+        "name": "update-browserslist-db",
+        "version": "1.3.4",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\update-browserslist-db"
+      }
+    },
+    {
+      "from": {
+        "name": "source-map-js",
+        "version": "1.2.1",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\source-map-js"
+      },
+      "to": {
+        "name": "source-map-js",
+        "version": "1.2.2",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\source-map-js"
+      }
+    },
+    {
+      "from": {
+        "name": "side-channel",
+        "version": "1.1.0",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\side-channel"
+      },
+      "to": {
+        "name": "side-channel",
+        "version": "1.1.1",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\side-channel"
+      }
+    },
+    {
+      "from": {
+        "name": "shell-quote",
+        "version": "1.8.3",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\shell-quote"
+      },
+      "to": {
+        "name": "shell-quote",
+        "version": "1.12.0",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\shell-quote"
+      }
+    },
+    {
+      "from": {
+        "name": "proxy-addr",
+        "version": "2.0.7",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\proxy-addr"
+      },
+      "to": {
+        "name": "proxy-addr",
+        "version": "2.0.8",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\proxy-addr"
+      }
+    },
+    {
+      "from": {
+        "name": "postcss",
+        "version": "8.5.12",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\postcss"
+      },
+      "to": {
+        "name": "postcss",
+        "version": "8.5.30",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\postcss"
+      }
+    },
+    {
+      "from": {
+        "name": "node-releases",
+        "version": "2.0.38",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\node-releases"
+      },
+      "to": {
+        "name": "node-releases",
+        "version": "2.0.59",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\node-releases"
+      }
+    },
+    {
+      "from": {
+        "name": "nanoid",
+        "version": "3.3.11",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\nanoid"
+      },
+      "to": {
+        "name": "nanoid",
+        "version": "3.3.20",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\nanoid"
+      }
+    },
+    {
+      "from": {
+        "name": "electron-to-chromium",
+        "version": "1.5.344",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\electron-to-chromium"
+      },
+      "to": {
+        "name": "electron-to-chromium",
+        "version": "1.5.459",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\electron-to-chromium"
+      }
+    },
+    {
+      "from": {
+        "name": "caniuse-lite",
+        "version": "1.0.30001791",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\caniuse-lite"
+      },
+      "to": {
+        "name": "caniuse-lite",
+        "version": "1.0.30001816",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\caniuse-lite"
+      }
+    },
+    {
+      "from": {
+        "name": "browserslist",
+        "version": "4.28.2",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\browserslist"
+      },
+      "to": {
+        "name": "browserslist",
+        "version": "4.29.3",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\browserslist"
+      }
+    },
+    {
+      "from": {
+        "name": "body-parser",
+        "version": "1.20.5",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\body-parser"
+      },
+      "to": {
+        "name": "body-parser",
+        "version": "1.20.8",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\body-parser"
+      }
+    },
+    {
+      "from": {
+        "name": "qs",
+        "version": "6.15.1",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\body-parser\\node_modules\\qs"
+      },
+      "to": {
+        "name": "qs",
+        "version": "6.16.1",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\body-parser\\node_modules\\qs"
+      }
+    },
+    {
+      "from": {
+        "name": "baseline-browser-mapping",
+        "version": "2.10.23",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\baseline-browser-mapping"
+      },
+      "to": {
+        "name": "baseline-browser-mapping",
+        "version": "2.11.29",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\baseline-browser-mapping"
+      }
+    },
+    {
+      "from": {
+        "name": "@babel/types",
+        "version": "7.29.0",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\types"
+      },
+      "to": {
+        "name": "@babel/types",
+        "version": "7.29.8",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\types"
+      }
+    },
+    {
+      "from": {
+        "name": "@babel/traverse",
+        "version": "7.29.0",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\traverse"
+      },
+      "to": {
+        "name": "@babel/traverse",
+        "version": "7.29.10",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\traverse"
+      }
+    },
+    {
+      "from": {
+        "name": "@babel/template",
+        "version": "7.28.6",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\template"
+      },
+      "to": {
+        "name": "@babel/template",
+        "version": "7.29.7",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\template"
+      }
+    },
+    {
+      "from": {
+        "name": "@babel/parser",
+        "version": "7.29.2",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\parser"
+      },
+      "to": {
+        "name": "@babel/parser",
+        "version": "7.29.9",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\parser"
+      }
+    },
+    {
+      "from": {
+        "name": "@babel/helpers",
+        "version": "7.29.2",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\helpers"
+      },
+      "to": {
+        "name": "@babel/helpers",
+        "version": "7.29.10",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\helpers"
+      }
+    },
+    {
+      "from": {
+        "name": "@babel/helper-validator-option",
+        "version": "7.27.1",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\helper-validator-option"
+      },
+      "to": {
+        "name": "@babel/helper-validator-option",
+        "version": "7.29.7",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\helper-validator-option"
+      }
+    },
+    {
+      "from": {
+        "name": "@babel/helper-validator-identifier",
+        "version": "7.28.5",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\helper-validator-identifier"
+      },
+      "to": {
+        "name": "@babel/helper-validator-identifier",
+        "version": "7.29.7",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\helper-validator-identifier"
+      }
+    },
+    {
+      "from": {
+        "name": "@babel/helper-string-parser",
+        "version": "7.27.1",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\helper-string-parser"
+      },
+      "to": {
+        "name": "@babel/helper-string-parser",
+        "version": "7.29.7",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\helper-string-parser"
+      }
+    },
+    {
+      "from": {
+        "name": "@babel/helper-module-transforms",
+        "version": "7.28.6",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\helper-module-transforms"
+      },
+      "to": {
+        "name": "@babel/helper-module-transforms",
+        "version": "7.29.7",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\helper-module-transforms"
+      }
+    },
+    {
+      "from": {
+        "name": "@babel/helper-module-imports",
+        "version": "7.28.6",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\helper-module-imports"
+      },
+      "to": {
+        "name": "@babel/helper-module-imports",
+        "version": "7.29.7",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\helper-module-imports"
+      }
+    },
+    {
+      "from": {
+        "name": "@babel/helper-globals",
+        "version": "7.28.0",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\helper-globals"
+      },
+      "to": {
+        "name": "@babel/helper-globals",
+        "version": "7.29.7",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\helper-globals"
+      }
+    },
+    {
+      "from": {
+        "name": "@babel/helper-compilation-targets",
+        "version": "7.28.6",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\helper-compilation-targets"
+      },
+      "to": {
+        "name": "@babel/helper-compilation-targets",
+        "version": "7.29.7",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\helper-compilation-targets"
+      }
+    },
+    {
+      "from": {
+        "name": "@babel/generator",
+        "version": "7.29.1",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\generator"
+      },
+      "to": {
+        "name": "@babel/generator",
+        "version": "7.29.8",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\generator"
+      }
+    },
+    {
+      "from": {
+        "name": "@babel/core",
+        "version": "7.29.0",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\core"
+      },
+      "to": {
+        "name": "@babel/core",
+        "version": "7.29.7",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\core"
+      }
+    },
+    {
+      "from": {
+        "name": "@babel/compat-data",
+        "version": "7.29.0",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\compat-data"
+      },
+      "to": {
+        "name": "@babel/compat-data",
+        "version": "7.29.7",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\compat-data"
+      }
+    },
+    {
+      "from": {
+        "name": "@babel/code-frame",
+        "version": "7.29.0",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\code-frame"
+      },
+      "to": {
+        "name": "@babel/code-frame",
+        "version": "7.29.7",
+        "path": "C:\\Users\\messe\\OneDrive\\Dokumente\\New project\\node_modules\\@babel\\code-frame"
+      }
+    }
+  ],
+  "changed": 31,
+  "funding": 65,
+  "remove": [],
+  "removed": 0,
+  "audit": {
+    "auditReportVersion": 2,
+    "vulnerabilities": {
+      "@babel/core": {
+        "name": "@babel/core",
+        "severity": "low",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1123528,
+            "name": "@babel/core",
+            "dependency": "@babel/core",
+            "title": "@babel/core: Arbitrary File Read via sourceMappingURL Comment",
+            "url": "https://github.com/advisories/GHSA-4x5r-pxfx-6jf8",
+            "severity": "low",
+            "cwe": [
+              "CWE-22",
+              "CWE-200"
+            ],
+            "cvss": {
+              "score": 3.2,
+              "vectorString": "CVSS:3.1/AV:L/AC:H/PR:N/UI:N/S:C/C:L/I:N/A:N"
+            },
+            "range": "<=7.29.0"
+          }
+        ],
+        "effects": [],
+        "range": "<=7.29.0",
+        "nodes": [
+          ""
+        ],
+        "fixAvailable": true
+      },
+      "@prisma/config": {
+        "name": "@prisma/config",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          "deepmerge-ts",
+          "effect"
+        ],
+        "effects": [
+          "prisma"
+        ],
+        "range": "6.13.0-dev.1 - 7.10.0 || 8.1.0-dev.1 - 8.1.0-dev.4",
+        "nodes": [
+          "node_modules/@prisma/config"
+        ],
+        "fixAvailable": {
+          "name": "prisma",
+          "version": "7.10.1",
+          "isSemVerMajor": true
+        }
+      },
+      "baseline-browser-mapping": {
+        "name": "baseline-browser-mapping",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1193686,
+            "name": "baseline-browser-mapping",
+            "dependency": "baseline-browser-mapping",
+            "title": "baseline-browser-mapping process termination on invalid input causes denial of service",
+            "url": "https://github.com/advisories/GHSA-w5vr-8v7q-w6rv",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-705"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": ">=2.0.0 <2.11.0"
+          }
+        ],
+        "effects": [],
+        "range": ">=2.0.0 <2.11.0",
+        "nodes": [
+          ""
+        ],
+        "fixAvailable": true
+      },
+      "body-parser": {
+        "name": "body-parser",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1123977,
+            "name": "body-parser",
+            "dependency": "body-parser",
+            "title": "body-parser vulnerable to denial of service when invalid limit value silently disables size enforcement",
+            "url": "https://github.com/advisories/GHSA-v422-hmwv-36x6",
+            "severity": "low",
+            "cwe": [
+              "CWE-770"
+            ],
+            "cvss": {
+              "score": 3.7,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": "<1.20.6"
+          },
+          "qs"
+        ],
+        "effects": [],
+        "range": "<=1.20.6",
+        "nodes": [
+          ""
+        ],
+        "fixAvailable": true
+      },
+      "browserslist": {
+        "name": "browserslist",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1153171,
+            "name": "browserslist",
+            "dependency": "browserslist",
+            "title": "Browserslist: Unbounded memory growth (no cache eviction) via distinct query results, leading to eventual OOM",
+            "url": "https://github.com/advisories/GHSA-c83g-rgw3-j3cx",
+            "severity": "high",
+            "cwe": [
+              "CWE-770"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<=4.28.6"
+          },
+          {
+            "source": 1153172,
+            "name": "browserslist",
+            "dependency": "browserslist",
+            "title": "Browserslist: Uncaught crash / prototype write via untrusted browserslist-stats.json custom stats (normalizeStats)",
+            "url": "https://github.com/advisories/GHSA-73wf-gq98-2v4g",
+            "severity": "high",
+            "cwe": [
+              "CWE-248",
+              "CWE-1321"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<=4.28.6"
+          }
+        ],
+        "effects": [],
+        "range": "<=4.28.6",
+        "nodes": [
+          ""
+        ],
+        "fixAvailable": true
+      },
+      "deepmerge-ts": {
+        "name": "deepmerge-ts",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1145093,
+            "name": "deepmerge-ts",
+            "dependency": "deepmerge-ts",
+            "title": "DeepmergeTS has stack exhaustion when merging recursive object graphs",
+            "url": "https://github.com/advisories/GHSA-ggr8-5vv4-36mx",
+            "severity": "high",
+            "cwe": [
+              "CWE-674"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<8.0.0"
+          }
+        ],
+        "effects": [
+          "@prisma/config"
+        ],
+        "range": "<8.0.0",
+        "nodes": [
+          "node_modules/deepmerge-ts"
+        ],
+        "fixAvailable": {
+          "name": "prisma",
+          "version": "7.10.1",
+          "isSemVerMajor": true
+        }
+      },
+      "effect": {
+        "name": "effect",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1115356,
+            "name": "effect",
+            "dependency": "effect",
+            "title": "Effect `AsyncLocalStorage` context lost/contaminated inside Effect fibers under concurrent load with RPC",
+            "url": "https://github.com/advisories/GHSA-38f7-945m-qr2g",
+            "severity": "high",
+            "cwe": [
+              "CWE-362"
+            ],
+            "cvss": {
+              "score": 7.4,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N"
+            },
+            "range": "<3.20.0"
+          }
+        ],
+        "effects": [
+          "@prisma/config"
+        ],
+        "range": "<3.20.0",
+        "nodes": [
+          "node_modules/effect"
+        ],
+        "fixAvailable": {
+          "name": "prisma",
+          "version": "7.10.1",
+          "isSemVerMajor": true
+        }
+      },
+      "esbuild": {
+        "name": "esbuild",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1102341,
+            "name": "esbuild",
+            "dependency": "esbuild",
+            "title": "esbuild enables any website to send any requests to the development server and read the response",
+            "url": "https://github.com/advisories/GHSA-67mh-4wv8-2f99",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-346"
+            ],
+            "cvss": {
+              "score": 5.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:N/A:N"
+            },
+            "range": "<=0.24.2"
+          },
+          {
+            "source": 1120680,
+            "name": "esbuild",
+            "dependency": "esbuild",
+            "title": "esbuild allows arbitrary file read when running the development server on Windows",
+            "url": "https://github.com/advisories/GHSA-g7r4-m6w7-qqqr",
+            "severity": "low",
+            "cwe": [
+              "CWE-22"
+            ],
+            "cvss": {
+              "score": 2.5,
+              "vectorString": "CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:L/A:N"
+            },
+            "range": ">=0.27.3 <0.28.1"
+          }
+        ],
+        "effects": [
+          "vite"
+        ],
+        "range": "<=0.24.2 || 0.27.3 - 0.28.0",
+        "nodes": [
+          "node_modules/esbuild",
+          "node_modules/vite/node_modules/esbuild"
+        ],
+        "fixAvailable": {
+          "name": "vite",
+          "version": "8.3.4",
+          "isSemVerMajor": true
+        }
+      },
+      "nanoid": {
+        "name": "nanoid",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1138811,
+            "name": "nanoid",
+            "dependency": "nanoid",
+            "title": "nanoid: non-secure generators can loop indefinitely with negative size",
+            "url": "https://github.com/advisories/GHSA-28wg-ghj8-5hjv",
+            "severity": "high",
+            "cwe": [
+              "CWE-835"
+            ],
+            "cvss": {
+              "score": 5.9,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<3.3.16"
+          },
+          {
+            "source": 1139427,
+            "name": "nanoid",
+            "dependency": "nanoid",
+            "title": "nanoid: custom generators can loop indefinitely when size is zero",
+            "url": "https://github.com/advisories/GHSA-2v37-7h3g-55p8",
+            "severity": "high",
+            "cwe": [
+              "CWE-835"
+            ],
+            "cvss": {
+              "score": 5.9,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<3.3.18"
+          },
+          {
+            "source": 1153189,
+            "name": "nanoid",
+            "dependency": "nanoid",
+            "title": "nanoid: Integer Overflow or Wraparound",
+            "url": "https://github.com/advisories/GHSA-xwg4-73v4-xw9w",
+            "severity": "high",
+            "cwe": [
+              "CWE-190"
+            ],
+            "cvss": {
+              "score": 7.4,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N"
+            },
+            "range": "<3.3.12"
+          }
+        ],
+        "effects": [],
+        "range": "<=3.3.17",
+        "nodes": [
+          ""
+        ],
+        "fixAvailable": true
+      },
+      "postcss": {
+        "name": "postcss",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1130709,
+            "name": "postcss",
+            "dependency": "postcss",
+            "title": "PostCSS: incomplete fix of GHSA-6g55-p6wh-862q — attacker-controlled sourceMappingURL reads arbitrary .map files when `from` is unset",
+            "url": "https://github.com/advisories/GHSA-fxqj-rqcc-2cmp",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-22",
+              "CWE-200"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=8.5.22"
+          },
+          {
+            "source": 1139510,
+            "name": "postcss",
+            "dependency": "postcss",
+            "title": "PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to Arbitrary .map File Disclosure",
+            "url": "https://github.com/advisories/GHSA-r28c-9q8g-f849",
+            "severity": "high",
+            "cwe": [
+              "CWE-22"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+            },
+            "range": "<=8.5.17"
+          }
+        ],
+        "effects": [],
+        "range": "<=8.5.22",
+        "nodes": [
+          ""
+        ],
+        "fixAvailable": true
+      },
+      "prisma": {
+        "name": "prisma",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          "@prisma/config"
+        ],
+        "effects": [],
+        "range": "6.13.0-dev.1 - 7.10.0 || 8.0.0-rc.3 - 8.1.0-dev.4",
+        "nodes": [
+          "node_modules/prisma"
+        ],
+        "fixAvailable": {
+          "name": "prisma",
+          "version": "7.10.1",
+          "isSemVerMajor": true
+        }
+      },
+      "proxy-addr": {
+        "name": "proxy-addr",
+        "severity": "critical",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1241210,
+            "name": "proxy-addr",
+            "dependency": "proxy-addr",
+            "title": "proxy-addr vulnerable to IP spoofing via IPv4-mapped IPv6 trust subnet",
+            "url": "https://github.com/advisories/GHSA-jqcg-44mw-7w3h",
+            "severity": "critical",
+            "cwe": [
+              "CWE-290",
+              "CWE-348",
+              "CWE-697"
+            ],
+            "cvss": {
+              "score": 9.1,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N"
+            },
+            "range": ">=1.1.0 <2.0.8"
+          }
+        ],
+        "effects": [],
+        "range": "1.1.0 - 2.0.7",
+        "nodes": [
+          ""
+        ],
+        "fixAvailable": true
+      },
+      "qs": {
+        "name": "qs",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1119502,
+            "name": "qs",
+            "dependency": "qs",
+            "title": "qs has a remotely triggerable DoS: qs.stringify crashes with TypeError on null/undefined entries in comma-format arrays when encodeValuesOnly is set",
+            "url": "https://github.com/advisories/GHSA-q8mj-m7cp-5q26",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-476"
+            ],
+            "cvss": {
+              "score": 5.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": ">=6.11.1 <=6.15.1"
+          },
+          {
+            "source": 1158506,
+            "name": "qs",
+            "dependency": "qs",
+            "title": "qs array-limit bypass via bracket-key comma parsing",
+            "url": "https://github.com/advisories/GHSA-x5fp-wj9c-mxmx",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-770"
+            ],
+            "cvss": {
+              "score": 3.7,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": ">=6.14.2 <=6.15.3"
+          },
+          {
+            "source": 1158507,
+            "name": "qs",
+            "dependency": "qs",
+            "title": "qs: Denial of Service via Attacker Controlled isBuffer",
+            "url": "https://github.com/advisories/GHSA-4mjr-xmp4-gh2g",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-248",
+              "CWE-703"
+            ],
+            "cvss": {
+              "score": 5.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": ">=2.2.5 <6.16.0"
+          }
+        ],
+        "effects": [
+          "body-parser"
+        ],
+        "range": "2.2.5 - 6.15.3",
+        "nodes": [
+          "",
+          "node_modules/qs"
+        ],
+        "fixAvailable": true
+      },
+      "shell-quote": {
+        "name": "shell-quote",
+        "severity": "critical",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1120422,
+            "name": "shell-quote",
+            "dependency": "shell-quote",
+            "title": "shell-quote quote() does not escape newlines in object .op values",
+            "url": "https://github.com/advisories/GHSA-w7jw-789q-3m8p",
+            "severity": "critical",
+            "cwe": [
+              "CWE-77",
+              "CWE-78"
+            ],
+            "cvss": {
+              "score": 8.1,
+              "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H"
+            },
+            "range": ">=1.1.0 <=1.8.3"
+          },
+          {
+            "source": 1123944,
+            "name": "shell-quote",
+            "dependency": "shell-quote",
+            "title": "shell-quote: Quadratic-complexity Denial of Service in `parse()` (CWE-407)",
+            "url": "https://github.com/advisories/GHSA-395f-4hp3-45gv",
+            "severity": "high",
+            "cwe": [
+              "CWE-407"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": "<=1.8.4"
+          }
+        ],
+        "effects": [],
+        "range": "<=1.8.4",
+        "nodes": [
+          ""
+        ],
+        "fixAvailable": true
+      },
+      "source-map-js": {
+        "name": "source-map-js",
+        "severity": "high",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1241209,
+            "name": "source-map-js",
+            "dependency": "source-map-js",
+            "title": "source-map-js allows event-loop denial of service through indexed source-map section offsets",
+            "url": "https://github.com/advisories/GHSA-68fv-2mgg-jv7q",
+            "severity": "high",
+            "cwe": [
+              "CWE-1284"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+            },
+            "range": ">=1.0.0 <1.2.2"
+          }
+        ],
+        "effects": [],
+        "range": "1.0.0 - 1.2.1",
+        "nodes": [
+          ""
+        ],
+        "fixAvailable": true
+      },
+      "tinypool": {
+        "name": "tinypool",
+        "severity": "critical",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1241260,
+            "name": "tinypool",
+            "dependency": "tinypool",
+            "title": "Tinypool: Prototype Pollution gadget in worker options leads to Remote Code Execution",
+            "url": "https://github.com/advisories/GHSA-5gmw-xhrv-c9v3",
+            "severity": "critical",
+            "cwe": [
+              "CWE-1321"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=2.1.0"
+          },
+          {
+            "source": 1241261,
+            "name": "tinypool",
+            "dependency": "tinypool",
+            "title": "Tinypool: Prototype Pollution Gadget to RCE in run() options",
+            "url": "https://github.com/advisories/GHSA-85c8-ppgw-ccpr",
+            "severity": "critical",
+            "cwe": [
+              "CWE-94",
+              "CWE-1321"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<2.1.2"
+          }
+        ],
+        "effects": [
+          "vitest"
+        ],
+        "range": "<=2.1.1",
+        "nodes": [
+          "node_modules/tinypool"
+        ],
+        "fixAvailable": {
+          "name": "vitest",
+          "version": "5.0.5",
+          "isSemVerMajor": true
+        }
+      },
+      "vite": {
+        "name": "vite",
+        "severity": "high",
+        "isDirect": true,
+        "via": [
+          {
+            "source": 1116229,
+            "name": "vite",
+            "dependency": "vite",
+            "title": "Vite Vulnerable to Path Traversal in Optimized Deps `.map` Handling",
+            "url": "https://github.com/advisories/GHSA-4w7w-66w2-5vf9",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-22",
+              "CWE-200"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=6.4.1"
+          },
+          {
+            "source": 1120784,
+            "name": "vite",
+            "dependency": "vite",
+            "title": "launch-editor: NTLMv2 hash disclosure via UNC path handling on Windows",
+            "url": "https://github.com/advisories/GHSA-v6wh-96g9-6wx3",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-73",
+              "CWE-522"
+            ],
+            "cvss": {
+              "score": 0,
+              "vectorString": null
+            },
+            "range": "<=6.4.2"
+          },
+          {
+            "source": 1123525,
+            "name": "vite",
+            "dependency": "vite",
+            "title": "vite: `server.fs.deny` bypass on Windows alternate paths",
+            "url": "https://github.com/advisories/GHSA-fx2h-pf6j-xcff",
+            "severity": "high",
+            "cwe": [
+              "CWE-22",
+              "CWE-200"
+            ],
+            "cvss": {
+              "score": 7.5,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+            },
+            "range": "<=6.4.2"
+          },
+          "esbuild"
+        ],
+        "effects": [
+          "vite-node",
+          "vitest"
+        ],
+        "range": "<=6.4.2",
+        "nodes": [
+          "node_modules/vite"
+        ],
+        "fixAvailable": {
+          "name": "vite",
+          "version": "8.3.4",
+          "isSemVerMajor": true
+        }
+      },
+      "vite-node": {
+        "name": "vite-node",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          "vite"
+        ],
+        "effects": [
+          "vitest"
+        ],
+        "range": "<=2.2.0-beta.2",
+        "nodes": [
+          "node_modules/vite-node"
+        ],
+        "fixAvailable": {
+          "name": "vitest",
+          "version": "5.0.5",
+          "isSemVerMajor": true
+        }
+      },
+      "vitest": {
+        "name": "vitest",
+        "severity": "critical",
+        "isDirect": true,
+        "via": [
+          {
+            "source": 1139528,
+            "name": "vitest",
+            "dependency": "vitest",
+            "title": "When Vitest UI server is listening, arbitrary file can be read and executed",
+            "url": "https://github.com/advisories/GHSA-5xrq-8626-4rwp",
+            "severity": "critical",
+            "cwe": [
+              "CWE-22",
+              "CWE-862"
+            ],
+            "cvss": {
+              "score": 9.8,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+            },
+            "range": "<3.2.6"
+          },
+          "tinypool",
+          "vite",
+          "vite-node"
+        ],
+        "effects": [],
+        "range": "<=4.0.0-beta.19",
+        "nodes": [
+          "node_modules/vitest"
+        ],
+        "fixAvailable": {
+          "name": "vitest",
+          "version": "5.0.5",
+          "isSemVerMajor": true
+        }
+      },
+      "yaml": {
+        "name": "yaml",
+        "severity": "moderate",
+        "isDirect": false,
+        "via": [
+          {
+            "source": 1115556,
+            "name": "yaml",
+            "dependency": "yaml",
+            "title": "yaml is vulnerable to Stack Overflow via deeply nested YAML collections",
+            "url": "https://github.com/advisories/GHSA-48c2-rrv3-qjmp",
+            "severity": "moderate",
+            "cwe": [
+              "CWE-674"
+            ],
+            "cvss": {
+              "score": 4.3,
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:L"
+            },
+            "range": ">=2.0.0 <2.8.3"
+          }
+        ],
+        "effects": [],
+        "range": "2.0.0 - 2.8.2",
+        "nodes": [
+          ""
+        ],
+        "fixAvailable": true
+      }
+    },
+    "metadata": {
+      "vulnerabilities": {
+        "info": 0,
+        "low": 1,
+        "moderate": 6,
+        "high": 9,
+        "critical": 4,
+        "total": 20
+      },
+      "dependencies": {
+        "prod": 250,
+        "dev": 135,
+        "optional": 4,
+        "peer": 0,
+        "peerOptional": 0,
+        "total": 387
+      }
+    }
+  }
+}
