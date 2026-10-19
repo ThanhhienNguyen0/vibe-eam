@@ -1,0 +1,21 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:00'
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 3
+    groups:
+      compatible-tooling:
+        dependency-type: development
+        update-types: [minor, patch]
+    # Major updates remain separate for explicit compatibility review.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 2

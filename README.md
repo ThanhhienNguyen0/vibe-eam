@@ -4,20 +4,21 @@ Ein lokaler Web-Prototyp fuer ein Enterprise Architecture Management Tool. Das P
 
 ## Projektziel
 
-Der Prototyp modelliert Business-, Application-, Data- und Technology-Elemente, gerichtete Relationen, Impact-Analyse, Heatmaps, Capability Map, Lifecycle Roadmap, JSON Import/Export und Audit Log. Er ist bewusst ein MVP und kein Nachbau eines bestehenden Open-Source-EAM-Tools.
+Der aktuelle Browserpfad bietet Anmeldung/Registrierung, Company-bezogene Repository-Komponenten, Diagramme und ein editierbares Metamodell. Historische Backendfunktionen wie Impact-Analyse und Portfolio sind nicht als aktuelle Browseransichten zu verstehen. Der Prototyp ist ein MVP und kein Nachbau eines bestehenden Open-Source-EAM-Tools.
 
 ## Setup
 
 Voraussetzungen:
 
-- Node.js 20 oder neuer empfohlen
+- Node.js 22 ab 22.13 (CI/Docker) oder eine in `package.json` zugelassene neuere Linie
 - npm
 - PostgreSQL (lokal) oder Docker Compose
 
 Installation:
 
 ```bash
-npm install
+npm ci
+npm run db:generate --workspace backend
 ```
 
 ## Startbefehle
@@ -54,14 +55,25 @@ docker.exe compose up --build
 
 Auf Linux normalerweise `docker compose up --build`. Getrennte Staging-/Produktionsumgebungen und das Hosting über `eam.messers-cardio-club.com` sind in `docs/DOCKER_SETUP.md`, `docs/HOSTING_SETUP.md` und `docs/ENVIRONMENT_AND_HOSTING_PLAN.md` beschrieben.
 
-Build und Typecheck:
+Verpflichtender lokaler Qualitätscheck und ergänzende Security-Scans:
 
 ```bash
-npm run typecheck
-npm run build
+npm run check
+npm run scan:dependencies
+npm run scan:secrets
 ```
 
-## Funktionsuebersicht
+Beitrags-/Reviewablauf: [CONTRIBUTING.md](CONTRIBUTING.md). REQ-30-Prüfnachweis: [docs/REQ-30_IMPLEMENTATION_EVIDENCE.md](docs/REQ-30_IMPLEMENTATION_EVIDENCE.md). Native GitHub-Schutzregeln bleiben bis zum Admin-Nachweis offen.
+
+## Aktuelle Funktionsuebersicht
+
+- Registrierung, Login, Logout und Company-Isolation
+- Sidebar, gemeinsame Repository-Komponenten und mehrere Diagramme
+- React-Flow-Editor mit Komponenten-/Verbindungseigenschaften
+- Editierbare Komponententypen, Verbindungsregeln, Viewpoints und Diagrammvalidierung
+- Metamodel-Ansicht einschließlich Regelgraph und Metamodel-JSON-Import/-Export
+
+## Historische Funktionsuebersicht (Legacy-Backend, keine aktuelle UI-Zusage)
 
 - EAM-Elemente: Business Capability, Business Process, Application Component, Data Object, Technology Node
 - Relationen: `uses`, `depends_on`, `realizes`, `serves`
@@ -91,8 +103,8 @@ npm run build
 
 ## Bekannte Grenzen
 
-- Keine Authentifizierung.
-- Der aktuelle Sidebar-/Diagramm-Pfad nutzt mit `DATABASE_URL` PostgreSQL; nur der historische `/api/model`-Pfad und der explizite Offline-Fallback bleiben JSON-basiert.
+- JWT/bcrypt-Authentifizierung und Company-Isolation sind vorhanden; ein vollständiges serverseitiges Admin-/Architekt-/Viewer-RBAC ist nicht nachgewiesen.
+- Der aktuelle Sidebar-/Diagramm-Pfad nutzt mit `DATABASE_URL` PostgreSQL. Auch `/api/model` nutzt dann Company-bezogene JSONB-Daten in PostgreSQL; JSON-Dateien bleiben ein expliziter Fallback. Beide Datenmodelle sind getrennt.
 - Keine kollaborative Bearbeitung.
 - Keine vollstaendige ArchiMate-, TOGAF- oder BPMN-Konformitaet.
 - Impact-Analyse ist bewusst einfach und betrachtet nur ausgehende `uses` und `depends_on`.

@@ -1,5 +1,7 @@
 # CI/CD Plan
 
+REQ-30-Erweiterung, 18.10.2026: `npm run check` generiert Prisma und bündelt Lint, Typecheck, Tests, Build, Repository- und Security-Gate-Validatoren einschließlich Prisma-Konfigurationskompatibilität. PR-CI enthält diese Prüfungen sowie die bisherigen drei realen Compose-Konfigurationen und beide Image-Builds. Separate Jobs `Dependency security` und `Secret security` blockieren bei Sicherheitsbefunden; `CodeQL JavaScript TypeScript` läuft im eigenen Workflow bei PR, main-Push und wöchentlich. Pflichtcheck-Namen/Administrator-Abnahme: `security/GITHUB_ADMIN_CHECKLIST.md`; tatsächliche Resultate: `REQ-30_IMPLEMENTATION_EVIDENCE.md`. Das Vorhandensein dieser Dateien beweist keine aktivierte Branch Protection.
+
 ## Ziel
 
 Die Pipeline trennt automatische Qualitätsprüfung von bewusster Auslieferung:
@@ -71,7 +73,7 @@ Der Remote-Ablauf protokolliert vor dem Deployment ausschließlich sichere Diagn
 - erfolgreichen Verify-Job.
 - optionalen GitHub-Environment-Schutz für `production` mit Required Reviewers.
 
-Der SSH-Ablauf entspricht Staging, verwendet aber `/var/www/eam`, `.env.prod`, `docker-compose.prod.yml` und `127.0.0.1:4401/api/health`. Auch hier laufen portable Healthcheck-Retries und dieselben secretfreien Fehlerdiagnosen.
+Der SSH-Ablauf entspricht Staging, verwendet aber `/var/www/eam`, `.env.prod`, `docker-compose.prod.yml` und `127.0.0.1:4401/api/health`. Auch hier laufen portable Healthcheck-Retries und dieselben secretfreien Fehlerdiagnosen. Produktionsdeployments akzeptieren nur eine vollständige 40-stellige Commit-SHA, die bereits in `main` enthalten ist. Nach dem internen Check prüft der Runner zusätzlich den öffentlichen HTTPS-Endpunkt aus `PROD_HEALTH_URL`; Staging verwendet entsprechend `STAGING_HEALTH_URL`.
 
 ## Benötigte GitHub Secrets und Environments
 

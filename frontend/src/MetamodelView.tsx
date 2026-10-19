@@ -42,17 +42,6 @@ type GraphSelection =
   | { kind: "edge"; item: GraphEdge }
   | null;
 
-const CORE_EAM_TYPE_IDS = new Set([
-  "ct-stakeholder",
-  "ct-goal",
-  "ct-capability",
-  "ct-proc",
-  "ct-app",
-  "ct-data-object",
-  "ct-technology-node",
-  "ct-org-unit"
-]);
-
 const SIMPLIFIED_RULE_IDS = new Set([
   "rule-stakeholder-interested-capability",
   "rule-stakeholder-responsible-application",

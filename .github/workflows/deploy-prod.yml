@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Approved Git tag or commit (main is allowed only by conscious choice)
+        description: Full 40-character commit SHA already contained in main
         required: true
         type: string
       confirmation:
@@ -53,16 +53,43 @@ jobs:
           [[ "$BACKUP_CONFIRMED" == "true" ]] || { echo "Production backup was not confirmed." >&2; exit 1; }
           [[ "$ACCEPTANCE_CONFIRMED" == "true" ]] || { echo "Hosting acceptance was not confirmed." >&2; exit 1; }
 
+      - name: Require an immutable production revision
+        env:
+          SELECTED_REF: ${{ inputs.ref }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$SELECTED_REF" =~ ^[0-9a-fA-F]{40}$ ]] || {
+            echo "Production ref must be a full 40-character commit SHA." >&2
+            exit 1
+          }
+
       - name: Checkout selected revision
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: npm
+
+      - name: Require revision to be contained in main
+        env:
+          SELECTED_REF: ${{ inputs.ref }}
+        run: |
+          set -Eeuo pipefail
+          RESOLVED_SHA="$(git rev-parse HEAD)"
+          [[ "${RESOLVED_SHA,,}" == "${SELECTED_REF,,}" ]] || {
+            echo "Checked-out revision does not match the requested commit SHA." >&2
+            exit 1
+          }
+          git merge-base --is-ancestor "$RESOLVED_SHA" origin/main || {
+            echo "Production commit must already be contained in origin/main." >&2
+            exit 1
+          }
 
       - name: Capture immutable revision
         id: revision
@@ -236,6 +263,24 @@ jobs:
           docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=120 backend || true
           exit 1
           REMOTE
+
+      - name: Verify public production health endpoint
+        env:
+          PUBLIC_HEALTH_URL: ${{ secrets.PROD_HEALTH_URL }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$PUBLIC_HEALTH_URL" || { echo "FAILED: PROD_HEALTH_URL is missing" >&2; exit 1; }
+          [[ "$PUBLIC_HEALTH_URL" == https://* ]] || { echo "FAILED: PROD_HEALTH_URL must use HTTPS" >&2; exit 1; }
+          for i in $(seq 1 12); do
+            if curl --fail --silent --show-error --proto '=https' --tlsv1.2 "$PUBLIC_HEALTH_URL" > /dev/null; then
+              echo "Public production healthcheck succeeded."
+              exit 0
+            fi
+            echo "Public production healthcheck failed, retry $i/12"
+            sleep 5
+          done
+          echo "FAILED: public production healthcheck failed after retries" >&2
+          exit 1
 
       - name: Remove SSH key
         if: always()

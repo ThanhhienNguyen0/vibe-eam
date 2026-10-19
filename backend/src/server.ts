@@ -152,6 +152,8 @@ export function createApp(options: AppOptions): express.Express {
   }
 });
 
+  // Express recognizes error middleware by its four-argument signature.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Required Express error-handler arity.
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error(error instanceof Error ? error.message : "Unexpected server error.");
     res.status(500).json({ error: "Unexpected server error." });

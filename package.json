@@ -11,14 +11,35 @@
     "typecheck": "npm run typecheck --workspace backend && npm run typecheck --workspace frontend",
     "test": "npm run test --workspace backend",
     "validate:compose": "node scripts/validate-compose.mjs",
-    "validate:workflows": "node scripts/validate-workflows.mjs"
+    "validate:workflows": "node scripts/validate-workflows.mjs",
+    "lint": "eslint backend/src frontend/src scripts/*.mjs eslint.config.mjs --max-warnings 0",
+    "check": "npm run db:generate --workspace backend && npm run lint && npm run typecheck && npm test && npm run build && npm run validate:compose && npm run validate:workflows && npm run test:security && npm run validate:prisma-config",
+    "scan:dependencies": "node scripts/scan-dependencies.mjs",
+    "scan:secrets": "node scripts/scan-secrets.mjs",
+    "test:security": "node --test scripts/security.test.mjs",
+    "validate:prisma-config": "node scripts/validate-prisma-config.mjs"
   },
   "workspaces": [
     "backend",
     "frontend"
   ],
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "concurrently": "^8.2.2",
-    "yaml": "^2.8.1"
+    "eslint": "^10.13.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
+    "typescript-eslint": "^8.71.2",
+    "yaml": "^2.8.1",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": "^22.13.0 || ^24.0.0 || >=26.0.0",
+    "npm": ">=10"
+  },
+  "overrides": {
+    "@prisma/config": {
+      "deepmerge-ts": "8.0.0"
+    }
   }
 }

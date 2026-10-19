@@ -25,12 +25,13 @@ jobs:
       verified_sha: ${{ steps.revision.outputs.sha }}
     steps:
       - name: Checkout selected revision
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ inputs.ref }}
+          persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: npm
@@ -207,6 +208,24 @@ jobs:
           docker compose --env-file .env.staging -f docker-compose.staging.yml logs --tail=120 backend || true
           exit 1
           REMOTE
+
+      - name: Verify public staging health endpoint
+        env:
+          PUBLIC_HEALTH_URL: ${{ secrets.STAGING_HEALTH_URL }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$PUBLIC_HEALTH_URL" || { echo "FAILED: STAGING_HEALTH_URL is missing" >&2; exit 1; }
+          [[ "$PUBLIC_HEALTH_URL" == https://* ]] || { echo "FAILED: STAGING_HEALTH_URL must use HTTPS" >&2; exit 1; }
+          for i in $(seq 1 12); do
+            if curl --fail --silent --show-error --proto '=https' --tlsv1.2 "$PUBLIC_HEALTH_URL" > /dev/null; then
+              echo "Public staging healthcheck succeeded."
+              exit 0
+            fi
+            echo "Public staging healthcheck failed, retry $i/12"
+            sleep 5
+          done
+          echo "FAILED: public staging healthcheck failed after retries" >&2
+          exit 1
 
       - name: Remove SSH key
         if: always()
