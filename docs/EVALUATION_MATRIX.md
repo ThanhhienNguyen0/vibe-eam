@@ -2,7 +2,7 @@
 
 ## REQ-24 – aktueller lokaler Prüfstand, 19.10.2026
 
-Die damaligen Auth-/Testbewertungen unten sind historisch. Die aktuelle kriteriumsweise Selbsteinstufung, tatsächlich ausgeführte Kommandos und Einschränkungen stehen in [REQ-24_IMPLEMENTATION_EVIDENCE.md](REQ-24_IMPLEMENTATION_EVIDENCE.md). Diese technische Selbstprüfung ersetzt keine unabhängige Freigabe.
+Die damaligen Auth-/Testbewertungen unten sind historisch. Die aktuelle kriteriumsweise Evidenz, tatsächlich ausgeführte Kommandos und Einschränkungen stehen in [REQ-24_IMPLEMENTATION_EVIDENCE.md](REQ-24_IMPLEMENTATION_EVIDENCE.md). Die lokale Umsetzung ist unabhängig bestätigt; der getrennte Auditdatensatz steht in [REQ-24_REVIEW.md](REQ-24_REVIEW.md). Push, Remote-CI, Containerausführung, Deployment und menschliche Freigabe bleiben offen.
 
 | Bereich | Implementierter Prüfgegenstand | Abnahmegrenze |
 |---|---|---|

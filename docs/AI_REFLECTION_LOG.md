@@ -1,8 +1,8 @@
 # AI Reflection Log
 
-## REQ-24 – technische Selbstprüfung und Grenzen (19.10.2026)
+## REQ-24 – technische Umsetzung, unabhängige Kontrolle und Grenzen (19.10.2026)
 
-Geltung: Implementierungsprotokoll, unabhängige Abnahme offen. Maßgeblicher Ergebnisbeleg ist `REQ-24_IMPLEMENTATION_EVIDENCE.md`; frühere Abschnitte bleiben historische Entwicklungsstände.
+Geltung: Implementierungsprotokoll; die lokale Umsetzung ist unabhängig bestätigt. Maßgebliche Belege sind `REQ-24_IMPLEMENTATION_EVIDENCE.md` und `REQ-24_REVIEW.md`; Push, Remote-CI, Containerausführung, Deployment und menschliche Freigabe bleiben offen. Frühere Abschnitte bleiben historische Entwicklungsstände.
 
 ### KI-Beitrag und Entscheidungen
 
@@ -26,9 +26,9 @@ Entscheidungsalternativen: verteilte Route-Stringchecks, reine UI-Prüfung, acht
 
 Beobachtbar sind ein zentraler Ort für Grants, eine vollständige inventarisierte Routenzuordnung, gemeinsame Passwortvalidierung/Hashkosten und zusätzliche echte DB-/UI-Vertragstests. Bewertung: Diese Struktur begrenzt konkrete Drift- und Auslassungsrisiken. Eine kausale Verbesserung allgemeiner Wartbarkeit ist nicht gemessen. Große Editor-/Storedateien, zwei Fachmodelle und bestehende Architektur-Persistenzkonkurrenz bleiben erhalten. Konkrete Gründe der Professorenkritik sind weiterhin nicht vollständig übermittelt und werden nicht erfunden.
 
-Vor Produktion sind Backup, Bootstrapadmin-Zuordnung und die unabhängige fachliche/Sicherheitskontrolle nötig. 401/403, direkte Requests und echte parallele Herabstufungen werden lokal getestet; Browser-E2E, OIDC, Passwortreset, Rate-Limiting und externe CI/Container-/Deploymentausführung sind dadurch nicht belegt. Globale E-Mail-Eindeutigkeit bleibt über einen generischen Anlagekonflikt erkennbar; keine fremden Company-/Nutzerinformationen werden zurückgegeben. Ein vollständiger Anti-Enumeration-Registrierungsprozess wäre zusätzlicher Scope. Direkte DB-Administration kann Repositoryinvarianten umgehen. Bereits laufende fachliche Requests werden bei Rollenänderungen nicht rückwirkend abgebrochen.
+Vor Produktion sind Backup, Bootstrapadmin-Zuordnung und menschliche fachliche/Sicherheitsfreigabe nötig. 401/403, direkte Requests und echte parallele Herabstufungen wurden lokal und anschließend getrennt kontrolliert; Browser-E2E, OIDC, Passwortreset, Rate-Limiting und externe CI/Container-/Deploymentausführung sind dadurch nicht belegt. Globale E-Mail-Eindeutigkeit bleibt über einen generischen Anlagekonflikt erkennbar; keine fremden Company-/Nutzerinformationen werden zurückgegeben. Ein vollständiger Anti-Enumeration-Registrierungsprozess wäre zusätzlicher Scope. Direkte DB-Administration kann Repositoryinvarianten umgehen. Bereits laufende fachliche Requests werden bei Rollenänderungen nicht rückwirkend abgebrochen.
 
-Getrennter Kontrollprozess: `01a154a2-d3b0-70c3-9a30-a130659a071d` erhält erst den vollständig selbstgeprüften lokalen Commit. Festgestellte Mängel werden im Umsetzungsbranch korrigiert. Keine Selbstfreigabe, kein Push/PR/Merge/Issue-Close.
+Getrennter Kontrollprozess: `01a154a2-d3b0-70c3-9a30-a130659a071d` erhielt erst den vollständig selbstgeprüften lokalen Commit. Die Kontrollinstanz fand keinen P0–P2-Befund und meldete als P3, dass Statussätze und eigener Auditdatensatz noch fehlten. `REQ-24_REVIEW.md` sowie die eng begrenzten Statuskorrekturen beheben diesen Dokumentationsbefund und werden derselben Instanz erneut vorgelegt. Keine Selbstfreigabe, kein Push/PR/Merge/Issue-Close.
 
 ## REQ-30 – belegte Selbstprüfung, 18.10.2026
 

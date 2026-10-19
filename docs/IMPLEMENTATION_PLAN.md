@@ -1,6 +1,6 @@
 # Implementation Plan
 
-## Aktueller Schritt: REQ-24 (19.10.2026), lokale Umsetzung vor unabhängiger Kontrolle
+## Aktueller Schritt: REQ-24 (19.10.2026), lokal unabhängig bestätigt
 
 Basis ist ausschließlich `origin/main` auf `2f21cfed4e1e56826e2b13590aea9d5649e59050`, einschließlich REQ-30. Der Dependabot-Checkout bleibt getrennt. Rollenmodell und Nutzerverwaltung werden ohne Neubau der EAM-Fachmodelle ergänzt.
 
@@ -8,7 +8,7 @@ Implementierte Reihenfolge: (1) reines Rollen-/Policyvokabular und exaktes Route
 
 Die ursprünglichen REQ-30-Gates bleiben erhalten. `npm test` umfasst jetzt zusätzlich Frontendregressionen; ein separater blockierender CI-Schritt erstellt einen isolierten PostgreSQL-Cluster für Migration, Seed und Konkurrenztests. Entfernen oder Optionalisieren dieses Schritts wird durch die Security-Gateregression erkannt. Lokale Resultate und Grenzen: `REQ-24_IMPLEMENTATION_EVIDENCE.md`.
 
-Nächster Schritt nach vollständiger Selbstprüfung: lokaler Commit an Kontrollchat `01a154a2-d3b0-70c3-9a30-a130659a071d`, Befunde im selben Branch korrigieren. Danach erst unabhängige Empfehlung und Titus-Freigabe; bis dahin kein Push, PR, Merge oder Issue-Close. REQ-25/OIDC, Passwortreset und EAM-Persistenzneubau bleiben außerhalb dieses Requirements.
+Der Implementierungscommit `16035678a1f0e813932e10b8f92d60a3e32230f9` wurde vom Kontrollchat `01a154a2-d3b0-70c3-9a30-a130659a071d` ohne P0–P2-Befund geprüft. Der gemeldete P3-Dokumentationsblocker wird in einem reinen Dokumentationscommit korrigiert und erneut vorgelegt. Danach bleiben Push, Remote-CI, Containerausführung, Deployment, Titus-Freigabe, PR, Merge und Issue-Close offene Schritte. REQ-25/OIDC, Passwortreset und EAM-Persistenzneubau bleiben außerhalb dieses Requirements.
 
 ## Aktueller Qualitätsstand: REQ-30 (18.10.2026)
 

@@ -2,17 +2,17 @@
 
 Stand: **19.10.2026** (Europe/Berlin). Issue: [#56](https://github.com/ThanhhienNguyen0/vibe-eam/issues/56), am selben Tag über die GitHub-Integration gelesen. Basis exakt `2f21cfed4e1e56826e2b13590aea9d5649e59050` (`origin/main`, Merge REQ-30). Branch: `codex/eam/req-24-rbac`. Separater Arbeitsbaum: `C:\Users\messe\.codex\worktrees\req-24-rbac\New project`.
 
-**Status: lokale technische Selbstprüfung; unabhängige Kontrolle und Freigabe offen.** Kein Push, PR, Merge, Deployment oder Issue-Close. Keine Behauptung extern ausgeführter CI. Der unberührte Dependabot-Checkout gehört nicht zum Basisdiff. Der lokale Abgabecommit wird im Übergabeschreiben per SHA identifiziert; diese Datei liegt in genau diesem Commit und enthält daher keinen selbstreferenziellen SHA.
+**Status: lokal unabhängig bestätigt; Push, Remote-CI, Containerausführung, Deployment und menschliche Freigabe offen.** Kein Push, PR, Merge, Deployment oder Issue-Close. Keine Behauptung extern ausgeführter CI. Der unberührte Dependabot-Checkout gehört nicht zum Basisdiff. Geprüfter Implementierungscommit: `16035678a1f0e813932e10b8f92d60a3e32230f9`. Auditdatensatz der getrennten Kontrolle: [REQ-24_REVIEW.md](REQ-24_REVIEW.md).
 
 ## Frage, Vorgehen und Aussagebereich
 
 Projektfrage ist, ob und inwiefern ein EAM-Tool mittels KI „gevibecodet“ werden kann. Gegenstand dieses Schritts ist die technische Umsetzung der expliziten Rollenmatrix in einem vorhandenen soziotechnischen EAM-Prototypen, primär aus Software-Engineering-Sicht. Untersucht werden Dateien, API-Verhalten, Datenbanktransaktionen und Testresultate dieser Revision; keine allgemeine Wartbarkeit, Nutzerakzeptanz oder kausale Überlegenheit von KI. Beobachtungen werden getrennt von Bewertungen und offenen Grenzen geführt. Reproduzierbarkeit, Least Privilege, Tenantgrenzen und nachvollziehbare Entscheidungen sind gesetzte Qualitätsziele. Keine Nutzerdatenstudie oder Übernahme produktiver Zugangsdaten.
 
-Methode: enger Ist-/Sollvergleich mit Issue und Umsetzungsauftrag, überprüfte technische Primärquelle OWASP, automatisierte positive/negative Matrixtests, Vergleich aller tatsächlichen Express-Routen, isolierte PostgreSQL-Integration und komponentenbezogene SSR-Tests. Die KI führte Implementierung, Testentwurf, Ausführung und Dokumentation durch. Der getrennte Kontrollchat `01a154a2-d3b0-70c3-9a30-a130659a071d` erhält den fertigen lokalen Commit erst nach dieser Selbstprüfung; dessen Urteil wird hier nicht vorweggenommen. Konkrete Gründe der Professorenkritik bleiben eine Evidenzlücke.
+Methode: enger Ist-/Sollvergleich mit Issue und Umsetzungsauftrag, überprüfte technische Primärquelle OWASP, automatisierte positive/negative Matrixtests, Vergleich aller tatsächlichen Express-Routen, isolierte PostgreSQL-Integration und komponentenbezogene SSR-Tests. Die KI führte Implementierung, Testentwurf, Ausführung und Dokumentation durch. Der getrennte Kontrollchat `01a154a2-d3b0-70c3-9a30-a130659a071d` prüfte anschließend den fertigen lokalen Commit in einer unabhängigen Kopie. Resultate, Trennung, Befunde und Grenzen stehen in `REQ-24_REVIEW.md`. Konkrete Gründe der Professorenkritik bleiben eine Evidenzlücke.
 
-## Kriteriumsweise Selbsteinstufung
+## Kriteriumsweiser lokaler Prüfstand
 
-Alle Beobachtungen stammen vom **19.10.2026**. „Erfüllt (lokal)“ bezeichnet den hier geprüften Implementierungsstand, keine unabhängige Abnahme.
+Alle Beobachtungen stammen vom **19.10.2026**. „Erfüllt (lokal)“ bezeichnet den lokal geprüften Implementierungsstand; die unabhängige Kontrollinstanz bestätigte ihn ohne P0–P2-Befund. Externe und menschliche Freigaben sind davon nicht umfasst.
 
 | Akzeptanzkriterium | Status | Konkrete Datei/Zeile oder Verhalten | Prüfkommando und tatsächlich beobachtetes Resultat | Grenzen |
 |---|---|---|---|---|
@@ -43,7 +43,7 @@ Umgebung: Windows, PowerShell, Node `v24.15.0`, npm-Workspace; echte temporäre 
 | `npm ci` | 438 Pakete installiert, 441 auditiert, 0 Vulnerabilities; saubere Abschlussinstallation mit aktualisiertem Lockfile |
 | `npm run check` | Prisma Generate, Lint ohne Warnungen, Backend-/Frontend-Typecheck erfolgreich; **85 Backendtests bestanden**, sieben DB-Tests in dieser regulären Suite bewusst übersprungen; **9 Frontendtests bestanden**; Backend- und Vite-Produktionsbuild erfolgreich (1.754 Module); **112 Composechecks**, **169 Workflowchecks**, **17 Securitytests**; Prisma-Konfigurationskompatibilität erfolgreich |
 | `npm run scan:dependencies` | Vollständiger Audit inklusive dev: info 0, low 0, moderate 0, high 0, critical 0, total 0 |
-| `npm run scan:secrets` | Canary meldet den synthetischen Testfund erwartungsgemäß; tatsächliche vollständige geholt verfügbare Historie und Arbeitssnapshot ohne Secretfund. Der Scan wird nach Fertigstellung dieser Evidenzdatei und nach dem Commit erneut ausgeführt |
+| `npm run scan:secrets` | Canary meldete den synthetischen Testfund erwartungsgemäß. Selbstprüfung: 43 lokal verfügbare Commits und aktueller Arbeitssnapshot ohne Secretfund. Unabhängige Kopie: 25 dort verfügbare Commits und 168 aktuelle Dateien ohne echten Fund. Die vollständige Remote-Historie ist erst nach Push und Remote-CI belegt |
 | `$env:PG_BIN='C:\Program Files\PostgreSQL\14\bin'; npm run test:rbac:db` | Alle vier Prisma-Migrationen auf leerer separater DB angewandt; **7/7 echte DB-Tests** bestanden: Registrierung/Hash/Login, Rollenmatrix, Tokenfreshness, Companygrenzen, Konkurrenz/letzter Admin, echter wiederholter Seed und deterministische Bestandsmigration mit Negativfall |
 | `npm run test --workspace backend -- src/auth/auth.test.ts src/auth/rbac.test.ts src/auth/demoSeed.test.ts` | Zusätzlich zur Vollsuite ausgeführt: **3/3 Testdateien, 25/25 Tests bestanden** |
 | `git diff --check` | Keine Whitespacefehler; vor Commit erneut geprüft |

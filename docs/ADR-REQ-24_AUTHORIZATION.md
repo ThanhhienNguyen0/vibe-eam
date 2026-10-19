@@ -1,6 +1,6 @@
 # ADR REQ-24: zentrale Aktionspolicies und frischer interner Benutzerkontext
 
-Datum: 19.10.2026. Status: lokal implementiert; unabhängige Abnahme offen. Geltung: Authentifizierung/Autorisierung beider vorhandenen API-Datenpfade, keine Änderung der EAM-Fachmodelle.
+Datum: 19.10.2026. Status: lokal unabhängig bestätigt; Push, Remote-CI, Containerausführung, Deployment und menschliche Freigabe offen. Geltung: Authentifizierung/Autorisierung beider vorhandenen API-Datenpfade, keine Änderung der EAM-Fachmodelle. Kontrollnachweis: [REQ-24_REVIEW.md](REQ-24_REVIEW.md).
 
 ## Problem und Entscheidung
 

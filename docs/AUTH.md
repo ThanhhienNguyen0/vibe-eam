@@ -2,7 +2,7 @@
 
 ## Aktueller Vertrag – REQ-24, 19.10.2026
 
-Diese Fassung ersetzt die früheren Aussagen über frei gespeicherte Rollen und allein aus dem JWT abgeleitete Company-/Rollenrechte. Lokale Implementierung und Prüfstand: [REQ-24_IMPLEMENTATION_EVIDENCE.md](REQ-24_IMPLEMENTATION_EVIDENCE.md). Unabhängige Kontrolle und menschliche Freigabe stehen vor Veröffentlichung aus.
+Diese Fassung ersetzt die früheren Aussagen über frei gespeicherte Rollen und allein aus dem JWT abgeleitete Company-/Rollenrechte. Die lokale Implementierung ist unabhängig bestätigt; Prüfstand: [REQ-24_IMPLEMENTATION_EVIDENCE.md](REQ-24_IMPLEMENTATION_EVIDENCE.md), Kontrollnachweis: [REQ-24_REVIEW.md](REQ-24_REVIEW.md). Push, Remote-CI, Containerausführung, Deployment und menschliche Freigabe stehen vor Veröffentlichung aus.
 
 ### Rollenmatrix
 
