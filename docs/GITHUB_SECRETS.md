@@ -24,14 +24,14 @@ Secrets können repositoryweit oder vorzugsweise environment-spezifisch hinterle
 
 Die Workflows validieren die beiden Deploy-Pfade zusätzlich gegen diese bestätigten Pfade.
 
-## Optionale Werte
+## Weitere erforderliche Werte
 
 | Secret | Vorgesehener Wert | Aktueller Einsatz |
 | --- | --- | --- |
-| `STAGING_HEALTH_URL` | `https://eam-test.messers-cardio-club.com/api/health` | Dokumentiert; der Workflow bevorzugt den internen Containercheck |
-| `PROD_HEALTH_URL` | `https://eam.messers-cardio-club.com/api/health` | Dokumentiert; der Workflow bevorzugt den internen Containercheck |
+| `STAGING_HEALTH_URL` | `https://eam-test.messers-cardio-club.com/api/health` | Nach dem internen Containercheck verpflichtend für DNS-, TLS- und Reverse-Proxy-Prüfung |
+| `PROD_HEALTH_URL` | `https://eam.messers-cardio-club.com/api/health` | Nach dem internen Containercheck verpflichtend für DNS-, TLS- und Reverse-Proxy-Prüfung |
 
-Die Workflows verwenden den zuverlässigen internen Healthcheck über `127.0.0.1:4400` beziehungsweise `127.0.0.1:4401`. Er ist unabhängig von DNS, TLS und Reverse Proxy. Externe End-to-End-Checks können ergänzend eingerichtet werden, ohne App-Tokens oder andere Zugangsdaten in Workflow-Logs auszugeben.
+Die Workflows prüfen zuerst zuverlässig intern über `127.0.0.1:4400` beziehungsweise `127.0.0.1:4401`. Anschließend prüfen sie mit den beiden Health-URL-Secrets den öffentlichen Weg über DNS, TLS und Reverse Proxy, ohne App-Tokens oder andere Zugangsdaten in Workflow-Logs auszugeben.
 
 ## Deployment-Key einrichten
 

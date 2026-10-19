@@ -36,7 +36,10 @@ const production = await load("deploy-prod.yml");
 const codeql = await load("codeql.yml");
 const dependabot = parse(await readFile(path.join(root, ".github", "dependabot.yml"), "utf8"));
 const pkg = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
-for (const result of securityWorkflowChecks(ci.workflow, codeql.workflow, dependabot, pkg)) {
+for (const result of securityWorkflowChecks(ci.workflow, codeql.workflow, dependabot, pkg, [
+  ["Deploy staging", staging.workflow],
+  ["Deploy production", production.workflow]
+])) {
   check(result.condition, result.message);
 }
 
@@ -57,9 +60,9 @@ for (const command of [
 ]) check(ciRuns.includes(command), `CI command missing: ${command}`);
 check(!ci.raw.includes("docker.exe compose"), "GitHub CI must use Linux 'docker compose'");
 
-for (const [label, document, envFile, composeFile, port, pathSecret] of [
-  ["staging", staging, ".env.staging", "docker-compose.staging.yml", "4400", "STAGING_DEPLOY_PATH"],
-  ["production", production, ".env.prod", "docker-compose.prod.yml", "4401", "PROD_DEPLOY_PATH"]
+for (const [label, document, envFile, composeFile, port, pathSecret, healthSecret] of [
+  ["staging", staging, ".env.staging", "docker-compose.staging.yml", "4400", "STAGING_DEPLOY_PATH", "STAGING_HEALTH_URL"],
+  ["production", production, ".env.prod", "docker-compose.prod.yml", "4401", "PROD_DEPLOY_PATH", "PROD_HEALTH_URL"]
 ]) {
   const workflowTriggers = triggers(document.workflow);
   check(workflowTriggers.length === 1 && workflowTriggers[0] === "workflow_dispatch", `${label} deployment must be workflow_dispatch only`);
@@ -67,12 +70,15 @@ for (const [label, document, envFile, composeFile, port, pathSecret] of [
   check(scripts.includes("npm run typecheck") && scripts.includes("npm test") && scripts.includes("npm run build"), `${label} deployment must verify code before deploy`);
   check(document.workflow.jobs?.deploy?.needs === "verify", `${label} deploy job must need verify`);
   check(document.raw.includes(`secrets.${pathSecret}`), `${label} deploy path must come from the expected secret`);
+  check(document.raw.includes(`secrets.${healthSecret}`), `${label} public health URL secret missing`);
   check(document.raw.includes("secrets.SERVER_SSH_KEY"), `${label} SSH key secret missing`);
   check(document.raw.includes("secrets.SERVER_SSH_KNOWN_HOSTS"), `${label} known-hosts secret missing`);
   check(scripts.includes(`test -f ${envFile}`), `${label} must require the server-side env file`);
   check(scripts.includes(`docker compose --env-file ${envFile} -f ${composeFile} config --quiet`), `${label} target Compose config check missing`);
   check(scripts.includes(`docker compose --env-file ${envFile} -f ${composeFile} up -d --build`), `${label} target Compose deployment missing`);
   check(scripts.includes(`http://127.0.0.1:${port}/api/health`), `${label} internal healthcheck missing`);
+  check(scripts.includes("--proto '=https' --tlsv1.2 \"$PUBLIC_HEALTH_URL\""), `${label} public HTTPS healthcheck missing`);
+  check(scripts.includes(`FAILED: ${healthSecret} is missing`), `${label} public health URL presence check missing`);
   check(scripts.includes("for i in $(seq 1 12)"), `${label} portable healthcheck retry loop missing`);
   check(scripts.includes("sleep 5"), `${label} healthcheck retry delay missing`);
   check(!scripts.includes("--retry-all-errors"), `${label} must not use non-portable curl --retry-all-errors`);
@@ -114,6 +120,8 @@ for (const [label, document, envFile, composeFile, port, pathSecret] of [
 check(production.raw.includes("DEPLOY_PRODUCTION"), "production explicit confirmation gate missing");
 check(production.raw.includes("backup_confirmed"), "production backup gate missing");
 check(production.raw.includes("acceptance_confirmed"), "production hosting acceptance gate missing");
+check(production.raw.includes("^[0-9a-fA-F]{40}$"), "production must require a full immutable commit SHA");
+check(production.raw.includes('git merge-base --is-ancestor "$RESOLVED_SHA" origin/main'), "production revision must be contained in main");
 check(!production.raw.includes("push:"), "production deployment must not have a push trigger");
 
 if (failures.length > 0) {

@@ -43,10 +43,12 @@ test("inconsistent metadata, missing counts, unknown severity and array reports 
 
 const ci = parse(await readFile(".github/workflows/ci.yml", "utf8"));
 const codeql = parse(await readFile(".github/workflows/codeql.yml", "utf8"));
+const staging = parse(await readFile(".github/workflows/deploy-staging.yml", "utf8"));
+const production = parse(await readFile(".github/workflows/deploy-prod.yml", "utf8"));
 const dependabot = parse(await readFile(".github/dependabot.yml", "utf8"));
 const pkg = JSON.parse(await readFile("package.json", "utf8"));
-function failures(c = ci, q = codeql, d = dependabot, p = pkg) {
-  return securityWorkflowChecks(c, q, d, p).filter((result) => !result.condition);
+function failures(c = ci, q = codeql, d = dependabot, p = pkg, deployments = [["Deploy staging", staging], ["Deploy production", production]]) {
+  return securityWorkflowChecks(c, q, d, p, deployments).filter((result) => !result.condition);
 }
 test("current quality and security workflow definitions pass", () => assert.deepEqual(failures(), []));
 for (const [jobId, command] of [["verify", "npm run lint"], ["verify", "npm run typecheck"], ["verify", "npm test"], ["verify", "npm run build"], ["dependencies", "npm run scan:dependencies"], ["secrets", "npm run scan:secrets"]]) {
@@ -79,4 +81,9 @@ test("an annotated-tag object SHA cannot replace the verified CodeQL commit", ()
     if (step.uses?.startsWith("github/codeql-action/")) step.uses = step.uses.replace("6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee", "f051dc808ef3645eb0d08647ec751634ec2304ac");
   }
   assert.ok(failures(ci, changed).length > 0);
+});
+test("mutable actions in deployment workflows are detected", () => {
+  const changed = structuredClone(staging);
+  changed.jobs.verify.steps[0].uses = "actions/checkout@v6";
+  assert.ok(failures(ci, codeql, dependabot, pkg, [["Deploy staging", changed], ["Deploy production", production]]).length > 0);
 });

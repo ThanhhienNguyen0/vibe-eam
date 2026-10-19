@@ -1,4 +1,4 @@
-export function securityWorkflowChecks(ci, codeql, dependabot, pkg) {
+export function securityWorkflowChecks(ci, codeql, dependabot, pkg, deploymentWorkflows = []) {
   const codeqlActionSha = "6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee";
   const checks = [];
   const check = (condition, message) => checks.push({ condition: Boolean(condition), message });
@@ -21,7 +21,7 @@ export function securityWorkflowChecks(ci, codeql, dependabot, pkg) {
   const secretCheckout = jobs.secrets?.steps?.find((step) => step.uses?.startsWith("actions/checkout@"));
   check(secretCheckout?.with?.["fetch-depth"] === 0, "Secret scan requires full history");
   check(secretCheckout?.with?.["persist-credentials"] === false, "Secret scan checkout must not persist credentials");
-  for (const [file, workflow] of [["CI", ci], ["CodeQL", codeql]]) {
+  for (const [file, workflow] of [["CI", ci], ["CodeQL", codeql], ...deploymentWorkflows]) {
     for (const job of Object.values(workflow.jobs ?? {})) {
       for (const step of job.steps ?? []) {
         if (step.uses) check(/^[\w/-]+@[a-f0-9]{40}$/.test(step.uses), `${file}: action must be pinned to immutable SHA: ${step.uses}`);

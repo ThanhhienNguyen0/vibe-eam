@@ -307,10 +307,10 @@ Rollback-Hinweis:
 
 Nach Einrichtung der in `GITHUB_SECRETS.md` beschriebenen Secrets stehen zwei ausschließlich manuelle Workflows bereit:
 
-- `Deploy staging`: Ref auswählen; der Workflow prüft Typecheck, Tests, Build und Compose, deployt danach exakt den geprüften Commit nach `/var/www/eam-test` und prüft `127.0.0.1:4400/api/health`.
-- `Deploy production`: freigegebenen Ref eingeben, `DEPLOY_PRODUCTION` wählen sowie Backup und `HOSTING_ACCEPTANCE_CHECK.md` bestätigen. Danach wird exakt der geprüfte Commit nach `/var/www/eam` deployt und `127.0.0.1:4401/api/health` geprüft.
+- `Deploy staging`: Ref auswählen; der Workflow prüft Typecheck, Tests, Build und Compose, deployt danach exakt den geprüften Commit nach `/var/www/eam-test` und prüft den internen sowie den öffentlichen HTTPS-Healthcheck.
+- `Deploy production`: vollständige 40-stellige Commit-SHA aus `main` eingeben, `DEPLOY_PRODUCTION` wählen sowie Backup und `HOSTING_ACCEPTANCE_CHECK.md` bestätigen. Danach wird exakt dieser Commit nach `/var/www/eam` deployt und intern sowie über den öffentlichen HTTPS-Endpunkt geprüft.
 
-Beide serverseitigen Env-Dateien bleiben unverändert. Die Workflows erzeugen, überschreiben oder loggen sie nicht. Sie verwenden bewusst interne Healthchecks, damit Deployment-Erfolg unabhängig von DNS, TLS und Reverse Proxy geprüft wird.
+Beide serverseitigen Env-Dateien bleiben unverändert. Die Workflows erzeugen, überschreiben oder loggen sie nicht. Der interne Healthcheck weist den Containerzustand nach; der anschließende öffentliche HTTPS-Check deckt zusätzlich DNS, TLS und Reverse Proxy ab.
 
 Vor Aktivierung:
 

@@ -73,7 +73,7 @@ Der Remote-Ablauf protokolliert vor dem Deployment ausschließlich sichere Diagn
 - erfolgreichen Verify-Job.
 - optionalen GitHub-Environment-Schutz für `production` mit Required Reviewers.
 
-Der SSH-Ablauf entspricht Staging, verwendet aber `/var/www/eam`, `.env.prod`, `docker-compose.prod.yml` und `127.0.0.1:4401/api/health`. Auch hier laufen portable Healthcheck-Retries und dieselben secretfreien Fehlerdiagnosen.
+Der SSH-Ablauf entspricht Staging, verwendet aber `/var/www/eam`, `.env.prod`, `docker-compose.prod.yml` und `127.0.0.1:4401/api/health`. Auch hier laufen portable Healthcheck-Retries und dieselben secretfreien Fehlerdiagnosen. Produktionsdeployments akzeptieren nur eine vollständige 40-stellige Commit-SHA, die bereits in `main` enthalten ist. Nach dem internen Check prüft der Runner zusätzlich den öffentlichen HTTPS-Endpunkt aus `PROD_HEALTH_URL`; Staging verwendet entsprechend `STAGING_HEALTH_URL`.
 
 ## Benötigte GitHub Secrets und Environments
 
