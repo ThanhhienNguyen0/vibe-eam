@@ -7,15 +7,17 @@ updates:
       day: monday
       time: '07:00'
       timezone: Europe/Berlin
-    open-pull-requests-limit: 3
+    # Routine version updates stay off; security updates are unaffected.
+    open-pull-requests-limit: 0
     groups:
-      compatible-tooling:
-        dependency-type: development
-        update-types: [minor, patch]
-    # Major updates remain separate for explicit compatibility review.
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 2
+    # Action version updates are reviewed manually when needed.
+    open-pull-requests-limit: 0
