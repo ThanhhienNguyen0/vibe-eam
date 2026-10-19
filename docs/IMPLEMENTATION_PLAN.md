@@ -8,7 +8,7 @@ Implementierte Reihenfolge: (1) reines Rollen-/Policyvokabular und exaktes Route
 
 Die ursprünglichen REQ-30-Gates bleiben erhalten. `npm test` umfasst jetzt zusätzlich Frontendregressionen; ein separater blockierender CI-Schritt erstellt einen isolierten PostgreSQL-Cluster für Migration, Seed und Konkurrenztests. Entfernen oder Optionalisieren dieses Schritts wird durch die Security-Gateregression erkannt. Lokale Resultate und Grenzen: `REQ-24_IMPLEMENTATION_EVIDENCE.md`.
 
-Der Implementierungscommit `16035678a1f0e813932e10b8f92d60a3e32230f9` wurde vom Kontrollchat `01a154a2-d3b0-70c3-9a30-a130659a071d` ohne P0–P2-Befund geprüft. Der gemeldete P3-Dokumentationsblocker wird in einem reinen Dokumentationscommit korrigiert und erneut vorgelegt. Danach bleiben Push, Remote-CI, Containerausführung, Deployment, Titus-Freigabe, PR, Merge und Issue-Close offene Schritte. REQ-25/OIDC, Passwortreset und EAM-Persistenzneubau bleiben außerhalb dieses Requirements.
+Der Implementierungscommit `16035678a1f0e813932e10b8f92d60a3e32230f9` wurde vom Kontrollchat `01a154a2-d3b0-70c3-9a30-a130659a071d` ohne P0–P2-Befund geprüft. Der gemeldete P3-Dokumentationsblocker wurde im reinen Dokumentationscommit `4193adb26bd570ab178aa2659586166a011663a0` korrigiert und durch denselben Kontrollchat geschlossen; im lokal geprüften Umfang bestehen keine offenen P0–P3. Push, Remote-CI, Containerausführung, Deployment, Titus-Freigabe, PR, Merge und Issue-Close bleiben offene Schritte. REQ-25/OIDC, Passwortreset und EAM-Persistenzneubau bleiben außerhalb dieses Requirements.
 
 ## Aktueller Qualitätsstand: REQ-30 (18.10.2026)
 

@@ -35,7 +35,11 @@ Eingaben waren der vollständige Commit `16035678`, die Basis `2f21cfed`, Issue 
 | P0–P2 | Kein Befund in Code, Migration, Seed, Rollenmatrix oder lokaler Testausführung | Lokale technische Umsetzung unabhängig bestätigt |
 | P3 | Statusdokumente bezeichneten die unabhängige Kontrolle nach ihrem Abschluss weiterhin als offen; ein eigener Auditdatensatz fehlte | Diese Datei ergänzt Zeit, Instanz, Trennung, Eingaben, Resultate, Befund, Entscheidung und Grenzen. Betroffene Statussätze werden auf den bestätigten lokalen Stand korrigiert |
 
-Die Dokumentationskorrektur verändert keinen Produktcode und keine Tests. Ihr neuer lokaler Commit wird derselben Kontrollinstanz zur reinen Dokumentationsnachprüfung vorgelegt; das Ergebnis dieser Nachprüfung wird in der Kontrollspur festgehalten.
+Die Dokumentationskorrektur verändert keinen Produktcode und keine Tests. Ihr lokaler Commit `4193adb26bd570ab178aa2659586166a011663a0` wurde derselben Kontrollinstanz zur reinen Dokumentationsnachprüfung vorgelegt.
+
+## Dokumentationsnachprüfung
+
+Die Kontrollinstanz meldete die Nachprüfung am **19.10.2026 um 22:18 CEST** abgeschlossen. Sie bestätigte den Parent `16035678`, ausschließlich die angekündigten acht Dokumentationsdateien im Diff, keine Änderung außerhalb `docs` und eine saubere Prüfung mit `git diff 16035678..4193adb --check`. Der Reviewdatensatz enthält nach ihrem Urteil Trennung, Zeitpunkt, Inputs, unabhängig reproduzierte Ergebnisse, den P3-Befund samt Korrektur und die exakte Secret-History-Grenze. Die Statusaussagen trennen lokale unabhängige Bestätigung von Push, Remote-CI, Containerausführung, Deployment und menschlicher Freigabe. Entscheidung: P3 geschlossen; im lokal geprüften Umfang vollständig erfüllt und keine offenen P0–P3. Empfehlung: Push und anschließender Draft-PR erst nach Titus' separater Freigabe; kein Merge und kein Schließen von Issue #56. Remote-CI-, Container- und GitHub-Nachweise bleiben nach einem Push separat zu prüfen.
 
 ## Aussagegrenzen
 
