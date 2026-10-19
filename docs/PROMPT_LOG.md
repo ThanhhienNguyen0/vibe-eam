@@ -1,5 +1,26 @@
 # Prompt Log
 
+## REQ-24 – Authentifizierung und Rollenmodell (19.10.2026)
+
+Auftrag aus Umsetzungs-Chat `01a154a2-45c9-78b2-9b0d-3e1fb5d6a623`, delegiert durch Kontrollchat `01a14fce-41f9-7302-8f9b-873a6e0a2c51`: „Setze REQ-24 ‚Authentifizierung und Rollenmodell (Admin, Architekt, Viewer)‘ ... vollständig, wartbar und nachvollziehbar um.“ Issue [#56](https://github.com/ThanhhienNguyen0/vibe-eam/issues/56) wurde am 19.10.2026 gelesen. Der Issuetext nennt fünf Akzeptanzkriterien und OIDC-Erweiterbarkeit als Hinweis; der Auftrag behandelt diesen Hinweis ausdrücklich als sechsten Prüfpunkt.
+
+Verbindliche Basis: `origin/main` exakt `2f21cfed4e1e56826e2b13590aea9d5649e59050`. Sauberer Ausgangsarbeitsbaum bestätigt. Der getrennte Dependabot-Checkout `89a8a8e2` bleibt unberührt; REQ-24 entsteht im verwalteten separaten Arbeitsbaum auf `codex/eam/req-24-rbac`. Lokaler veralteter `main` wird nicht als Basis verwendet. Kein Push, PR, Merge oder Issue-Close. Bestehende REQ-30-Gates bleiben verpflichtend.
+
+Fachliche Konkretisierung des Auftrags (verbindlich): „Admin: alle Lese- und Schreibrechte innerhalb der eigenen Company; zusätzlich Nutzer-/Rollenzuordnung und Metamodelländerungen.“ „Architekt: alle Lesezugriffe sowie Schreibzugriffe auf Architekturinstanzen, Beziehungen und Diagramme; keine Nutzer-/Rollenverwaltung und keine strukturellen Metamodelländerungen.“ „Viewer: ausschließlich Lesezugriffe.“ Frontendausblendung ist nur Bedienbarkeit; API ist Autorität. Matrix und Ausnahmen für Nutzerverwaltung stehen in `AUTH.md`.
+
+Weitere Promptvorgaben: zentraler typisierter Deny-by-default-Layer; frische serverseitige Rollen statt acht Stunden Vertrauen in Claims; Enum und sichere `member`-Migration; Erstregistrierung als Admin; Nutzerliste/Anlage/Rollenwechsel company-lokal; globale E-Mail-Eindeutigkeit; keine Passwörter in Antworten/Logs; kein Cross-Company-Zugriff; Sperre für den letzten Admin auch unter Konkurrenz; vollständiges Routeninventar beider Datenpfade; sichere, explizite Dev/Test-Seeds je Rolle; kein OIDC jetzt. Test- und Dokumentationspflichten werden in der kriteriumsweisen Evidenzmatrix aufgelöst.
+
+Forschungsrahmen aus dem Auftrag: „Das Projekt untersucht, ob und inwiefern ein EAM-Tool mittels KI ‚gevibecodet‘ werden kann.“ Prompt, Entscheidungen, Alternativen, Fehlversuche, KI-Beitrag, Tests und Grenzen sind ebenso zu dokumentieren wie Code. Die konkreten Gründe der Professorenkritik bleiben unbekannt; keine Zuschreibung aus eigenen Codebefunden.
+
+Folgeanweisungen vom 19.10.2026:
+
+1. Unabhängiger Kontrollchat: `01a154a2-d3b0-70c3-9a30-a130659a071d` (Host `local`). Fertiger lokaler Commit und reproduzierbare Ergebnisse werden erst nach vollständiger Selbstprüfung gemeldet. Kontrolle implementiert nicht; Befunde gehen in eine Korrekturschleife. Selbstprüfung ist keine Freigabe.
+2. Nutzerkorrektur zur Modellwahl: „Verwende ab diesem Turn für die weitere REQ-24-Umsetzung gpt-5.6-sol mit Reasoning High.“ Diese Anweisung wird als Prozessvorgabe dokumentiert; eine nachträgliche Behauptung über nicht verfügbare Laufzeittelemetrie wird daraus nicht abgeleitet. Keine Scopeänderung und keine Verwerfung vorhandener Arbeit.
+
+Operative Entscheidungen: DB-Company-Lock statt ungesperrter Adminzählung; Subjekt-only-JWT statt Rollenautorität; deterministischer Bootstrapadmin statt pauschaler Hochstufung; Wiederverwendung des konsistenten Company-Starters nach realem Seedfehler; SSR-Komponententests als proportionale Erweiterung der vorhandenen Vitestarchitektur. Fehlversuche und Grenzen: `AI_REFLECTION_LOG.md`, endgültige Resultate: `REQ-24_IMPLEMENTATION_EVIDENCE.md`.
+
+Die KI erstellte Implementierung, Tests und Dokumentation. Unabhängige Kontrollentscheidung, Bootstrapadmin-Prüfung vor Produktion und externe Freigaben bleiben getrennte menschliche/externe Schritte. Es wurde kein Forschungsrelease oder Wartbarkeitsnachweis außerhalb dieser lokalen technischen Evidenz erzeugt.
+
 ## REQ-30 – CI, Qualität und Security (18.10.2026)
 
 Auftrag: Issue #62 ab sauberem `main` `3f5e9e40` vollständig und nachvollziehbar umsetzen; Branch `codex/eam/req-30-ci-security`, kein Direktcommit auf main, kein Merge und kein Issueschließen. Gefordert sind ESLint, reproduzierbarer Gesamtcheck, PR-Qualitäts-/Infrastruktur-Gates, Dependency-Probelauf und begründete Korrekturen, Dependabot, CodeQL, Secret-Scan, externe Admin-Abnahme, Beitrags-/KI-Regeln und belegte Wartbarkeitsdokumentation.

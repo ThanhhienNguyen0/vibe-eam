@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import type { AuthPrincipal } from "../tenant.js";
 import type { AuthRepository, AuthResult, PublicUser, StoredUser } from "./authTypes.js";
+import { isRole } from "./policy.js";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_ROUNDS = 12;
@@ -23,7 +24,7 @@ export function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function publicUser(user: StoredUser): PublicUser {
+export function publicUser(user: StoredUser): PublicUser {
   return {
     id: user.id,
     email: user.email,
@@ -42,7 +43,7 @@ export class AuthService {
 
   private tokenFor(user: StoredUser): string {
     return jwt.sign(
-      { companyId: user.companyId, role: user.role },
+      {},
       this.jwtSecret,
       { subject: user.id, expiresIn: "8h", issuer: "eam-tool", audience: "eam-tool" }
     );
@@ -55,11 +56,11 @@ export class AuthService {
     const name = typeof input.name === "string" && input.name.trim() ? input.name.trim() : null;
 
     if (!EMAIL_PATTERN.test(email)) throw new AuthHttpError(400, "A valid email is required.");
-    if (password.length < 8) throw new AuthHttpError(400, "Password must contain at least 8 characters.");
+    validatePassword(password);
     if (!companyName) throw new AuthHttpError(400, "companyName is required.");
     if (await this.repository.findUserByEmail(email)) throw new AuthHttpError(409, "An account with this email already exists.");
 
-    const passwordHash = await bcrypt.hash(password, PASSWORD_ROUNDS);
+    const passwordHash = await hashLocalPassword(password);
     let user: StoredUser;
     try {
       user = await this.repository.createCompanyUser({ email, passwordHash, name, companyName });
@@ -81,6 +82,7 @@ export class AuthService {
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       throw new AuthHttpError(401, "Invalid email or password.");
     }
+    if (!isRole(user.role)) throw new AuthHttpError(403, "No valid role assigned.");
     return { token: this.tokenFor(user), user: publicUser(user) };
   }
 
@@ -89,4 +91,24 @@ export class AuthService {
     if (!user || user.companyId !== principal.companyId) throw new AuthHttpError(401, "Authentication is no longer valid.");
     return publicUser(user);
   }
+
+}
+
+export function validatePassword(password: string): void {
+  if (password.length < 8) throw new AuthHttpError(400, "Password must contain at least 8 characters.");
+  if (Buffer.byteLength(password, "utf8") > 72) throw new AuthHttpError(400, "Password must not exceed 72 UTF-8 bytes.");
+}
+
+export function hashLocalPassword(password: string): Promise<string> {
+  validatePassword(password);
+  return bcrypt.hash(password, PASSWORD_ROUNDS);
+}
+
+export function validateLocalUser(input: { email?: unknown; password?: unknown; name?: unknown }) {
+  const email = normalizeEmail(typeof input.email === "string" ? input.email : "");
+  const password = typeof input.password === "string" ? input.password : "";
+  if (!EMAIL_PATTERN.test(email)) throw new AuthHttpError(400, "A valid email is required.");
+  validatePassword(password);
+  const name = typeof input.name === "string" && input.name.trim() ? input.name.trim() : null;
+  return { email, password, name };
 }

@@ -22,7 +22,7 @@ class MemoryAuthRepository implements AuthRepository {
       name: input.name,
       companyId: `company-${this.users.length + 1}`,
       companyName: input.companyName,
-      role: "member"
+      role: "Admin"
     };
     this.users.push(user);
     return structuredClone(user);

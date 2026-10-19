@@ -1,5 +1,19 @@
 # Evaluation Matrix
 
+## REQ-24 – aktueller lokaler Prüfstand, 19.10.2026
+
+Die damaligen Auth-/Testbewertungen unten sind historisch. Die aktuelle kriteriumsweise Selbsteinstufung, tatsächlich ausgeführte Kommandos und Einschränkungen stehen in [REQ-24_IMPLEMENTATION_EVIDENCE.md](REQ-24_IMPLEMENTATION_EVIDENCE.md). Diese technische Selbstprüfung ersetzt keine unabhängige Freigabe.
+
+| Bereich | Implementierter Prüfgegenstand | Abnahmegrenze |
+|---|---|---|
+| Lokale Identität und Rollen | bcrypt 12, Admin-Erstregistrierung, exakte DB-/TS-Rollen, frische serverseitige Rolle | Keine E-Mail-Verifikation, Passwortreset oder OIDC |
+| Aktionen beider API-Datenpfade | zentrale Matrix, 52 inventarisierte Routen, Default-Ablehnung, 401/403 | Keine allgemeine Sicherheitszertifizierung; bestehende Fachpersistenz bleibt |
+| Nutzerverwaltung und Tenantgrenzen | Liste/Anlage/Rollenwechsel, eigener Companykontext, identische 404 für fremde/unbekannte IDs | Globale E-Mail-Konflikte bleiben erkennbar; kein Löschen |
+| Transaktionen und Migration | Company-Lock/erneute Akteurprüfung, konkurrierende Demotionen, deterministische atomare `member`-Migration | Bootstrapadmin vor Produktion fachlich bestätigen; keine direkten DB-Administrationsinvarianten |
+| Demo-Seed | explizites Dev/Test-Opt-in, private Passwortdatei, exakt drei Rollen, realer Wiederholungstest | Keine Produktionsaccounts, kein automatischer Produktivseed |
+| Frontend | Rollenanzeige, passende Aktionen, Admin-Nutzerverwaltung, SSR-Rendering-/Statusregressionen | Keine vollständige Browserbedienungs-/E2E-Prüfung |
+| Wartbarkeit und KI-Prozess | ADR, Prompt-/Fehler-/Evidenzspur, gemeinsamer Policykern, Inventar-/DB-Gates | Keine gemessene allgemeine Wartbarkeit; Professorengründe bleiben offen |
+
 ## Geltung und REQ-30-Stand vom 18.10.2026
 
 Bewertungen historischer Funktionen gelten für den damals geprüften Legacy-Pfad. Impact, Portfolio, Heatmap, Capability Map und Lifecycle sind keine nachgewiesenen aktuellen Browseransichten. Der aktuelle Browserpfad umfasst Authentifizierung, Sidebar, Diagrammeditor und Metamodel. Funktionale historische Bewertungen werden hier nicht ohne neue fachliche Abnahme aufgewertet.

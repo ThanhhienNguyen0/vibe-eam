@@ -20,13 +20,19 @@ model Company {
   architectureModel   ArchitectureModel?
 }
 
+enum Role {
+  Admin
+  Architect
+  Viewer
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
   passwordHash String
   name         String?
   companyId    String
-  role         String   @default("member")
+  role         Role     @default(Viewer)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)

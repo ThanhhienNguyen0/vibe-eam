@@ -1,5 +1,35 @@
 # AI Reflection Log
 
+## REQ-24 – technische Selbstprüfung und Grenzen (19.10.2026)
+
+Geltung: Implementierungsprotokoll, unabhängige Abnahme offen. Maßgeblicher Ergebnisbeleg ist `REQ-24_IMPLEMENTATION_EVIDENCE.md`; frühere Abschnitte bleiben historische Entwicklungsstände.
+
+### KI-Beitrag und Entscheidungen
+
+KI-gestützt entstanden Policy-/Routenvokabular, frischer Identitätsadapter, Prisma-Enummigration, company-lokale Nutzerverwaltung mit Sperrprüfung, rollenabhängige UI, abgesicherter Demo-Seed, API-/Frontend-/DB-Regressionen sowie die Dokumentation. Es wird kein gemessener menschlicher Zeitanteil und kein allgemeiner Qualitätsvorsprung von KI behauptet. Der Änderungsumfang bleibt auf Auth/RBAC und die für einen reproduzierbaren Seed nachweislich nötige Referenzkorrektur begrenzt.
+
+Entscheidungsalternativen: verteilte Route-Stringchecks, reine UI-Prüfung, acht Stunden autoritative Tokenrollen, zusätzliche Tokenversionsverwaltung und pauschale Hochstufung aller Mitglieder. Gründe und Konsequenzen sind im ADR dokumentiert. Zur Konkurrenzkontrolle wird dieselbe Companyzeile vor Akteursprüfung/Adminzählung gesperrt. Der lokale Identitätsadapter reicht nur interne DB-Rollen weiter; ein späterer OIDC-Adapter darf keine Providerrollen unmittelbar übernehmen.
+
+### Tatsächliche Fehlversuche und Korrekturen
+
+- Der neue verwaltete Worktree lag außerhalb des ursprünglichen Sandbox-Schreibbereichs. Git-/Installationsversuche im Sandboxkontext scheiterten mit fehlendem Worktreezugriff beziehungsweise `EPERM`; die ausdrücklich beauftragten lokalen Operationen wurden im freigegebenen Ausführungskontext wiederholt. Keine destruktiven Git-Befehle und keine Übernahme der Dependabot-Arbeit.
+- Zwei Patchentwürfe wurden vor Anwendung durch Format-/Kontextprüfung abgewiesen; danach wurden geordnete, getrennte Änderungen angewandt. Kein daraus abgeleiteter Codeerfolg behauptet.
+- Ein Frontend-Propname (`componentId` statt vorhandenem `compId`) wurde durch Typecheck gefunden und korrigiert. Ein Komponententest erwartete einen nicht vorhandenen Tooltiptext; die Erwartung wurde an die belegte vorhandene Beschriftung angepasst, ohne Rollenprüfung zu entfernen.
+- PostgreSQL 16 lag nur als Restverzeichnis vor; vorhandene PostgreSQL-14-Binaries wurden für eine separate temporäre Instanz verwendet. Docker war zunächst nicht erreichbar; Docker Desktop wurde im Hintergrund angestoßen, die endgültigen DB-Tests verwenden es nicht. Keine bestehende Datenbank wurde verändert.
+- Windows-`pg_ctl` hielt erfasste Ausgabehandles offen, obwohl der Testserver erreichbar war. Der identifizierte Teststarter und nur dessen Cluster wurden gestoppt; Start/Stop verwenden keine geerbten Ausgabepipes mehr.
+- Der erste DB-Lauf hatte ein abweichendes Test-Arbeitsverzeichnis; Seed-/Migrationspfade wurden durch explizites Backend-CWD korrigiert.
+- Der reale Seed scheiterte reproduzierbar an einer BPMN-Viewpointreferenz: vorhandene Legacy-Beispiele wurden mit einer EAM-only-Definition vermischt. Der Seed verwendet jetzt die bereits getestete konsistente Starterfunktion und erhält bestehende Metamodelle. Beide echten Seed-Durchläufe und drei Rollenlogins werden geprüft.
+- Der Migrations-Negativtest sah zunächst Exitcode 0 trotz korrekter Ablehnung/Rollback. Erfasste `psql`-Ausgabe zeigte ignorierte Optionen hinter einer positionalen Datenbank-URL unter Windows. Explizites `-d` vor `-f -`, `-X` und `ON_ERROR_STOP` machen den Fehlerpfad reproduzierbar. Die Migration wurde nicht permissiver gemacht.
+- Beim Dockerabgleich wurde die neue Frontend-Quelleinbindung der reinen Policy sichtbar; die kanonische Datei wird nun ausdrücklich in den Frontend-Buildkontext kopiert. Ein lokaler normaler Build allein wäre für diesen Containerpfad kein Beleg gewesen.
+
+### Sicherheitsabwägungen, Wartbarkeit und offene Prüfung
+
+Beobachtbar sind ein zentraler Ort für Grants, eine vollständige inventarisierte Routenzuordnung, gemeinsame Passwortvalidierung/Hashkosten und zusätzliche echte DB-/UI-Vertragstests. Bewertung: Diese Struktur begrenzt konkrete Drift- und Auslassungsrisiken. Eine kausale Verbesserung allgemeiner Wartbarkeit ist nicht gemessen. Große Editor-/Storedateien, zwei Fachmodelle und bestehende Architektur-Persistenzkonkurrenz bleiben erhalten. Konkrete Gründe der Professorenkritik sind weiterhin nicht vollständig übermittelt und werden nicht erfunden.
+
+Vor Produktion sind Backup, Bootstrapadmin-Zuordnung und die unabhängige fachliche/Sicherheitskontrolle nötig. 401/403, direkte Requests und echte parallele Herabstufungen werden lokal getestet; Browser-E2E, OIDC, Passwortreset, Rate-Limiting und externe CI/Container-/Deploymentausführung sind dadurch nicht belegt. Globale E-Mail-Eindeutigkeit bleibt über einen generischen Anlagekonflikt erkennbar; keine fremden Company-/Nutzerinformationen werden zurückgegeben. Ein vollständiger Anti-Enumeration-Registrierungsprozess wäre zusätzlicher Scope. Direkte DB-Administration kann Repositoryinvarianten umgehen. Bereits laufende fachliche Requests werden bei Rollenänderungen nicht rückwirkend abgebrochen.
+
+Getrennter Kontrollprozess: `01a154a2-d3b0-70c3-9a30-a130659a071d` erhält erst den vollständig selbstgeprüften lokalen Commit. Festgestellte Mängel werden im Umsetzungsbranch korrigiert. Keine Selbstfreigabe, kein Push/PR/Merge/Issue-Close.
+
 ## REQ-30 – belegte Selbstprüfung, 18.10.2026
 
 **Geltung:** Frühere Entwicklungszyklen sind historische Aufzeichnungen. Aktuell sind JWT/bcrypt-Authentifizierung und Company-Isolation implementiert, PostgreSQL wird auch für Company-bezogene Legacy-JSONB-Aggregate verwendet, 69 Backendtests bestehen als zu prüfender Umfang. Frühere Impact-/Portfolio-/Heatmap-/Capability-/Lifecycle-UI-Aussagen sind keine Zusage der heutigen Oberfläche. Der datierte Abschlussbeleg ist `REQ-30_IMPLEMENTATION_EVIDENCE.md`.

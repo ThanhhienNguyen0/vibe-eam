@@ -3,6 +3,7 @@ import { ArrowRight, GitBranch, LayoutDashboard, Plus, Trash2, X } from "lucide-
 import { sidebarApi } from "./sidebarApi";
 import type { SidebarSelection } from "./Sidebar";
 import { COMPONENT_SHAPES } from "./sidebarTypes";
+import { useAccess } from "../access";
 import type {
   ComponentInstance,
   ComponentShape,
@@ -37,9 +38,28 @@ function DetailWrapper({ title, onClose, children }: { title: string; onClose: (
 }
 
 export default function SidebarPanels({ selection, sidebarState, onStateChange, onSelect, onOpenDiagram, onClose }: Props) {
+  const { canWrite, canManageMetamodel } = useAccess();
   if (!selection) return null;
 
   const { componentTypes, connectionTypes, connectionRules, viewpoints, components, connections, diagrams } = sidebarState;
+
+  const collections = { componentType: componentTypes, connectionType: connectionTypes, connectionRule: connectionRules, viewpoint: viewpoints, component: components, connection: connections, diagram: diagrams };
+  if ("id" in selection) {
+    const structural = ["componentType", "connectionType", "connectionRule", "viewpoint"].includes(selection.kind);
+    if (!(structural ? canManageMetamodel : canWrite)) {
+      const entity = collections[selection.kind].find((entry) => entry.id === selection.id);
+      if (!entity) return null;
+      return <DetailWrapper title={"name" in entity ? entity.name : "Verbindungsregel"} onClose={onClose}>
+        <p className="muted">Leseansicht</p>
+        <dl>{Object.entries(entity).map(([key, value]) => <div key={key}><dt>{key}</dt><dd style={{ overflowWrap: "anywhere" }}>{typeof value === "object" ? JSON.stringify(value) : String(value ?? "")}</dd></div>)}</dl>
+        {selection.kind === "diagram" && <button onClick={() => onOpenDiagram(selection.id)}>Diagramm öffnen</button>}
+        {selection.kind === "component" && <>
+          <LinkedConnections compId={selection.id} connections={connections} components={components} connectionTypes={connectionTypes} onSelect={onSelect} />
+          <LinkedDiagrams diagrams={diagrams} isIncluded={(diagram) => diagram.componentIds.includes(selection.id)} onOpenDiagram={onOpenDiagram} />
+        </>}
+      </DetailWrapper>;
+    }
+  }
 
   if (selection.kind === "componentTypes") {
     return (
