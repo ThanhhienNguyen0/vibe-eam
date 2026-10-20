@@ -22,7 +22,7 @@ Methode: enger Ist-/Sollvergleich mit Issue und Umsetzungsauftrag, überprüfte 
 
 ## Kriteriumsweiser lokaler Prüfstand
 
-Alle Beobachtungen stammen vom **19.10.2026**. „Erfüllt (lokal)“ bezeichnet den lokal geprüften Implementierungsstand; die unabhängige Kontrollinstanz bestätigte ihn ohne P0–P2-Befund. Externe und menschliche Freigaben sind davon nicht umfasst.
+Die ursprünglichen REQ-24-Beobachtungen stammen vom **19.10.2026**; die ausdrücklich als PR-Fortschreibung bezeichneten CodeQL-, Proxy- und Limiterbeobachtungen vom **20.10.2026**. „Erfüllt (lokal)“ bezeichnet den lokal geprüften Implementierungsstand. Die ursprüngliche Kontrollinstanz bestätigte den Basisstand ohne P0–P2-Befund; die getrennte Folgekontrolle bestätigte den finalen Korrekturcommit ohne neue P0–P2-Code- oder Konfigurationsbefunde. Externe und menschliche Freigaben sind davon nicht umfasst.
 
 | Akzeptanzkriterium | Status | Konkrete Datei/Zeile oder Verhalten | Prüfkommando und tatsächlich beobachtetes Resultat | Grenzen |
 |---|---|---|---|---|
