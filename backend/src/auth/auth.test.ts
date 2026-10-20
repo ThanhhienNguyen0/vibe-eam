@@ -87,14 +87,42 @@ describe("application authentication", () => {
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const response = await request(app)
         .post("/api/auth/login")
-        .set("X-Forwarded-For", "203.0.113.10")
+        .set("X-Forwarded-For", `198.51.100.${attempt + 1}, 203.0.113.10`)
         .send({ email: "missing@example.com", password: "wrong-password" });
       expect(response.status).toBe(401);
     }
     const blocked = await request(app)
       .post("/api/auth/login")
-      .set("X-Forwarded-For", "203.0.113.10")
+      .set("X-Forwarded-For", "198.51.100.250, 203.0.113.10")
       .send({ email: "missing@example.com", password: "wrong-password" });
+    expect(blocked.status).toBe(429);
+  });
+
+  it("counts successful registrations against their dedicated limit", async () => {
+    const app = createApp({ jwtSecret: SECRET, authRepository: new MemoryAuthRepository() });
+    const created = await request(app)
+      .post("/api/auth/register")
+      .set("X-Forwarded-For", "198.51.100.1, 203.0.113.11")
+      .send({
+        email: "first@example.com",
+        password: "correct horse battery staple",
+        companyName: "Example GmbH",
+        name: "Example User"
+      });
+    expect(created.status).toBe(201);
+
+    for (let attempt = 0; attempt < 9; attempt += 1) {
+      const rejected = await request(app)
+        .post("/api/auth/register")
+        .set("X-Forwarded-For", `198.51.100.${attempt + 1}, 203.0.113.11`)
+        .send({ email: "invalid", password: "long-enough", companyName: "Example" });
+      expect(rejected.status).toBe(400);
+    }
+
+    const blocked = await request(app)
+      .post("/api/auth/register")
+      .set("X-Forwarded-For", "198.51.100.250, 203.0.113.11")
+      .send({ email: "invalid", password: "long-enough", companyName: "Example" });
     expect(blocked.status).toBe(429);
   });
 

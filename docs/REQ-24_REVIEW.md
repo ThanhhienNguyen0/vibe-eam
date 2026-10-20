@@ -43,6 +43,19 @@ Die Dokumentationskorrektur verändert keinen Produktcode und keine Tests. Ihr l
 
 Die Kontrollinstanz meldete die Nachprüfung am **19.10.2026 um 22:18 CEST** abgeschlossen. Sie bestätigte den Parent `16035678`, ausschließlich die angekündigten acht Dokumentationsdateien im Diff, keine Änderung außerhalb `docs` und eine saubere Prüfung mit `git diff 16035678..4193adb --check`. Der Reviewdatensatz enthält nach ihrem Urteil Trennung, Zeitpunkt, Inputs, unabhängig reproduzierte Ergebnisse, den P3-Befund samt Korrektur und die exakte Secret-History-Grenze. Die Statusaussagen trennen lokale unabhängige Bestätigung von Push, Remote-CI, Containerausführung, Deployment und menschlicher Freigabe. Entscheidung: P3 geschlossen; im lokal geprüften Umfang vollständig erfüllt und keine offenen P0–P3. Empfehlung: Push und anschließender Draft-PR erst nach Titus' separater Freigabe; kein Merge und kein Schließen von Issue #56. Remote-CI-, Container- und GitHub-Nachweise bleiben nach einem Push separat zu prüfen.
 
+## Unabhängige Folgekontrolle der CodeQL-Korrektur, 20.10.2026
+
+Eine saubere Review-Subinstanz, die weder die CodeQL-Korrektur noch ihre Dokumentation erstellt hatte, prüfte den lokalen Commit `f8704e48cbf0e387424417896028fbc8be242940` read-only gegen den aktuellen PR-Stand. Eingaben waren der Commitdiff, die beiden Advanced-Security-Befunde, der dokumentierte Nginx-/Compose-Pfad und die ausführbaren Authregressionen. Die gewünschte Schlussfolgerung wurde nicht vorgegeben.
+
+| Priorität | Befund | Entscheidung / Änderung |
+|---|---|---|
+| P1 | Vertrauen in alle Loopback-/privaten Proxyadressen konnte bei privaten Proxyketten manipulierbare `X-Forwarded-For`-Werte als Client-IP übernehmen | Express vertraut exakt einem Hop; alle dokumentierten Nginx-Konfigurationen überschreiben den Header; der lokal veröffentlichte Backend-Port bindet an Loopback |
+| P2 | Das allgemeine Requestlimit lag hinter dem 2-MB-JSON-Parser | Allgemeiner Limiter läuft vor `express.json()` |
+| P2 | `skipSuccessfulRequests` galt für den gesamten Authrouter; erfolgreiche Registrierungen zählten daher nicht zum engeren Limit | Eigener Registrierungslimiter mit zehn gezählten Versuchen; separater Loginlimiter mit 20 fehlgeschlagenen Versuchen |
+| P3 | Das Promptprotokoll bezeichnete die Veröffentlichung der lokalen Korrektur vor dem Push als bereits umgesetzt | Status auf beauftragt und lokal in Korrektur geändert |
+
+Die neuen Regressionen halten die tatsächliche rechte Client-IP konstant, verändern aber den nicht vertrauenswürdigen linken Headerwert. Damit sind weder Login- noch Registrierungslimit durch links vorangestellte Werte umgehbar; eine erfolgreiche Registrierung zählt ausdrücklich. Der erste Testentwurf ordnete den erfolgreichen Registrierungsrequest wegen fehlendem Header einem anderen Bucket zu und scheiterte erwartungsgemäß 400 statt 429. Nach Korrektur des Testaufbaus bestanden Auth 12/12, RBAC 14/14 und die statische Composeprüfung 112/112. Die abschließende Nachprüfung des daraus erzeugten finalen Commits wird hier nach ihrem tatsächlichen Ergebnis ergänzt.
+
 ## Aussagegrenzen
 
 Die Selbstprüfung sah 43 lokal verfügbare Commits, die getrennte Kontrollkopie 25; beide Secret-Scans waren fundfrei. Daraus folgt kein Nachweis der vollständigen Remote-Historie. Dieser ist erst nach Push und erfolgreichem Remote-CI-Lauf belegbar. Ebenso offen bleiben Browser-E2E, tatsächliche Containerausführung, produktive Migration und Seed-Ausführung, Bootstrapadmin-Prüfung, GitHub-Branch-/Security-Einstellungen, Deployment und menschliche Freigabe. Das Urteil bezieht sich ausschließlich auf den lokal geprüften Commit und belegt keine allgemeine Wartbarkeit oder Produktionsreife.
