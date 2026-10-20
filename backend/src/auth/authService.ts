@@ -4,7 +4,8 @@ import type { AuthPrincipal } from "../tenant.js";
 import type { AuthRepository, AuthResult, PublicUser, StoredUser } from "./authTypes.js";
 import { isRole } from "./policy.js";
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_EMAIL_LENGTH = 254;
+const MAX_EMAIL_LOCAL_PART_LENGTH = 64;
 const PASSWORD_ROUNDS = 12;
 
 export class AuthHttpError extends Error {
@@ -22,6 +23,28 @@ export function requireJwtSecret(environment: NodeJS.ProcessEnv = process.env): 
 
 export function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
+}
+
+export function isValidEmail(value: string): boolean {
+  if (!value || value.length > MAX_EMAIL_LENGTH) return false;
+
+  const separator = value.indexOf("@");
+  if (
+    separator <= 0 ||
+    separator > MAX_EMAIL_LOCAL_PART_LENGTH ||
+    separator !== value.lastIndexOf("@") ||
+    separator === value.length - 1
+  ) {
+    return false;
+  }
+
+  const domain = value.slice(separator + 1);
+  if (!domain.includes(".") || domain.startsWith(".") || domain.endsWith(".")) return false;
+
+  for (const character of value) {
+    if (character.trim() === "") return false;
+  }
+  return true;
 }
 
 export function publicUser(user: StoredUser): PublicUser {
@@ -55,7 +78,7 @@ export class AuthService {
     const companyName = typeof input.companyName === "string" ? input.companyName.trim() : "";
     const name = typeof input.name === "string" && input.name.trim() ? input.name.trim() : null;
 
-    if (!EMAIL_PATTERN.test(email)) throw new AuthHttpError(400, "A valid email is required.");
+    if (!isValidEmail(email)) throw new AuthHttpError(400, "A valid email is required.");
     validatePassword(password);
     if (!companyName) throw new AuthHttpError(400, "companyName is required.");
     if (await this.repository.findUserByEmail(email)) throw new AuthHttpError(409, "An account with this email already exists.");
@@ -107,7 +130,7 @@ export function hashLocalPassword(password: string): Promise<string> {
 export function validateLocalUser(input: { email?: unknown; password?: unknown; name?: unknown }) {
   const email = normalizeEmail(typeof input.email === "string" ? input.email : "");
   const password = typeof input.password === "string" ? input.password : "";
-  if (!EMAIL_PATTERN.test(email)) throw new AuthHttpError(400, "A valid email is required.");
+  if (!isValidEmail(email)) throw new AuthHttpError(400, "A valid email is required.");
   validatePassword(password);
   const name = typeof input.name === "string" && input.name.trim() ? input.name.trim() : null;
   return { email, password, name };

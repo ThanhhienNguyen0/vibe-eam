@@ -1,5 +1,7 @@
 # REQ-24 – unabhängiger Kontrollnachweis
 
+**Zeitliche Einordnung:** Dieser unabhängige Kontrollnachweis gilt für die ursprünglichen Commits vom 19.10.2026. Draft-PR #88 meldete am 20.10.2026 danach zwei neue CodeQL-Befunde. Korrektur, lokale Regression und die noch ausstehende erneute Remoteprüfung sind als Fortschreibung in `REQ-24_IMPLEMENTATION_EVIDENCE.md` dokumentiert; sie werden nicht rückwirkend als Bestandteil dieses früheren Kontrolllaufs ausgegeben.
+
 Stand: **19.10.2026, 22:14 CEST**. Geprüfter Implementierungscommit: `16035678a1f0e813932e10b8f92d60a3e32230f9`; verbindliche Basis: `2f21cfed4e1e56826e2b13590aea9d5649e59050`.
 
 **Urteil:** Die lokale Implementierung ist unabhängig bestätigt. Der Kontrolllauf fand keine P0-, P1- oder P2-Befunde. Ein P3-Dokumentationsblocker wurde durch diesen Nachweis und die eng begrenzten Statuskorrekturen bearbeitet. Push, Remote-CI, Containerausführung, Deployment, menschliche Freigabe, Merge und das Schließen von Issue #56 bleiben offen.

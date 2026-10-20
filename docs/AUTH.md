@@ -1,8 +1,8 @@
 # Authentifizierung, Rollen und Company-Isolation
 
-## Aktueller Vertrag – REQ-24, 19.10.2026
+## Aktueller Vertrag – REQ-24, 20.10.2026
 
-Diese Fassung ersetzt die früheren Aussagen über frei gespeicherte Rollen und allein aus dem JWT abgeleitete Company-/Rollenrechte. Die lokale Implementierung ist unabhängig bestätigt; Prüfstand: [REQ-24_IMPLEMENTATION_EVIDENCE.md](REQ-24_IMPLEMENTATION_EVIDENCE.md), Kontrollnachweis: [REQ-24_REVIEW.md](REQ-24_REVIEW.md). Push, Remote-CI, Containerausführung, Deployment und menschliche Freigabe stehen vor Veröffentlichung aus.
+Diese Fassung ersetzt die früheren Aussagen über frei gespeicherte Rollen und allein aus dem JWT abgeleitete Company-/Rollenrechte. Die lokale Implementierung ist unabhängig bestätigt; Prüfstand: [REQ-24_IMPLEMENTATION_EVIDENCE.md](REQ-24_IMPLEMENTATION_EVIDENCE.md), Kontrollnachweis: [REQ-24_REVIEW.md](REQ-24_REVIEW.md). Draft-PR [#88](https://github.com/ThanhhienNguyen0/vibe-eam/pull/88) ist veröffentlicht. Die PR-Fortschreibung vom 20.10.2026 dokumentiert die beiden CodeQL-Befunde und ihre Korrektur; Containerausführung, Deployment und menschliche Freigabe bleiben getrennte Grenzen.
 
 ### Rollenmatrix
 
@@ -18,6 +18,8 @@ Die Issue-Kurzform „Admin (Nutzer, Metamodell), Architekt (lesen/schreiben), V
 ### Authentifizierung und frischer interner Kontext
 
 Lokale Registrierung und Nutzeranlage verwenden den gemeinsamen Passwort-Hasher mit bcrypt-Kostenfaktor 12. Passwörter brauchen mindestens acht Zeichen und höchstens 72 UTF-8-Bytes, damit bcrypt nichts still abschneidet. Antworten enthalten ausschließlich öffentliche Nutzerfelder. Unbekannte Serverfehler werden ohne Datenbankeingaben oder Passwort-Hashes protokolliert.
+
+E-Mail-Eingaben werden vor Repositoryzugriff mit einer längenbegrenzten linearen Prüfung verarbeitet; eine reguläre Formel mit datenabhängigem Backtracking wird nicht verwendet. Alle API-Routen besitzen pro Client-IP ein allgemeines Limit von 600 Requests je 15 Minuten. Fehlgeschlagene Registrierung/Login-Versuche unter `/api/auth` werden zusätzlich auf 20 je 15 Minuten begrenzt; erfolgreiche Authentifizierungen belasten dieses engere Limit nicht. Gesundheitsprüfungen und CORS-Preflight sind vom allgemeinen Limit ausgenommen. Loopback- und private Proxyadressen werden als vertrauenswürdige Nginx-Hops behandelt, damit die vom vorhandenen Proxy gesetzte Client-IP maßgeblich bleibt. Der Speicher ist pro Backendprozess; ein verteilter Store wäre bei mehreren Backendinstanzen erforderlich.
 
 Neue JWTs enthalten den internen Nutzer als `sub`, `iat`, `exp`, Issuer und Audience `eam-tool`; Laufzeit acht Stunden, verifiziert ausschließlich mit HS256. Rollen-/Company-Claims sind keine Autorität. Jeder geschützte Request lädt den Nutzer erneut aus der Datenbank und bildet erst danach den internen `AuthPrincipal` und AsyncLocalStorage-Company-Kontext. Alte Company-Claims müssen, falls vorhanden, zur aktuellen internen Zuordnung passen; alte Rollenclaims werden ignoriert. Daher funktionieren auch alte `member`-Tokens nach der Migration entsprechend der aktuellen DB-Rolle. Gelöschte/unbekannte Subjekte verlieren den Zugang. Ein neuer Request mit einem bereits ausgestellten Token berücksichtigt eine Rollenänderung sofort. Bereits laufende fachliche Requests werden nicht rückwirkend abgebrochen.
 
@@ -44,6 +46,7 @@ Vollständiges ausführbares Inventar: `backend/src/auth/routePolicies.ts` (52 R
 - **400:** fehlerhafte Eingaben, beispielsweise unbekannte Zielrolle oder ungültige Passwortlänge.
 - **404:** Zielnutzer nicht in der eigenen Company gefunden; unbekannte und fremde IDs haben identische Antworten.
 - **409:** letzter Admin darf nicht herabgestuft werden oder Nutzer kann wegen global eindeutiger E-Mail nicht angelegt werden. Konfliktantworten nennen weder fremde Company noch Nutzerinformationen.
+- **429:** allgemeines API-Limit oder engeres Limit für fehlgeschlagene Authentifizierungsversuche überschritten.
 - **500:** unerwarteter Repository-/Policyfehler; keine Fortsetzung zur geschützten Aktion, keine Umdeutung in 401.
 
 `POST /api/users` akzeptiert `email`, `password`, optional `name` sowie eine gültige `role`. `PATCH /api/users/:id/role` akzeptiert `role`. Die Company wird immer aus dem serverseitigen Kontext abgeleitet; mitgesendete Company-/Identitätsfelder haben keine Wirkung. Eine Löschfunktion ist nicht enthalten. Jede Rollen-/Nutzeranlage sperrt in einer Transaktion die eigene Company-Zeile (`FOR UPDATE`), prüft danach den aktuellen Admin erneut und prüft vor Herabstufung die Zahl verbleibender Admins. Dadurch werden parallele Herabstufungen serialisiert und bereits demotete Akteure unter der Sperre erneut abgelehnt. Diese Invarianten gelten für den Anwendungsweg; direkte Datenbankadministration muss dieselben Betriebsregeln beachten.
@@ -83,7 +86,7 @@ Auf Linux: `PG_BIN="$(pg_config --bindir)" npm run test:rbac:db`. Benötigt loka
 
 ### Fortbestehende Grenzen
 
-Kein OIDC, Passwortreset, E-Mail-Verifikation, Nutzerlöschen, Rate-Limiting oder umfassender Browser-E2E-Test. Logout bleibt lokal/stateless; ein kopierter gültiger Token ist bis Ablauf verwendbar, aber jede Aktion nutzt den aktuellen Nutzer und seine aktuelle Rolle. Tokens bleiben im Browser-Storage. Die globale E-Mail-Eindeutigkeit erzwingt einen generischen Anlagekonflikt; daraus kann die Belegung einer E-Mail hervorgehen, jedoch keine fremde Company oder deren Nutzerliste. Die bisherige öffentliche Registrierung besitzt ebenfalls eine E-Mail-Konfliktantwort; vollständiger Schutz vor E-Mail-Verfügbarkeitsabfragen erfordert einen eigenen Registrierungs-/Einladungsprozess. Die fachliche Datenpersistenz und ihre Parallelitätsgrenzen außerhalb der Nutzerverwaltung werden hier nicht grundsätzlich umgebaut.
+Kein OIDC, Passwortreset, E-Mail-Verifikation, Nutzerlöschen oder umfassender Browser-E2E-Test. Logout bleibt lokal/stateless; ein kopierter gültiger Token ist bis Ablauf verwendbar, aber jede Aktion nutzt den aktuellen Nutzer und seine aktuelle Rolle. Tokens bleiben im Browser-Storage. Das Rate-Limiting ist pro Backendprozess und ersetzt bei horizontaler Skalierung keinen gemeinsamen Store. Die globale E-Mail-Eindeutigkeit erzwingt einen generischen Anlagekonflikt; daraus kann die Belegung einer E-Mail hervorgehen, jedoch keine fremde Company oder deren Nutzerliste. Die bisherige öffentliche Registrierung besitzt ebenfalls eine E-Mail-Konfliktantwort; vollständiger Schutz vor E-Mail-Verfügbarkeitsabfragen erfordert einen eigenen Registrierungs-/Einladungsprozess. Die fachliche Datenpersistenz und ihre Parallelitätsgrenzen außerhalb der Nutzerverwaltung werden hier nicht grundsätzlich umgebaut.
 
 Orientierungsquelle (am 19.10.2026 gelesen): [OWASP Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html), insbesondere Least Privilege, Deny by Default, Prüfung jedes Requests und Autorisierungstests. Implementiert wird die explizit beauftragte Rollenmatrix zusammen mit Company-Kontext; keine Behauptung vollständiger OWASP-Konformität.
 

@@ -1,5 +1,6 @@
 import cors from "cors";
 import express from "express";
+import { rateLimit } from "express-rate-limit";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
@@ -39,6 +40,7 @@ export interface AppOptions {
 
 export function createApp(options: AppOptions): express.Express {
   const app = express();
+  app.set("trust proxy", "loopback, linklocal, uniquelocal");
   const corsOrigin = process.env.CORS_ORIGIN?.trim();
   const databaseRepository = options.authRepository && options.userRepository ? undefined : new PrismaAuthRepository(new PrismaClient());
   const authRepository = options.authRepository ?? databaseRepository!;
@@ -46,6 +48,13 @@ export function createApp(options: AppOptions): express.Express {
 
   app.use(cors(corsOrigin ? { origin: corsOrigin.split(",").map((origin) => origin.trim()) } : undefined));
   app.use(express.json({ limit: "2mb" }));
+  app.use(rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 600,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    skip: (req) => req.method === "OPTIONS" || req.path === "/api/health"
+  }));
   // Precedes every API route, including auth and future routers.
   app.use(apiSecurity(requireAuth(options.jwtSecret, authRepository)));
 
@@ -53,7 +62,13 @@ export function createApp(options: AppOptions): express.Express {
     res.json({ status: "ok" });
   });
 
-  app.use("/api/auth", createAuthRouter(authService));
+  app.use("/api/auth", rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 20,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    skipSuccessfulRequests: true
+  }), createAuthRouter(authService));
   app.use("/api/users", createUserRouter(options.userRepository ?? databaseRepository!));
   app.use("/api/sidebar", sidebarRouter);
 

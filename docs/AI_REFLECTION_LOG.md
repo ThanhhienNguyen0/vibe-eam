@@ -1,8 +1,8 @@
 # AI Reflection Log
 
-## REQ-24 – technische Umsetzung, unabhängige Kontrolle und Grenzen (19.10.2026)
+## REQ-24 – technische Umsetzung, unabhängige Kontrolle und PR-Fortschreibung (20.10.2026)
 
-Geltung: Implementierungsprotokoll; die lokale Umsetzung ist unabhängig bestätigt. Maßgebliche Belege sind `REQ-24_IMPLEMENTATION_EVIDENCE.md` und `REQ-24_REVIEW.md`; Push, Remote-CI, Containerausführung, Deployment und menschliche Freigabe bleiben offen. Frühere Abschnitte bleiben historische Entwicklungsstände.
+Geltung: Implementierungsprotokoll; die ursprüngliche lokale Umsetzung ist unabhängig bestätigt. Maßgebliche Belege sind `REQ-24_IMPLEMENTATION_EVIDENCE.md` und `REQ-24_REVIEW.md`; Draft-PR #88 und sein erster Remote-Lauf existieren. Die beiden dort zusätzlich erkannten CodeQL-Befunde sind lokal korrigiert; der erneute Remote-Lauf des Korrekturcommits, Containerausführung, Deployment und menschliche Freigabe werden separat belegt. Frühere Abschnitte bleiben historische Entwicklungsstände.
 
 ### KI-Beitrag und Entscheidungen
 
@@ -26,9 +26,19 @@ Entscheidungsalternativen: verteilte Route-Stringchecks, reine UI-Prüfung, acht
 
 Beobachtbar sind ein zentraler Ort für Grants, eine vollständige inventarisierte Routenzuordnung, gemeinsame Passwortvalidierung/Hashkosten und zusätzliche echte DB-/UI-Vertragstests. Bewertung: Diese Struktur begrenzt konkrete Drift- und Auslassungsrisiken. Eine kausale Verbesserung allgemeiner Wartbarkeit ist nicht gemessen. Große Editor-/Storedateien, zwei Fachmodelle und bestehende Architektur-Persistenzkonkurrenz bleiben erhalten. Konkrete Gründe der Professorenkritik sind weiterhin nicht vollständig übermittelt und werden nicht erfunden.
 
-Vor Produktion sind Backup, Bootstrapadmin-Zuordnung und menschliche fachliche/Sicherheitsfreigabe nötig. 401/403, direkte Requests und echte parallele Herabstufungen wurden lokal und anschließend getrennt kontrolliert; Browser-E2E, OIDC, Passwortreset, Rate-Limiting und externe CI/Container-/Deploymentausführung sind dadurch nicht belegt. Globale E-Mail-Eindeutigkeit bleibt über einen generischen Anlagekonflikt erkennbar; keine fremden Company-/Nutzerinformationen werden zurückgegeben. Ein vollständiger Anti-Enumeration-Registrierungsprozess wäre zusätzlicher Scope. Direkte DB-Administration kann Repositoryinvarianten umgehen. Bereits laufende fachliche Requests werden bei Rollenänderungen nicht rückwirkend abgebrochen.
+Vor Produktion sind Backup, Bootstrapadmin-Zuordnung und menschliche fachliche/Sicherheitsfreigabe nötig. 401/403, direkte Requests und echte parallele Herabstufungen wurden lokal und anschließend getrennt kontrolliert; Browser-E2E, OIDC, Passwortreset und Container-/Deploymentausführung sind dadurch nicht belegt. Rate-Limiting ist jetzt lokal regressionsgeprüft, bleibt jedoch pro Backendprozess. Globale E-Mail-Eindeutigkeit bleibt über einen generischen Anlagekonflikt erkennbar; keine fremden Company-/Nutzerinformationen werden zurückgegeben. Ein vollständiger Anti-Enumeration-Registrierungsprozess wäre zusätzlicher Scope. Direkte DB-Administration kann Repositoryinvarianten umgehen. Bereits laufende fachliche Requests werden bei Rollenänderungen nicht rückwirkend abgebrochen.
 
 Getrennter Kontrollprozess: `01a154a2-d3b0-70c3-9a30-a130659a071d` erhielt erst den vollständig selbstgeprüften lokalen Commit. Die Kontrollinstanz fand keinen P0–P2-Befund und meldete als P3, dass Statussätze und eigener Auditdatensatz noch fehlten. `REQ-24_REVIEW.md` sowie die eng begrenzten Statuskorrekturen behoben diesen Dokumentationsbefund; die reine Dokumentationsnachprüfung schloss P3 und meldete im lokal geprüften Umfang keine offenen P0–P3. Keine Selbstfreigabe, kein Push/PR/Merge/Issue-Close.
+
+### PR-CodeQL-Korrekturschleife vom 20.10.2026
+
+Nach Veröffentlichung von Draft-PR #88 waren die GitHub-Actions-Jobs erfolgreich, während GitHub Advanced Security zwei hohe Befunde als eigenen fehlgeschlagenen Check auswies. Die frühere lokale Prüfung hatte diese beiden statischen Sicherheitsbefunde nicht erkannt: Die kompakte E-Mail-Regulärformel konnte auf kontrollierten Eingaben übermäßig lange laufen, und vor der zentralen Autorisierung fehlte ein Requestlimit. Die Korrektur verwendet eine explizit längenbegrenzte lineare E-Mail-Prüfung und zwei gestaffelte IP-Limits vor den geschützten Routen. Der bestehende Nginx-Pfad machte eine ausdrückliche, auf Loopback/private Netze begrenzte Proxy-Vertrauenskonfiguration notwendig; ein unbedachtes globales `trust proxy` wurde nicht verwendet. Der Prozessspeicher des Limiters bleibt eine dokumentierte Skalierungsgrenze.
+
+Der Branch wurde mit dem inzwischen fortgeschrittenen `main` zusammengeführt, ohne veröffentlichte Historie umzuschreiben. Die gezielten Tests und das vollständige lokale Gate liefen nach der Korrektur erneut; konkrete Resultate stehen in `REQ-24_IMPLEMENTATION_EVIDENCE.md`. Erst der erneute GitHub-Advanced-Security-Check kann belegen, dass beide Remote-Befunde für den neuen Head geschlossen sind.
+
+Nach `npm ci` wurde einmal ein einzelner Auth-Test direkt gestartet und scheiterte vor der Testausführung, weil die saubere Installation den generierten Prisma-Client erwartungsgemäß nicht enthält. Das ist kein Produktbefund: Das kanonische `npm run check` führt `db:generate` zuerst aus. Dieser vollständige Ablauf wurde direkt aus der sauberen Installation wiederholt und bestand vollständig.
+
+Ein späterer gemeinsamer Zwei-Dateien-Vitest-Aufruf meldete unter Windows einen unerwartet beendeten Worker für `rbac.test.ts` (Exitcode `3221226505`), während die Auth-Datei bestand. Das vollständige Gate war zuvor grün; die beiden Dateien wurden anschließend einzeln wiederholt und bestanden mit 11/11 beziehungsweise 14/14 Tests. Es wurde kein Produktcode verändert, um den isolierten Workerabbruch zu kaschieren.
 
 ## REQ-30 – belegte Selbstprüfung, 18.10.2026
 

@@ -1,14 +1,14 @@
 # Implementation Plan
 
-## Aktueller Schritt: REQ-24 (19.10.2026), lokal unabhängig bestätigt
+## Aktueller Schritt: REQ-24 (20.10.2026), PR-CodeQL-Korrektur
 
-Basis ist ausschließlich `origin/main` auf `2f21cfed4e1e56826e2b13590aea9d5649e59050`, einschließlich REQ-30. Der Dependabot-Checkout bleibt getrennt. Rollenmodell und Nutzerverwaltung werden ohne Neubau der EAM-Fachmodelle ergänzt.
+Historische Implementierungsbasis war `origin/main` auf `2f21cfed4e1e56826e2b13590aea9d5649e59050`, einschließlich REQ-30. Für Draft-PR #88 wurde der veröffentlichte Branch am 20.10.2026 ohne History-Rewrite mit aktuellem `main` `c489027fc9e7897da17d4dc08d4bb230d4aaed3e` zusammengeführt. Dadurch ist die separat gemergte Dependabot-Konfiguration nun regulär Teil des PR-Stands. Rollenmodell und Nutzerverwaltung werden weiterhin ohne Neubau der EAM-Fachmodelle ergänzt.
 
 Implementierte Reihenfolge: (1) reines Rollen-/Policyvokabular und exaktes Routeninventar; (2) Identitätsadapter mit frischer interner DB-Rolle; (3) atomare Enum-/`member`-Migration; (4) company-lokale, gesperrte Adminoperationen; (5) verständliche Rollenanzeige und passende UI-Aktionen; (6) expliziter sicherer Demo-Seed und konsistente Starterreferenzen; (7) Matrix-/Inventar-/Frontend-/reale DB-Tests; (8) Ergebnis-/Entscheidungs-/Fehlversuchsdokumentation und lokaler Commit.
 
 Die ursprünglichen REQ-30-Gates bleiben erhalten. `npm test` umfasst jetzt zusätzlich Frontendregressionen; ein separater blockierender CI-Schritt erstellt einen isolierten PostgreSQL-Cluster für Migration, Seed und Konkurrenztests. Entfernen oder Optionalisieren dieses Schritts wird durch die Security-Gateregression erkannt. Lokale Resultate und Grenzen: `REQ-24_IMPLEMENTATION_EVIDENCE.md`.
 
-Der Implementierungscommit `16035678a1f0e813932e10b8f92d60a3e32230f9` wurde vom Kontrollchat `01a154a2-d3b0-70c3-9a30-a130659a071d` ohne P0–P2-Befund geprüft. Der gemeldete P3-Dokumentationsblocker wurde im reinen Dokumentationscommit `4193adb26bd570ab178aa2659586166a011663a0` korrigiert und durch denselben Kontrollchat geschlossen; im lokal geprüften Umfang bestehen keine offenen P0–P3. Push, Remote-CI, Containerausführung, Deployment, Titus-Freigabe, PR, Merge und Issue-Close bleiben offene Schritte. REQ-25/OIDC, Passwortreset und EAM-Persistenzneubau bleiben außerhalb dieses Requirements.
+Der Implementierungscommit `16035678a1f0e813932e10b8f92d60a3e32230f9` wurde vom Kontrollchat `01a154a2-d3b0-70c3-9a30-a130659a071d` ohne P0–P2-Befund geprüft. Der gemeldete P3-Dokumentationsblocker wurde im reinen Dokumentationscommit `4193adb26bd570ab178aa2659586166a011663a0` korrigiert und durch denselben Kontrollchat geschlossen. Draft-PR #88 meldete anschließend zwei neue CodeQL-Befunde. Der aktuelle Korrekturschritt ersetzt die problematische E-Mail-Regulärformel durch eine lineare Prüfung, ergänzt allgemeines und Auth-spezifisches Rate-Limiting und wiederholt lokale Gesamt-, DB-, Dependency- und Secret-Prüfungen. Der erneute Remote-Check, Containerausführung, Deployment, menschliche Freigabe, Merge und Issue-Close bleiben getrennte Schritte. REQ-25/OIDC, Passwortreset und EAM-Persistenzneubau bleiben außerhalb dieses Requirements.
 
 ## Aktueller Qualitätsstand: REQ-30 (18.10.2026)
 

@@ -82,6 +82,22 @@ describe("application authentication", () => {
     expect(response.status).toBe(401);
   });
 
+  it("rate-limits repeated failed login attempts", async () => {
+    const app = createApp({ jwtSecret: SECRET, authRepository: new MemoryAuthRepository() });
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const response = await request(app)
+        .post("/api/auth/login")
+        .set("X-Forwarded-For", "203.0.113.10")
+        .send({ email: "missing@example.com", password: "wrong-password" });
+      expect(response.status).toBe(401);
+    }
+    const blocked = await request(app)
+      .post("/api/auth/login")
+      .set("X-Forwarded-For", "203.0.113.10")
+      .send({ email: "missing@example.com", password: "wrong-password" });
+    expect(blocked.status).toBe(429);
+  });
+
   it("rejects /api/auth/me without a bearer token", async () => {
     const response = await request(createApp({ jwtSecret: SECRET, authRepository: new MemoryAuthRepository() })).get("/api/auth/me");
     expect(response.status).toBe(401);
@@ -115,5 +131,13 @@ describe("application authentication", () => {
       .post("/api/auth/register")
       .send({ email: "short@example.com", password: "short", companyName: "Example" });
     expect(response.status).toBe(400);
+  });
+
+  it("rejects malformed and oversized email addresses without regular-expression backtracking", async () => {
+    const app = createApp({ jwtSecret: SECRET, authRepository: new MemoryAuthRepository() });
+    for (const email of ["missing-at.example.com", "a@@example.com", `a@${"a.".repeat(200)}com`]) {
+      const response = await register(app, email);
+      expect(response.status).toBe(400);
+    }
   });
 });
