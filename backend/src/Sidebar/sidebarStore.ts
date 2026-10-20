@@ -21,10 +21,7 @@ import {
   extractMetamodelDefinition,
   validateMetamodelDefinition
 } from "./metamodelConfig.js";
-import {
-  databasePersistenceEnabled,
-  databaseSidebarRepository
-} from "../persistence/databaseSidebarRepository.js";
+import { databaseSidebarRepository } from "../persistence/databaseSidebarRepository.js";
 import {
   addConnectionToDiagramState,
   assertValidConnectionEndpoints,
@@ -927,15 +924,6 @@ const defaultState: SidebarState = {
 
 const cachedByCompany = new Map<string, SidebarState>();
 
-async function ensureFile(): Promise<void> {
-  await fs.mkdir(dataDir, { recursive: true });
-  try {
-    await fs.access(sidebarFile);
-  } catch {
-    await fs.writeFile(sidebarFile, JSON.stringify(defaultState, null, 2), "utf-8");
-  }
-}
-
 function upsertById<T extends { id: string }>(items: T[], seeds: T[]): T[] {
   const existingIds = new Set(items.map((item) => item.id));
   return [...items, ...seeds.filter((seed) => !existingIds.has(seed.id))];
@@ -1030,42 +1018,31 @@ export async function readSidebarState(): Promise<SidebarState> {
   const companyId = requireCompanyId();
   const cached = cachedByCompany.get(companyId);
   if (cached) return structuredClone(cached);
-  if (databasePersistenceEnabled()) {
-    const persisted = await databaseSidebarRepository().read(companyId);
-    if (persisted) {
-      const normalized = normalizeSidebarStateForCompany(persisted, companyId);
-      const stored = JSON.stringify(normalized) === JSON.stringify(persisted)
-        ? persisted
-        : await databaseSidebarRepository().write(normalized, companyId);
-      cachedByCompany.set(companyId, stored);
-      return structuredClone(stored);
-    }
-
-    const initial = buildInitialSidebarStateForCompany(companyId);
-    const stored = await databaseSidebarRepository().write(initial, companyId);
+  const persisted = await databaseSidebarRepository().read(companyId);
+  if (persisted) {
+    const normalized = normalizeSidebarStateForCompany(persisted, companyId);
+    const stored = JSON.stringify(normalized) === JSON.stringify(persisted)
+      ? persisted
+      : await databaseSidebarRepository().write(normalized, companyId);
     cachedByCompany.set(companyId, stored);
     return structuredClone(stored);
   }
 
-  const companyFile = path.join(dataDir, `sidebar.${companyId}.json`);
-  let state: SidebarState;
-  try {
-    state = normalizeSidebarStateForCompany(
-      JSON.parse(await fs.readFile(companyFile, "utf-8")) as Partial<SidebarState>,
-      companyId
-    );
-  } catch {
-    state = buildInitialSidebarStateForCompany(companyId);
-  }
-  cachedByCompany.set(companyId, state);
-  await writeSidebarState(state);
-  return structuredClone(state);
+  const initial = buildInitialSidebarStateForCompany(companyId);
+  const stored = await databaseSidebarRepository().write(initial, companyId);
+  cachedByCompany.set(companyId, stored);
+  return structuredClone(stored);
 }
 
+// Read-only seed source for db:seed and db:migrate-json; runtime data lives in PostgreSQL only.
 export async function readLegacySidebarState(): Promise<SidebarState> {
-  await ensureFile();
-  const raw = await fs.readFile(sidebarFile, "utf-8");
-  return normalizeSidebarState(JSON.parse(raw) as Partial<SidebarState>);
+  let raw: Partial<SidebarState>;
+  try {
+    raw = JSON.parse(await fs.readFile(sidebarFile, "utf-8")) as Partial<SidebarState>;
+  } catch {
+    raw = {};
+  }
+  return normalizeSidebarState(raw);
 }
 
 async function readJsonFile(filePath: string): Promise<unknown> {
@@ -1126,16 +1103,9 @@ export async function importMetamodelDefinition(input: unknown): Promise<Metamod
 
 export async function writeSidebarState(state: SidebarState): Promise<SidebarState> {
   const companyId = requireCompanyId();
-  let cached = structuredClone(state);
-  if (databasePersistenceEnabled()) {
-    cached = await databaseSidebarRepository().write(cached, companyId);
-    cachedByCompany.set(companyId, cached);
-    return structuredClone(cached);
-  }
-  await fs.mkdir(dataDir, { recursive: true });
-  await fs.writeFile(path.join(dataDir, `sidebar.${companyId}.json`), JSON.stringify(cached, null, 2), "utf-8");
-  cachedByCompany.set(companyId, cached);
-  return structuredClone(cached);
+  const stored = await databaseSidebarRepository().write(structuredClone(state), companyId);
+  cachedByCompany.set(companyId, stored);
+  return structuredClone(stored);
 }
 
 // ── Component Types ──────────────────────────────────────────────────────────

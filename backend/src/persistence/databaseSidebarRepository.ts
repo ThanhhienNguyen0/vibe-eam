@@ -432,21 +432,23 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
 
 let singleton: PrismaSidebarStateRepository | undefined;
 
-export function configuredStorageBackend(environment: NodeJS.ProcessEnv = process.env): "database" | "json" {
+// PostgreSQL is the only persistence layer (ADR 0001). STORAGE_BACKEND is a removed setting:
+// "database" is tolerated for old .env files, anything else fails so nobody expects JSON storage.
+export function requireDatabaseConfiguration(environment: NodeJS.ProcessEnv = process.env): string {
   const requested = environment.STORAGE_BACKEND?.trim().toLowerCase();
-  const hasDatabaseUrl = Boolean(environment.DATABASE_URL?.trim());
-  if (requested && requested !== "database" && requested !== "json") {
-    throw new Error("STORAGE_BACKEND must be either 'database' or 'json'.");
+  if (requested && requested !== "database") {
+    throw new Error(
+      `STORAGE_BACKEND=${requested} is no longer supported. JSON file storage was removed (REQ-28); ` +
+      "remove STORAGE_BACKEND and migrate old JSON data with 'npm run db:migrate-json --workspace backend'."
+    );
   }
-  if (requested === "database" && !hasDatabaseUrl) {
-    throw new Error("DATABASE_URL is required when STORAGE_BACKEND=database.");
+  const databaseUrl = environment.DATABASE_URL?.trim();
+  if (!databaseUrl) {
+    throw new Error(
+      "DATABASE_URL is required. Start PostgreSQL (e.g. 'docker compose up -d postgres') and set DATABASE_URL in .env."
+    );
   }
-  if (requested === "json") return "json";
-  return hasDatabaseUrl ? "database" : "json";
-}
-
-export function databasePersistenceEnabled(): boolean {
-  return configuredStorageBackend() === "database";
+  return databaseUrl;
 }
 
 export function databaseSidebarRepository(): PrismaSidebarStateRepository {
