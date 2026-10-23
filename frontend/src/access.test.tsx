@@ -41,6 +41,24 @@ describe("role-aware rendering", () => {
     expect(render("component", "component")).toContain("Inventory");
   });
 
+  it("renders viewer component details as a semantic read-only view", () => {
+    const html = renderToStaticMarkup(<AccessContext.Provider value="Viewer">
+      <SidebarPanels selection={{ kind: "component", id: "component" }} sidebarState={state} onStateChange={noop} onSelect={noop} onOpenDiagram={noop} onClose={noop} />
+    </AccessContext.Provider>);
+
+    expect(html).toContain("Leseansicht");
+    expect(html).toContain("Typ");
+    expect(html).toContain("Application");
+    expect(html).toContain("Beschreibung");
+    expect(html).toContain("Details");
+    expect(html).toContain("Eigenschaften");
+    expect(html).toContain("owner");
+    expect(html).toContain("Team");
+    expect(html).not.toContain("componentTypeId");
+    expect(html).not.toContain("<dt>id</dt>");
+    expect(html).not.toContain("Speichern");
+  });
+
   it("keeps credentials on 403 and clears them only on 401", () => {
     const removeItem = vi.fn(); const dispatchEvent = vi.fn();
     vi.stubGlobal("window", { localStorage: { removeItem }, dispatchEvent });

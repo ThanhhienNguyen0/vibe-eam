@@ -47,16 +47,28 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
   if ("id" in selection) {
     const structural = ["componentType", "connectionType", "connectionRule", "viewpoint"].includes(selection.kind);
     if (!(structural ? canManageMetamodel : canWrite)) {
+      if (selection.kind === "component") {
+        const component = components.find((entry) => entry.id === selection.id);
+        if (!component) return null;
+        return <DetailWrapper title={component.name} onClose={onClose}>
+          <ComponentReadOnly
+            comp={component}
+            componentTypes={componentTypes}
+            connections={connections}
+            connectionTypes={connectionTypes}
+            components={components}
+            diagrams={diagrams}
+            onSelect={onSelect}
+            onOpenDiagram={onOpenDiagram}
+          />
+        </DetailWrapper>;
+      }
       const entity = collections[selection.kind].find((entry) => entry.id === selection.id);
       if (!entity) return null;
       return <DetailWrapper title={"name" in entity ? entity.name : "Verbindungsregel"} onClose={onClose}>
         <p className="muted">Leseansicht</p>
         <dl>{Object.entries(entity).map(([key, value]) => <div key={key}><dt>{key}</dt><dd style={{ overflowWrap: "anywhere" }}>{typeof value === "object" ? JSON.stringify(value) : String(value ?? "")}</dd></div>)}</dl>
         {selection.kind === "diagram" && <button onClick={() => onOpenDiagram(selection.id)}>Diagramm öffnen</button>}
-        {selection.kind === "component" && <>
-          <LinkedConnections compId={selection.id} connections={connections} components={components} connectionTypes={connectionTypes} onSelect={onSelect} />
-          <LinkedDiagrams diagrams={diagrams} isIncluded={(diagram) => diagram.componentIds.includes(selection.id)} onOpenDiagram={onOpenDiagram} />
-        </>}
       </DetailWrapper>;
     }
   }
@@ -857,6 +869,60 @@ function ViewpointEditor({
         ))}
       </div>
       <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft)}>Speichern</button>
+    </div>
+  );
+}
+
+function ComponentReadOnly({
+  comp,
+  componentTypes,
+  connections,
+  connectionTypes,
+  components,
+  diagrams,
+  onSelect,
+  onOpenDiagram
+}: {
+  comp: ComponentInstance;
+  componentTypes: ComponentType[];
+  connections: ConnectionInstance[];
+  connectionTypes: ConnectionType[];
+  components: ComponentInstance[];
+  diagrams: Diagram[];
+  onSelect: (sel: SidebarSelection) => void;
+  onOpenDiagram: (id: string) => void;
+}) {
+  const selectedType = componentTypes.find((type) => type.id === comp.componentTypeId);
+  const propertyKeys = [...new Set([...(selectedType?.customPropertyKeys ?? []), ...Object.keys(comp.properties)])];
+
+  return (
+    <div className="sb-readonly-view">
+      <p className="muted">Leseansicht</p>
+      <dl className="sb-readonly-fields">
+        <div><dt>Typ</dt><dd>{selectedType?.name ?? "Unbekannter Typ"}</dd></div>
+        <div><dt>Beschreibung</dt><dd>{comp.description || "Keine Beschreibung"}</dd></div>
+      </dl>
+
+      <h3>Eigenschaften</h3>
+      {propertyKeys.length > 0 ? (
+        <dl className="sb-readonly-fields">
+          {propertyKeys.map((key) => <div key={key}><dt>{key}</dt><dd>{comp.properties[key] || "—"}</dd></div>)}
+        </dl>
+      ) : <p className="muted">Keine Eigenschaften hinterlegt.</p>}
+
+      <LinkedConnections
+        compId={comp.id}
+        connections={connections}
+        connectionTypes={connectionTypes}
+        components={components}
+        onSelect={onSelect}
+      />
+
+      <LinkedDiagrams
+        diagrams={diagrams}
+        isIncluded={(diagram) => diagram.componentIds.includes(comp.id)}
+        onOpenDiagram={onOpenDiagram}
+      />
     </div>
   );
 }

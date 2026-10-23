@@ -264,3 +264,9 @@ Umgesetzt wurde:
 - Migrationssichere Zuordnung vorhandener Daten zur Default Demo Company ohne Löschen bestehender JSON-Daten.
 - React-Login/-Registrierung, automatische Authorization-Header, 401-Rückführung und Logout.
 - Basic Auth bleibt in Staging/Produktion vorerst als zusätzliche äußere Schutzschicht aktiv.
+
+## REQ-24-Nachkorrektur am 23.10.2026
+
+Nach einem manuellen Rollenreview wurde gemeldet, dass die Viewer-Leseansicht für Komponenten Rohdaten ausgibt. Der Folgeauftrag verlangte, diesen Fehler zu beheben, die Änderung zu begründen und den unabhängigen Kontrollchat für die anschließende PR-Prüfung zu informieren.
+
+Umgesetzt wurde eine fachliche, nicht editierbare Komponentenansicht mit aufgelöstem Typ, Beschreibung, formatierten Eigenschaften und den vorhandenen Verknüpfungen. Ergänzt wurde ein Regressionstest gegen die Ausgabe interner ID-Feldnamen und Schreibaktionen. Da PR #90 bereits für denselben Branch offen ist, ist nach unabhängiger Freigabe dessen Aktualisierung vorgesehen; es wird kein zweiter PR angelegt.

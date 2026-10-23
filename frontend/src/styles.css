@@ -1425,6 +1425,39 @@ tr.attention td {
   overflow-y: auto;
 }
 
+.sb-readonly-view > h3 {
+  margin: 16px 0 8px;
+  font-size: 13px;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.sb-readonly-fields {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.sb-readonly-fields > div {
+  display: grid;
+  gap: 3px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.sb-readonly-fields dt {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.sb-readonly-fields dd {
+  margin: 0;
+  color: #172033;
+  overflow-wrap: anywhere;
+}
+
 .sb-detail {
   padding: 20px;
 }

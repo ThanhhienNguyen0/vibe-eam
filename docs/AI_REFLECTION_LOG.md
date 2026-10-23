@@ -350,3 +350,22 @@ Stakeholder wurden bewusst als normale Diagrammelemente erhalten. Ein Stakeholde
 - Backup und Restore bleiben manuell; die Pipeline bestätigt nur, dass vor Produktion ein Backup existiert.
 - GitHub Environments, Secrets, Required Reviewers und der erste reale Workflowlauf sind externe Konfigurationsschritte.
 - Kein Zero-Downtime-Deployment und kein automatisches Prisma-Rollback.
+
+## REQ-24-Nachkorrektur: fachliche Viewer-Leseansicht
+
+### Beobachtung
+
+- Ein manueller Staging-Test zeigte bei Viewer-Komponenten die internen Felder `id` und `componentTypeId` sowie Eigenschaften als rohes JSON.
+- Die automatisierten Rollentests erkannten den Fehler nicht, weil sie nur Schreibaktionen und den Komponentennamen prüften.
+
+### Ursache und Entscheidung
+
+- Der generische Read-only-Fallback serialisierte jede Entität mit `Object.entries` und Objektwerte mit `JSON.stringify`.
+- Für Komponenten wurde deshalb eine eigene fachliche Leseansicht ergänzt: aufgelöster Typname, Beschreibung, einzeln beschriftete Eigenschaften sowie die bestehenden Verknüpfungen.
+- Die Korrektur ändert keine Backendberechtigung und keine Tenantabfrage. Die bereits autorisierten, company-gefilterten Lesedaten werden anders dargestellt.
+
+### Verifikation und Grenze
+
+- Ein eigener Viewer-Regressionstest fordert die fachlichen Inhalte und schließt interne ID-Feldnamen sowie die Schreibaktion aus.
+- Der gezielte Test bestand mit 10/10; `npm run check` bestand vollständig.
+- Die übrigen Entitätstypen verwenden weiterhin den vorhandenen generischen Read-only-Fallback. Gegenstand dieser Nachkorrektur ist der konkret gemeldete Komponentenfehler.

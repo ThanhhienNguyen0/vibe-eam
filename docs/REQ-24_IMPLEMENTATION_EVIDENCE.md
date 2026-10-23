@@ -127,4 +127,12 @@ scripts/workflow-security.mjs
 
 Primärquelle: [OWASP Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html), am 19.10.2026 gelesen. Unterstützt Least Privilege, Deny by Default, Requestprüfung und Tests; ist keine Abnahme dieses Codes.
 
+## Nachkorrektur der Komponenten-Leseansicht am 23.10.2026
+
+Ein manueller Viewer-Test in Staging zeigte interne Komponentenfelder wie `id` und `componentTypeId` sowie das ungegliederte `properties`-Objekt. Ursache war der generische Read-only-Fallback in `SidebarPanels.tsx`, der Entitäten mit `Object.entries` und Objektwerte per `JSON.stringify` ausgab. Die betroffenen Daten waren für Viewer bereits regulär lesbar und company-gefiltert; belegt ist daher ein Darstellungsfehler, kein zusätzlicher Autorisierungs- oder Tenant-Durchbruch.
+
+Die Komponentenansicht löst den Typnamen nun über die vorhandenen Komponententypen auf, zeigt Beschreibung und Eigenschaften mit fachlichen Bezeichnungen und behält verknüpfte Verbindungen und Diagramme bei. Interne IDs werden in dieser Ansicht nicht mehr ausgegeben. Ein SSR-Regressionstest prüft die fachlichen Werte sowie die Abwesenheit von `componentTypeId`, eines `id`-Feldes und der Schreibaktion.
+
+Lokaler Nachweis dieses noch nicht unabhängig freigegebenen Nachkorrekturstands: gezielter Frontendtest **10/10**; vollständiges `npm run check` mit Lint und Typecheck erfolgreich, **88 Backendtests bestanden und 7 übersprungen**, **10 Frontendtests bestanden**, beide Builds erfolgreich, 112 Compose-, 169 Workflow- und 17 Securityprüfungen bestanden. `git diff --check` war sauber. Remote-CI, Aktualisierung von PR #90 und erneute Staging-Bereitstellung sind zu diesem Zeitpunkt offen.
+
 Die Erstellung dieser Ausarbeitung wurde durch KI unterstützt.
