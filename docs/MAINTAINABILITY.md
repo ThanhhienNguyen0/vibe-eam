@@ -1,5 +1,15 @@
 # Wartbarkeit: belegter Stand und Änderungsregeln
 
+## REQ-24-Ergänzung vom 19.10.2026
+
+Der aktuelle Authpfad ergänzt `auth/routePolicies.ts` vor allen Routen, `auth/policy.ts` als reinen gemeinsamen Grantkern, einen aktuellen DB-Nutzerlookup pro Request und Nutzerverwaltung mit company-weitem Transaktionslock. Die Frontend-Permissiongrenzen konsumieren denselben reinen Kern; dessen explizite Docker-Kopie ist Teil des Buildvertrags. ADR und Nachweise: `ADR-REQ-24_AUTHORIZATION.md`, `REQ-24_IMPLEMENTATION_EVIDENCE.md`.
+
+Beobachtbare Wartbarkeitseffekte sind ein zentraler Grantänderungsort, ein geprüfter vollständiger Express-Routengraph statt nicht inventarisierter Einzelchecks, ein gemeinsamer Passwort-Hasher und zusätzliche Vitest-Frontend-/echte PostgreSQL-Tests. Eine fehlende Policy wird sowohl im Inventartest als auch zur Laufzeit erkannt. Der CI-DB-Schritt wird gegen Entfernung/Optionalisierung geprüft. Bewertung: Diese Änderungen begrenzen konkrete Rollen-/Routendrift; sie beweisen keine allgemeine Wartbarkeit.
+
+Verbleibende Kosten/Grenzen: zusätzlicher DB-Lookup je Request, explizite Inventarpflege, PostgreSQL-Binaries für DB-Integration und Quellkopplung des reinen Policykerns im Frontendbuild. Die großen UI-/Storedateien, separaten Fachmodelle und Full-State-Persistenz werden nicht pauschal umgebaut. Die frühere DB-Testlücke ist für Auth/RBAC/Migration/Seed gezielt geschlossen, nicht für sämtliche übrigen Persistenzoperationen. SSR-Komponententests ersetzen keine Browser-E2E-Prüfung. Professorengründe bleiben eine offene Evidenzlücke; kein eigener Befund wird als dessen Aussage ausgegeben.
+
+Die nachfolgenden REQ-30-Befunde sind datierte Vorgängerstände, soweit diese Ergänzung sie aktualisiert.
+
 Stand: 18.10.2026, REQ-30. Interner technischer Prüfstand; keine abschließende wissenschaftliche Bewertung. Der Professor hat nach dem Umsetzungsauftrag die Wartbarkeit grundsätzlich infrage gestellt. Konkrete Gründe sind noch nicht vollständig übermittelt und bleiben eine **offene Evidenzlücke**. Die folgenden Risiken stammen aus Repository-Befunden; sie werden dem Professor nicht zugeschrieben.
 
 ## Architektur und zwei Datenpfade

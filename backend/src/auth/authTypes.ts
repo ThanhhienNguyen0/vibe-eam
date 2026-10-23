@@ -1,3 +1,5 @@
+import type { Role } from "./policy.js";
+
 export interface StoredUser {
   id: string;
   email: string;
@@ -5,7 +7,7 @@ export interface StoredUser {
   name: string | null;
   companyId: string;
   companyName: string;
-  role: string;
+  role: Role;
 }
 
 export interface PublicUser {
@@ -14,7 +16,7 @@ export interface PublicUser {
   name: string | null;
   companyId: string;
   companyName: string;
-  role: string;
+  role: Role;
 }
 
 export interface AuthRepository {
@@ -31,4 +33,18 @@ export interface AuthRepository {
 export interface AuthResult {
   token: string;
   user: PublicUser;
+}
+
+export interface LocalUserInput {
+  email: string;
+  passwordHash: string;
+  name: string | null;
+  role: Role;
+}
+
+/** Implementations lock the company, then recheck the actor and last-admin invariant. */
+export interface UserRepository {
+  listCompanyUsers(companyId: string): Promise<PublicUser[]>;
+  createLocalUser(actorId: string, companyId: string, input: LocalUserInput): Promise<PublicUser>;
+  changeRole(actorId: string, companyId: string, userId: string, role: Role): Promise<PublicUser>;
 }

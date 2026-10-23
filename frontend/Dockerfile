@@ -8,6 +8,8 @@ COPY frontend/package.json frontend/package.json
 RUN npm ci
 
 COPY frontend frontend
+# Frontend consumes the pure authorization vocabulary from its canonical module.
+COPY backend/src/auth/policy.ts backend/src/auth/policy.ts
 ARG VITE_API_BASE_URL=/api/sidebar
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN npm run build --workspace frontend

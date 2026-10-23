@@ -17,6 +17,7 @@ import ReactFlow, {
 } from "reactflow";
 import { GitBranch, MousePointerClick, PanelLeftClose, PanelLeftOpen, Search, SlidersHorizontal, X } from "lucide-react";
 import { sidebarApi } from "./Sidebar/sidebarApi";
+import { useAccess } from "./access";
 import { getAllowedConnectionTypes, validateDiagram, type DiagramValidationResult } from "./Sidebar/metamodelRules";
 import { COMPONENT_DRAG_MIME, COMPONENT_TYPE_DRAG_MIME } from "./Sidebar/sidebarTypes";
 import type {
@@ -450,7 +451,8 @@ function buildNodes(
   hoveredNodeId: string | null,
   activeNodeId: string | null,
   onInteractionStart: ShapedNodeData["onInteractionStart"],
-  onTransformEnd: ShapedNodeData["onTransformEnd"]
+  onTransformEnd: ShapedNodeData["onTransformEnd"],
+  canEdit: boolean
 ): Node[] {
   return diagram.componentIds.flatMap((id) => {
     const comp = components.find((c) => c.id === id);
@@ -474,7 +476,7 @@ function buildNodes(
         color: type?.color ?? "#cbd5e1",
         shape,
         isSource: connectingFrom === id,
-        showInteraction: id === hoveredNodeId || id === activeNodeId,
+        showInteraction: canEdit && (id === hoveredNodeId || id === activeNodeId),
         onInteractionStart,
         onTransformEnd
       } satisfies ShapedNodeData,
@@ -694,6 +696,7 @@ function DiagramEditorInner({
   onSelectConnection,
   onClose
 }: Props) {
+  const { canWrite } = useAccess();
   // Knotengröße nach Skalieren persistieren (inkl. Position, falls oben/links gezogen wurde)
   const diagramRef = useRef(diagram);
   diagramRef.current = diagram;
@@ -711,17 +714,18 @@ function DiagramEditorInner({
 
   const onNodeTransformEnd = useCallback(
     async (nodeId: string, pos: { x: number; y: number; width: number; height: number }) => {
+      if (!canWrite) return;
       setActiveNodeId(null);
       const current = diagramRef.current;
       const updatedPositions = { ...current.positions, [nodeId]: pos };
       const updated = await sidebarApi.updateDiagram(current.id, { positions: updatedPositions });
       onDiagramChange(updated);
     },
-    [onDiagramChange]
+    [canWrite, onDiagramChange]
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(
-    buildNodes(diagram, components, componentTypes, null, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd)
+    buildNodes(diagram, components, componentTypes, null, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, canWrite)
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState(
     buildEdges(diagram, connections, connectionTypes)
@@ -749,9 +753,9 @@ function DiagramEditorInner({
   );
 
   useEffect(() => {
-    setNodes(buildNodes(diagram, components, componentTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd));
+    setNodes(buildNodes(diagram, components, componentTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, canWrite));
     setEdges(buildEdges(diagram, connections, connectionTypes));
-  }, [diagram, components, componentTypes, connections, connectionTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, setNodes, setEdges]);
+  }, [canWrite, diagram, components, componentTypes, connections, connectionTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, setNodes, setEdges]);
 
   useEffect(() => () => window.clearTimeout(hoverLeaveTimer.current), []);
 
@@ -1067,7 +1071,7 @@ function DiagramEditorInner({
 
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
       <div className="diagram-toolbar">
-        <button
+        {canWrite && <button
           className="diagram-palette-toggle"
           onClick={() => setPaletteOpen((v) => !v)}
           title={paletteOpen ? "Palette ausblenden" : "Palette einblenden"}
@@ -1075,10 +1079,11 @@ function DiagramEditorInner({
         >
           {paletteOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
           Palette
-        </button>
+        </button>}
         <strong className="diagram-title">{diagram.name}</strong>
         <select
           className="diagram-viewpoint-select"
+          disabled={!canWrite}
           value={diagram.viewpointId ?? ""}
           onChange={async (e) => {
             try {
@@ -1099,7 +1104,7 @@ function DiagramEditorInner({
           <SlidersHorizontal size={16} /> Validate diagram
         </button>
         <span className="muted diagram-hint">
-          Hover: Mitte = verschieben · Kanten = eine Richtung · Ecken = beide Richtungen
+          {canWrite ? "Hover: Mitte = verschieben · Kanten = eine Richtung · Ecken = beide Richtungen" : "Leseansicht"}
         </span>
         <button className="diagram-close-btn" onClick={onClose} title="Tab schließen"><X size={16} /></button>
       </div>
@@ -1139,7 +1144,7 @@ function DiagramEditorInner({
 
       {/* ── Palette + Canvas ────────────────────────────────────────────────── */}
       <div className="diagram-body">
-        {paletteOpen && (
+        {canWrite && paletteOpen && (
           <Palette
             components={availableComponents}
             componentTypes={visibleComponentTypes}
@@ -1149,21 +1154,24 @@ function DiagramEditorInner({
 
         <div
           className={`diagram-canvas${isDragOver ? " diagram-canvas--drop" : ""}`}
-          onDragOver={onCanvasDragOver}
+          onDragOver={canWrite ? onCanvasDragOver : undefined}
           onDragLeave={onCanvasDragLeave}
-          onDrop={onCanvasDrop}
+          onDrop={canWrite ? onCanvasDrop : undefined}
         >
           <ReactFlow
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
             nodesDraggable={false}
+            nodesConnectable={canWrite}
+            edgesFocusable={canWrite}
+            deleteKeyCode={canWrite ? "Backspace" : null}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
+            onConnect={canWrite ? onConnect : undefined}
             onNodeClick={onNodeClick}
             onEdgeClick={onEdgeClick}
-            onNodeContextMenu={onNodeContextMenu}
+            onNodeContextMenu={canWrite ? onNodeContextMenu : undefined}
             onNodeMouseEnter={(_e, node) => {
               window.clearTimeout(hoverLeaveTimer.current);
               setHoveredNodeId(node.id);
@@ -1177,7 +1185,7 @@ function DiagramEditorInner({
             fitView
           >
             <MiniMap nodeStrokeWidth={3} pannable zoomable />
-            <Controls />
+            <Controls showInteractive={canWrite} />
             <Background gap={24} />
           </ReactFlow>
 

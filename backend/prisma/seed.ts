@@ -1,19 +1,17 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { Prisma, PrismaClient } from "@prisma/client";
-import { validateMetamodelDefinition } from "../src/Sidebar/metamodelConfig.js";
-import { readLegacySidebarState } from "../src/Sidebar/sidebarStore.js";
-import type { SidebarState } from "../src/Sidebar/sidebarTypes.js";
+import { buildInitialSidebarStateForCompany } from "../src/Sidebar/sidebarStore.js";
 import { PrismaSidebarStateRepository } from "../src/persistence/databaseSidebarRepository.js";
 import { DEFAULT_COMPANY_ID, DEFAULT_COMPANY_NAME } from "../src/tenant.js";
 import { seedState as architectureSeedState } from "../src/seed.js";
+import { demoCredentials, seedDemoUsers } from "../src/auth/demoSeed.js";
 
 const prisma = new PrismaClient();
 const repository = new PrismaSidebarStateRepository(prisma);
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function main(): Promise<void> {
+  // Validate the explicit dev/test opt-in before any database write.
+  const credentials = await demoCredentials(process.env);
+  await seedDemoUsers(prisma, credentials);
   await prisma.company.upsert({
     where: { id: DEFAULT_COMPANY_ID },
     create: { id: DEFAULT_COMPANY_ID, name: DEFAULT_COMPANY_NAME },
@@ -34,16 +32,10 @@ async function main(): Promise<void> {
     return;
   }
 
-  const raw = JSON.parse(await fs.readFile(path.resolve(__dirname, "../src/data/default-metamodel.json"), "utf-8")) as unknown;
-  const validation = validateMetamodelDefinition(raw);
-  if (!validation.success || !validation.definition) {
-    throw new Error(validation.errors[0]?.message ?? "Default metamodel is invalid.");
-  }
-
   const withExamples = process.env.SEED_EXAMPLES !== "false";
-  const state: SidebarState = withExamples
-    ? { ...(await readLegacySidebarState()), ...validation.definition }
-    : { ...validation.definition, components: [], connections: [], diagrams: [] };
+  // Use the same self-consistent, company-scoped starter as first application access.
+  // Mixing legacy instances (including BPMN) with an EAM-only JSON metamodel orphaned references.
+  const state = buildInitialSidebarStateForCompany(DEFAULT_COMPANY_ID, withExamples);
 
   await repository.write(state, DEFAULT_COMPANY_ID);
   console.log(`Seeded metamodel '${state.metamodel.name}'${withExamples ? " with example diagrams" : ""}.`);

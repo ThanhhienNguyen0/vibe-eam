@@ -1,5 +1,29 @@
 # Prompt Log
 
+## REQ-24 – Authentifizierung und Rollenmodell (19.10.2026)
+
+Auftrag aus Umsetzungs-Chat `01a154a2-45c9-78b2-9b0d-3e1fb5d6a623`, delegiert durch Kontrollchat `01a14fce-41f9-7302-8f9b-873a6e0a2c51`: „Setze REQ-24 ‚Authentifizierung und Rollenmodell (Admin, Architekt, Viewer)‘ ... vollständig, wartbar und nachvollziehbar um.“ Issue [#56](https://github.com/ThanhhienNguyen0/vibe-eam/issues/56) wurde am 19.10.2026 gelesen. Der Issuetext nennt fünf Akzeptanzkriterien und OIDC-Erweiterbarkeit als Hinweis; der Auftrag behandelt diesen Hinweis ausdrücklich als sechsten Prüfpunkt.
+
+Verbindliche Basis: `origin/main` exakt `2f21cfed4e1e56826e2b13590aea9d5649e59050`. Sauberer Ausgangsarbeitsbaum bestätigt. Der getrennte Dependabot-Checkout `89a8a8e2` bleibt unberührt; REQ-24 entsteht im verwalteten separaten Arbeitsbaum auf `codex/eam/req-24-rbac`. Lokaler veralteter `main` wird nicht als Basis verwendet. Kein Push, PR, Merge oder Issue-Close. Bestehende REQ-30-Gates bleiben verpflichtend.
+
+Fachliche Konkretisierung des Auftrags (verbindlich): „Admin: alle Lese- und Schreibrechte innerhalb der eigenen Company; zusätzlich Nutzer-/Rollenzuordnung und Metamodelländerungen.“ „Architekt: alle Lesezugriffe sowie Schreibzugriffe auf Architekturinstanzen, Beziehungen und Diagramme; keine Nutzer-/Rollenverwaltung und keine strukturellen Metamodelländerungen.“ „Viewer: ausschließlich Lesezugriffe.“ Frontendausblendung ist nur Bedienbarkeit; API ist Autorität. Matrix und Ausnahmen für Nutzerverwaltung stehen in `AUTH.md`.
+
+Weitere Promptvorgaben: zentraler typisierter Deny-by-default-Layer; frische serverseitige Rollen statt acht Stunden Vertrauen in Claims; Enum und sichere `member`-Migration; Erstregistrierung als Admin; Nutzerliste/Anlage/Rollenwechsel company-lokal; globale E-Mail-Eindeutigkeit; keine Passwörter in Antworten/Logs; kein Cross-Company-Zugriff; Sperre für den letzten Admin auch unter Konkurrenz; vollständiges Routeninventar beider Datenpfade; sichere, explizite Dev/Test-Seeds je Rolle; kein OIDC jetzt. Test- und Dokumentationspflichten werden in der kriteriumsweisen Evidenzmatrix aufgelöst.
+
+Forschungsrahmen aus dem Auftrag: „Das Projekt untersucht, ob und inwiefern ein EAM-Tool mittels KI ‚gevibecodet‘ werden kann.“ Prompt, Entscheidungen, Alternativen, Fehlversuche, KI-Beitrag, Tests und Grenzen sind ebenso zu dokumentieren wie Code. Die konkreten Gründe der Professorenkritik bleiben unbekannt; keine Zuschreibung aus eigenen Codebefunden.
+
+Folgeanweisungen vom 19.10.2026:
+
+1. Unabhängiger Kontrollchat: `01a154a2-d3b0-70c3-9a30-a130659a071d` (Host `local`). Fertiger lokaler Commit und reproduzierbare Ergebnisse werden erst nach vollständiger Selbstprüfung gemeldet. Kontrolle implementiert nicht; Befunde gehen in eine Korrekturschleife. Selbstprüfung ist keine Freigabe.
+2. Nutzerkorrektur zur Modellwahl: „Verwende ab diesem Turn für die weitere REQ-24-Umsetzung gpt-5.6-sol mit Reasoning High.“ Diese Anweisung wird als Prozessvorgabe dokumentiert; eine nachträgliche Behauptung über nicht verfügbare Laufzeittelemetrie wird daraus nicht abgeleitet. Keine Scopeänderung und keine Verwerfung vorhandener Arbeit.
+3. Kontrollbefund zum Commit `16035678a1f0e813932e10b8f92d60a3e32230f9`: keine P0–P2-Befunde in Code, Migration, Seed, Rollenmatrix oder lokalen Tests. P3: Statusdokumente bezeichneten die unabhängige Abnahme weiter als offen und es fehlte der Auditdatensatz mit Zeit, Instanz/Modell, Trennung, Eingaben, Resultaten, Entscheidungen und Grenzen. Korrekturauftrag: `REQ-24_REVIEW.md` ergänzen, Status eng auf „lokal unabhängig bestätigt“ ändern, Secret-History-Grenze 43 lokal verfügbare Commits gegenüber 25 in der Kontrollkopie exakt dokumentieren und einen neuen reinen Dokumentationscommit zur Nachprüfung senden. Kein Push/PR/Merge/Issue-Close.
+4. Dokumentationsnachprüfung des Commits `4193adb26bd570ab178aa2659586166a011663a0`: Parent und ausschließlich acht angekündigte Dokumentationsdateien bestätigt, Diffprüfung sauber, Auditdatensatz vollständig und Statusgrenzen konsistent. P3 geschlossen; im lokal geprüften Umfang keine offenen P0–P3. Empfehlung der Kontrollinstanz: Push und anschließender Draft-PR erst nach Titus' separater Freigabe; kein Merge oder Issue-Close, Remote-Nachweise danach separat.
+5. Folgeauftrag vom 20.10.2026: „Der PR hat bei den Tests Fehler, die korrigiert werden müssen. Mache alles fertig in den PR.“ PR #88 und sämtliche Check-Runs wurden erneut gelesen. Die normalen CI-/CodeQL-Workflow-Jobs waren erfolgreich; der separate Advanced-Security-Check meldete zwei hohe CodeQL-Befunde. Beauftragt wurden die Korrektur beider Befunde, vollständige lokale Regression, Abgleich mit aktuellem `main` und anschließende Veröffentlichung im bestehenden PR. Der erste lokale Korrekturcommit wurde vor dem Push einer getrennten Folgekontrolle vorgelegt; deren Proxy-, Parser-, Registrierungs- und Dokumentationsbefunde wurden in einer weiteren Korrekturschleife bearbeitet. Kein Merge, Deployment oder Issue-Close ist davon umfasst.
+
+Operative Entscheidungen: DB-Company-Lock statt ungesperrter Adminzählung; Subjekt-only-JWT statt Rollenautorität; deterministischer Bootstrapadmin statt pauschaler Hochstufung; Wiederverwendung des konsistenten Company-Starters nach realem Seedfehler; SSR-Komponententests als proportionale Erweiterung der vorhandenen Vitestarchitektur. Fehlversuche und Grenzen: `AI_REFLECTION_LOG.md`, endgültige Resultate: `REQ-24_IMPLEMENTATION_EVIDENCE.md`.
+
+Die KI erstellte Implementierung, Tests und Dokumentation. Eine getrennte Kontrollinstanz bestätigte die ursprüngliche lokale technische Umsetzung ohne P0–P2-Befund und löste die dokumentierte P3-Korrekturschleife aus. Draft-PR #88 und der erste Remote-Lauf folgten nach Titus' Freigabe; die neue CodeQL-Korrektur wird als eigene Fortschreibung geprüft. Bootstrapadmin-Prüfung vor Produktion, erneuter Remote-Check, Containerausführung, Deployment und menschliche Freigaben bleiben getrennte Schritte. Es wurde kein Forschungsrelease oder Wartbarkeitsnachweis außerhalb dieser technischen Evidenz erzeugt.
+
 ## REQ-30 – CI, Qualität und Security (18.10.2026)
 
 Auftrag: Issue #62 ab sauberem `main` `3f5e9e40` vollständig und nachvollziehbar umsetzen; Branch `codex/eam/req-30-ci-security`, kein Direktcommit auf main, kein Merge und kein Issueschließen. Gefordert sind ESLint, reproduzierbarer Gesamtcheck, PR-Qualitäts-/Infrastruktur-Gates, Dependency-Probelauf und begründete Korrekturen, Dependabot, CodeQL, Secret-Scan, externe Admin-Abnahme, Beitrags-/KI-Regeln und belegte Wartbarkeitsdokumentation.
@@ -240,3 +264,9 @@ Umgesetzt wurde:
 - Migrationssichere Zuordnung vorhandener Daten zur Default Demo Company ohne Löschen bestehender JSON-Daten.
 - React-Login/-Registrierung, automatische Authorization-Header, 401-Rückführung und Logout.
 - Basic Auth bleibt in Staging/Produktion vorerst als zusätzliche äußere Schutzschicht aktiv.
+
+## REQ-24-Nachkorrektur am 23.10.2026
+
+Nach einem manuellen Rollenreview wurde gemeldet, dass die Viewer-Leseansicht für Komponenten Rohdaten ausgibt. Der Folgeauftrag verlangte, diesen Fehler zu beheben, die Änderung zu begründen und den unabhängigen Kontrollchat für die anschließende PR-Prüfung zu informieren.
+
+Umgesetzt wurde eine fachliche, nicht editierbare Komponentenansicht mit aufgelöstem Typ, Beschreibung, formatierten Eigenschaften und den vorhandenen Verknüpfungen. Ergänzt wurde ein Regressionstest gegen die Ausgabe interner ID-Feldnamen und Schreibaktionen. Da PR #90 bereits für denselben Branch offen ist, ist nach unabhängiger Freigabe dessen Aktualisierung vorgesehen; es wird kein zweiter PR angelegt.
