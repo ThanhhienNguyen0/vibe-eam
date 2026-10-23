@@ -52,8 +52,8 @@ describe("role-aware rendering", () => {
     expect(html).toContain("Beschreibung");
     expect(html).toContain("Details");
     expect(html).toContain("Eigenschaften");
-    expect(html).toContain("owner");
-    expect(html).toContain("Team");
+    expect(html).toContain("<dt>owner</dt><dd>Team</dd>");
+    expect(html).not.toContain("{&quot;owner&quot;:&quot;Team&quot;}");
     expect(html).not.toContain("componentTypeId");
     expect(html).not.toContain("<dt>id</dt>");
     expect(html).not.toContain("Speichern");
