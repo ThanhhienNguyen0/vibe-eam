@@ -7,7 +7,7 @@ import MetamodelView from "./MetamodelView";
 import { sidebarApi } from "./Sidebar/sidebarApi";
 import type { SidebarState } from "./Sidebar/sidebarTypes";
 import { authApi, clearAuthToken, getAuthToken, setAuthToken, type AuthUser } from "./authApi";
-import { AccessContext, ROLE_LABELS, useAccess } from "./access";
+import { AccessContext, ROLE_DESCRIPTIONS, ROLE_LABELS, useAccess } from "./access";
 import UserManagement from "./UserManagement";
 
 export default function App() {
@@ -130,7 +130,15 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
           </nav>
         )}
         <div className="account-menu">
-          <span><strong>{user.name ?? user.email}</strong><small>{user.companyName} · {ROLE_LABELS[user.role]}</small></span>
+          <span className="account-identity"><strong>{user.name ?? user.email}</strong><small>{user.companyName}</small></span>
+          <details className="account-role-info">
+            <summary>{ROLE_LABELS[user.role]}</summary>
+            <div>
+              <strong>Deine Rolle: {ROLE_LABELS[user.role]}</strong>
+              <p>{ROLE_DESCRIPTIONS[user.role]}</p>
+              <p>{user.role === "Admin" ? "Rollen vergibst du unter Nutzerverwaltung." : "Rollen werden von einem Admin unter Nutzerverwaltung vergeben."}</p>
+            </div>
+          </details>
           <button type="button" onClick={onLogout} title="Abmelden"><LogOut size={16} /> Abmelden</button>
         </div>
       </header>

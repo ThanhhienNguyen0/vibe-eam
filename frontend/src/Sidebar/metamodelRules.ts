@@ -108,6 +108,26 @@ function ruleForViewpoint(viewpoint: Viewpoint, state: SidebarState): ViewpointR
   };
 }
 
+export function getViewpointRule(state: SidebarState, viewpointId?: string): ViewpointRule | undefined {
+  if (!viewpointId) return undefined;
+  const viewpoint = state.viewpoints.find((item) => item.id === viewpointId);
+  return viewpoint ? ruleForViewpoint(viewpoint, state) : undefined;
+}
+
+export function getApplicableViewpoints(diagram: Diagram, state: SidebarState): Viewpoint[] {
+  const diagramTypeIds = new Set(diagram.componentIds
+    .map((id) => state.components.find((item) => item.id === id)?.componentTypeId)
+    .filter((id): id is string => Boolean(id)));
+  if (diagramTypeIds.size === 0) return state.viewpoints;
+
+  return state.viewpoints.filter((viewpoint) => {
+    const rule = ruleForViewpoint(viewpoint, state);
+    const visibleIds = rule.visibleComponentTypeIds ?? [];
+    const configuredIds = visibleIds.length > 0 ? visibleIds : rule.allowedComponentTypeIds;
+    return configuredIds.length === 0 || configuredIds.some((id) => diagramTypeIds.has(id));
+  });
+}
+
 function matchingConnectionRule(connection: ConnectionInstance, state: SidebarState): ConnectionRule | undefined {
   const source = state.components.find((component) => component.id === connection.sourceComponentId);
   const target = state.components.find((component) => component.id === connection.targetComponentId);
@@ -130,6 +150,48 @@ function connectionRuleAllowedByViewpoint(rule: ConnectionRule, state: SidebarSt
   if (viewpointRule.allowedComponentTypeIds.length > 0 && !viewpointRule.allowedComponentTypeIds.includes(rule.sourceComponentTypeId)) return false;
   if (viewpointRule.allowedComponentTypeIds.length > 0 && !viewpointRule.allowedComponentTypeIds.includes(rule.targetComponentTypeId)) return false;
   return true;
+}
+
+/**
+ * Builds a read-only projection of a diagram for a stakeholder viewpoint.
+ * The persisted diagram remains unchanged; elements outside the selected view
+ * are hidden together with connections that are not part of that viewpoint.
+ */
+export function projectDiagramToViewpoint(
+  diagram: Diagram,
+  state: SidebarState,
+  viewpointId?: string
+): Diagram {
+  if (!viewpointId) return { ...diagram, viewpointId: undefined };
+
+  const viewpointRule = getViewpointRule(state, viewpointId);
+  if (!viewpointRule) return { ...diagram, viewpointId };
+
+  const visibleComponentTypeIds = viewpointRule.visibleComponentTypeIds ?? [];
+  const configuredVisibleTypeIds = visibleComponentTypeIds.length > 0
+    ? visibleComponentTypeIds
+    : viewpointRule.allowedComponentTypeIds;
+  const visibleTypeIds = configuredVisibleTypeIds.length > 0 ? new Set(configuredVisibleTypeIds) : null;
+  const componentIds = diagram.componentIds.filter((id) => {
+    const component = state.components.find((item) => item.id === id);
+    return component && (!visibleTypeIds || visibleTypeIds.has(component.componentTypeId));
+  });
+  const visibleComponentIds = new Set(componentIds);
+  const connectionIds = diagram.connectionIds.filter((id) => {
+    const connection = state.connections.find((item) => item.id === id);
+    if (!connection) return false;
+    if (!visibleComponentIds.has(connection.sourceComponentId) || !visibleComponentIds.has(connection.targetComponentId)) return false;
+    const rule = matchingConnectionRule(connection, state);
+    return Boolean(rule?.allowed && connectionRuleAllowedByViewpoint(rule, state, viewpointId));
+  });
+
+  return {
+    ...diagram,
+    viewpointId,
+    componentIds,
+    connectionIds,
+    positions: Object.fromEntries(Object.entries(diagram.positions).filter(([id]) => visibleComponentIds.has(id)))
+  };
 }
 
 export function getAllowedConnectionRules(

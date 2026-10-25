@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { API_ROOT, apiRequest, type AuthUser } from "./authApi";
-import { ROLES, ROLE_LABELS, isRole, useAccess, type Role } from "./access";
+import { ROLES, ROLE_DESCRIPTIONS, ROLE_LABELS, isRole, useAccess, type Role } from "./access";
 
 export default function UserManagement({ onRoleChanged }: { onRoleChanged: () => void }) {
   const { canManageUsers } = useAccess();
@@ -38,6 +38,13 @@ export default function UserManagement({ onRoleChanged }: { onRoleChanged: () =>
 
   return <section className="home-view" aria-label="Nutzerverwaltung">
     <h2>Nutzerverwaltung</h2>
+    <p className="muted">Nur Admins können Nutzer anlegen und Rollen innerhalb ihrer Company ändern.</p>
+    <div className="role-guide" aria-label="Rollen und Rechte">
+      {ROLES.map((value) => <div key={value} className="role-guide-card">
+        <strong>{ROLE_LABELS[value]}</strong>
+        <span>{ROLE_DESCRIPTIONS[value]}</span>
+      </div>)}
+    </div>
     {error && <div role="alert" className="error-banner">{error}</div>}
     <table><thead><tr><th>Name</th><th>E-Mail</th><th>Rolle</th></tr></thead><tbody>
       {users.map((user) => <tr key={user.id}><td>{user.name ?? "—"}</td><td>{user.email}</td><td>

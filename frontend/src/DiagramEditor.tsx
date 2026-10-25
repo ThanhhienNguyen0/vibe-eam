@@ -18,7 +18,14 @@ import ReactFlow, {
 import { GitBranch, MousePointerClick, PanelLeftClose, PanelLeftOpen, Search, SlidersHorizontal, X } from "lucide-react";
 import { sidebarApi } from "./Sidebar/sidebarApi";
 import { useAccess } from "./access";
-import { getAllowedConnectionTypes, validateDiagram, type DiagramValidationResult } from "./Sidebar/metamodelRules";
+import {
+  getAllowedConnectionTypes,
+  getApplicableViewpoints,
+  getViewpointRule,
+  projectDiagramToViewpoint,
+  validateDiagram,
+  type DiagramValidationResult
+} from "./Sidebar/metamodelRules";
 import { COMPONENT_DRAG_MIME, COMPONENT_TYPE_DRAG_MIME } from "./Sidebar/sidebarTypes";
 import type {
   ComponentInstance,
@@ -740,22 +747,47 @@ function DiagramEditorInner({
   const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState("");
   const [validationResult, setValidationResult] = useState<DiagramValidationResult | null>(null);
+  const [viewpointFilterId, setViewpointFilterId] = useState(diagram.viewpointId ?? "");
   const menuRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
-  const activeViewpoint = diagram.viewpointId ? viewpoints.find((viewpoint) => viewpoint.id === diagram.viewpointId) : undefined;
+  const activeViewpoint = viewpointFilterId ? viewpoints.find((viewpoint) => viewpoint.id === viewpointFilterId) : undefined;
   const sidebarState = useMemo(
     () => ({ metamodel, componentTypes, connectionTypes, connectionRules, viewpointRules, validationRules, viewpoints, components, connections, diagrams: [diagram] }),
     [metamodel, componentTypes, connectionTypes, connectionRules, viewpointRules, validationRules, viewpoints, components, connections, diagram]
   );
+  const displayedDiagram = useMemo(
+    () => projectDiagramToViewpoint(diagram, sidebarState, viewpointFilterId || undefined),
+    [diagram, sidebarState, viewpointFilterId]
+  );
+  const applicableViewpoints = useMemo(
+    () => getApplicableViewpoints(diagram, sidebarState),
+    [diagram, sidebarState]
+  );
+  const activeViewpointRule = useMemo(
+    () => getViewpointRule(sidebarState, viewpointFilterId || undefined),
+    [sidebarState, viewpointFilterId]
+  );
+  const activeVisibleTypeIds = useMemo(() => {
+    if (!activeViewpointRule) return null;
+    const visibleIds = activeViewpointRule.visibleComponentTypeIds ?? [];
+    const ids = visibleIds.length > 0 ? visibleIds : activeViewpointRule.allowedComponentTypeIds;
+    return ids.length > 0 ? new Set(ids) : null;
+  }, [activeViewpointRule]);
   const visibleComponentTypes = useMemo(
-    () => activeViewpoint ? componentTypes.filter((type) => activeViewpoint.allowedComponentTypeIds.includes(type.id)) : componentTypes,
-    [activeViewpoint, componentTypes]
+    () => activeVisibleTypeIds ? componentTypes.filter((type) => activeVisibleTypeIds.has(type.id)) : componentTypes,
+    [activeVisibleTypeIds, componentTypes]
   );
 
   useEffect(() => {
-    setNodes(buildNodes(diagram, components, componentTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, canWrite));
-    setEdges(buildEdges(diagram, connections, connectionTypes));
-  }, [canWrite, diagram, components, componentTypes, connections, connectionTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, setNodes, setEdges]);
+    setViewpointFilterId(diagram.viewpointId ?? "");
+    setValidationResult(null);
+    setError("");
+  }, [diagram.id, diagram.viewpointId]);
+
+  useEffect(() => {
+    setNodes(buildNodes(displayedDiagram, components, componentTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, canWrite));
+    setEdges(buildEdges(displayedDiagram, connections, connectionTypes));
+  }, [canWrite, displayedDiagram, components, componentTypes, connections, connectionTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, setNodes, setEdges]);
 
   useEffect(() => () => window.clearTimeout(hoverLeaveTimer.current), []);
 
@@ -912,7 +944,7 @@ function DiagramEditorInner({
   async function createAndPlaceComponent(name: string, properties: Record<string, string>) {
     if (!pendingCreate) return;
     const { typeId, position } = pendingCreate;
-    if (activeViewpoint && !activeViewpoint.allowedComponentTypeIds.includes(typeId)) {
+    if (activeViewpoint && activeVisibleTypeIds && !activeVisibleTypeIds.has(typeId)) {
       const type = componentTypes.find((item) => item.id === typeId);
       setError(`${type?.name ?? "This component type"} is not allowed in the selected ${activeViewpoint.name}.`);
       return;
@@ -943,7 +975,7 @@ function DiagramEditorInner({
     if (diagram.componentIds.includes(compId)) return;
     const component = components.find((item) => item.id === compId);
     const componentType = componentTypes.find((type) => type.id === component?.componentTypeId);
-    if (activeViewpoint && componentType && !activeViewpoint.allowedComponentTypeIds.includes(componentType.id)) {
+    if (activeViewpoint && activeVisibleTypeIds && componentType && !activeVisibleTypeIds.has(componentType.id)) {
       setError(`${componentType.name} is not allowed in the selected ${activeViewpoint.name}.`);
       return;
     }
@@ -1036,8 +1068,12 @@ function DiagramEditorInner({
   }
 
   async function runDiagramValidation() {
-    const local = validateDiagram(diagram, sidebarState);
+    const local = validateDiagram(displayedDiagram, sidebarState);
     setValidationResult(local);
+    if (viewpointFilterId !== (diagram.viewpointId ?? "")) {
+      setError("");
+      return;
+    }
     try {
       const server = await sidebarApi.validateDiagram(diagram.id);
       setValidationResult(server);
@@ -1062,8 +1098,8 @@ function DiagramEditorInner({
   ].filter((group) => group.items.length > 0) : [];
   const validationStatus = validationResult
     ? validationResult.valid
-      ? validationResult.warnings.length > 0 ? "Diagramm gültig mit Warnungen" : "Diagramm gültig"
-      : "Diagramm ungültig"
+      ? validationResult.warnings.length > 0 ? "Ansicht gültig mit Warnungen" : "Ansicht gültig"
+      : "Ansicht ungültig"
     : "";
 
   return (
@@ -1081,30 +1117,31 @@ function DiagramEditorInner({
           Palette
         </button>}
         <strong className="diagram-title">{diagram.name}</strong>
-        <select
-          className="diagram-viewpoint-select"
-          disabled={!canWrite}
-          value={diagram.viewpointId ?? ""}
-          onChange={async (e) => {
-            try {
-              const updated = await sidebarApi.updateDiagram(diagram.id, { viewpointId: e.target.value || undefined });
-              onDiagramChange(updated);
+        <label className="diagram-viewpoint-filter">
+          <span>Ansicht</span>
+          <select
+            className="diagram-viewpoint-select"
+            aria-label="Diagrammansicht filtern"
+            value={viewpointFilterId}
+            onChange={(e) => {
+              setViewpointFilterId(e.target.value);
               setValidationResult(null);
               setError("");
-            } catch (err) {
-              setError(err instanceof Error ? err.message : "Viewpoint konnte nicht gesetzt werden.");
-            }
-          }}
-          title="Viewpoint fuer Diagramm"
-        >
-          <option value="">Kein Viewpoint</option>
-          {viewpoints.map((viewpoint) => <option key={viewpoint.id} value={viewpoint.id}>{viewpoint.name}</option>)}
-        </select>
+            }}
+            title="Filtert nur die sichtbaren Inhalte und ändert das Diagramm nicht"
+          >
+            <option value="">Alle Inhalte</option>
+            {applicableViewpoints.map((viewpoint) => <option key={viewpoint.id} value={viewpoint.id}>{viewpoint.name}</option>)}
+          </select>
+        </label>
         <button className="diagram-palette-toggle" onClick={runDiagramValidation}>
-          <SlidersHorizontal size={16} /> Validate diagram
+          <SlidersHorizontal size={16} /> Ansicht prüfen
         </button>
         <span className="muted diagram-hint">
-          {canWrite ? "Hover: Mitte = verschieben · Kanten = eine Richtung · Ecken = beide Richtungen" : "Leseansicht"}
+          {activeViewpoint
+            ? `Zielgruppe: ${activeViewpoint.stakeholderRole} · ${activeViewpoint.purpose} · keine Benutzerrolle`
+            : "Alle Diagramminhalte · Ansichtsfilter speichert nichts"}
+          {!canWrite && " · Leseansicht"}
         </span>
         <button className="diagram-close-btn" onClick={onClose} title="Tab schließen"><X size={16} /></button>
       </div>

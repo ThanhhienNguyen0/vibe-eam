@@ -30,6 +30,11 @@ describe("role-aware rendering", () => {
     expect(html.includes("Neues Diagramm")).toBe(role === "Admin" || role === "Architect");
     expect(html.includes('title="Löschen"')).toBe(role === "Admin" || role === "Architect");
     expect(html.includes('title="Neuer Komponenten-Typ"')).toBe(role === "Admin");
+    if (role === "Admin") {
+      expect(html).toContain("Nur Admins können Nutzer anlegen und Rollen");
+      expect(html).toContain("Viewer (nur lesen)");
+      expect(html).toContain("keine Daten verändern");
+    }
   });
 
   it.each(ROLES)("shows instance editing and metamodel editing according to %s", (role) => {
