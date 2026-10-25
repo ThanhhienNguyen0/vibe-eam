@@ -388,7 +388,7 @@ Stakeholder wurden bewusst als normale Diagrammelemente erhalten. Ein Stakeholde
 
 - Die erste Kontrolle fand einen Smart-Add-Pfad, der den lokalen Filter umgehen konnte, sowie einen Test gegen den falschen Starter. Beides wurde korrigiert.
 - Eine weitere Kontrolle fand eine stale Verbindungsinteraktion. Handler-Guards und Zustandsbereinigung schlossen den Funktionsfehler; erst der anschließende Verhaltenstest schloss auch die Prüflücke.
-- Ein zwischenzeitlicher jsdom-/Testing-Library-Test war funktional aussagekräftig, hätte aber Testpakete über das bestehende Backend-Dockerfile in das Laufzeit-Image übernommen und passte nicht zur gesamten deklarierten Node-Untergrenze. Die Pakete und ihr Lockfile-Baum wurden wieder entfernt.
+- Ein zwischenzeitlicher jsdom-/Testing-Library-Test war funktional aussagekräftig, hätte aber Testpakete über das bestehende Backend-Dockerfile in das Laufzeit-Image übernommen und passte nicht zur gesamten deklarierten Node-Untergrenze. Die direkten Deklarationen und der dadurch zusätzlich aufgelöste Lockfile-Paketbaum wurden wieder entfernt; die schon vorher vorhandenen optionalen Vitest-Peer-Referenzen auf jsdom bleiben unverändert.
 - Ein vollständiger Prüflauf hatte einmalig einen unerwarteten Vitest-Workerabbruch. Der betroffene RBAC-Test bestand danach 14/14; der vollständige Wiederholungslauf bestand ohne Fehler. Daraus wurde kein Produktfehler abgeleitet.
 
 ### Abschluss
