@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildInitialSidebarStateForCompany } from "../../../backend/src/Sidebar/sidebarStore";
-import { getApplicableViewpoints, isLocalViewpointPreview, projectDiagramToViewpoint, validateDiagram } from "./metamodelRules";
+import { getApplicableViewpoints, isLocalViewpointPreview, projectDiagramToViewpoint, runIfDiagramWritable, validateDiagram } from "./metamodelRules";
 import type { SidebarState } from "./sidebarTypes";
 
 const state: SidebarState = {
@@ -66,6 +66,16 @@ describe("viewpoint preview", () => {
     expect(isLocalViewpointPreview(state.diagrams[0], "business")).toBe(true);
     expect(isLocalViewpointPreview(state.diagrams[0], "full")).toBe(false);
     expect(isLocalViewpointPreview({ ...state.diagrams[0], viewpointId: undefined }, undefined)).toBe(false);
+  });
+
+  it("does not execute a queued diagram mutation after a local preview becomes read-only", async () => {
+    const mutation = vi.fn(async () => "written");
+
+    await expect(runIfDiagramWritable(false, mutation)).resolves.toBeUndefined();
+    expect(mutation).not.toHaveBeenCalled();
+
+    await expect(runIfDiagramWritable(true, mutation)).resolves.toBe("written");
+    expect(mutation).toHaveBeenCalledOnce();
   });
 
   it("hides connections without an allowed metamodel rule", () => {

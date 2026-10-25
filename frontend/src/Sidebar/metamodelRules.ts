@@ -132,6 +132,14 @@ export function isLocalViewpointPreview(diagram: Diagram, viewpointId?: string):
   return (viewpointId ?? "") !== (diagram.viewpointId ?? "");
 }
 
+export async function runIfDiagramWritable<T>(
+  canWrite: boolean,
+  mutation: () => Promise<T>
+): Promise<T | undefined> {
+  if (!canWrite) return undefined;
+  return mutation();
+}
+
 function matchingConnectionRule(connection: ConnectionInstance, state: SidebarState): ConnectionRule | undefined {
   const source = state.components.find((component) => component.id === connection.sourceComponentId);
   const target = state.components.find((component) => component.id === connection.targetComponentId);

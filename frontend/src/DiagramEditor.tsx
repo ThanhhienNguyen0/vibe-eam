@@ -24,6 +24,7 @@ import {
   getViewpointRule,
   isLocalViewpointPreview,
   projectDiagramToViewpoint,
+  runIfDiagramWritable,
   validateDiagram,
   type DiagramValidationResult
 } from "./Sidebar/metamodelRules";
@@ -708,6 +709,10 @@ function DiagramEditorInner({
   const [viewpointFilterId, setViewpointFilterId] = useState(diagram.viewpointId ?? "");
   const localPreviewActive = isLocalViewpointPreview(diagram, viewpointFilterId || undefined);
   const canWrite = roleCanWrite && !localPreviewActive;
+  const runMutation = useCallback(
+    <T,>(mutation: () => Promise<T>) => runIfDiagramWritable(canWrite, mutation),
+    [canWrite]
+  );
   // Knotengröße nach Skalieren persistieren (inkl. Position, falls oben/links gezogen wurde)
   const diagramRef = useRef(diagram);
   diagramRef.current = diagram;
@@ -729,10 +734,11 @@ function DiagramEditorInner({
       setActiveNodeId(null);
       const current = diagramRef.current;
       const updatedPositions = { ...current.positions, [nodeId]: pos };
-      const updated = await sidebarApi.updateDiagram(current.id, { positions: updatedPositions });
+      const updated = await runMutation(() => sidebarApi.updateDiagram(current.id, { positions: updatedPositions }));
+      if (!updated) return;
       onDiagramChange(updated);
     },
-    [canWrite, onDiagramChange]
+    [canWrite, onDiagramChange, runMutation]
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(
@@ -837,13 +843,14 @@ function DiagramEditorInner({
       }
 
       try {
-        const result = await sidebarApi.createDiagramConnection(diagram.id, {
+        const result = await runMutation(() => sidebarApi.createDiagramConnection(diagram.id, {
           name: "",
           connectionTypeId: connType.id,
           sourceComponentId: sourceId,
           targetComponentId: targetId,
           description: ""
-        });
+        }));
+        if (!result) return;
         if (result.created) onConnectionCreated(result.connection);
         onDiagramChange(result.diagram);
         setError("");
@@ -851,7 +858,7 @@ function DiagramEditorInner({
         setError(err instanceof Error ? err.message : "Verbindung konnte nicht erstellt werden.");
       }
     },
-    [activeViewpoint, canWrite, components, diagram, onConnectionCreated, onDiagramChange, sidebarState]
+    [activeViewpoint, canWrite, components, diagram, onConnectionCreated, onDiagramChange, runMutation, sidebarState]
   );
 
   const onConnect = useCallback(
@@ -904,11 +911,12 @@ function DiagramEditorInner({
       Object.entries(diagram.positions).filter(([componentId]) => componentId !== nodeId)
     );
     try {
-      const updated = await sidebarApi.updateDiagram(diagram.id, {
+      const updated = await runMutation(() => sidebarApi.updateDiagram(diagram.id, {
         componentIds: newCompIds,
         connectionIds: newConnIds,
         positions: newPositions
-      });
+      }));
+      if (!updated) return;
       onDiagramChange(updated);
       setValidationResult(null);
       setError("");
@@ -965,17 +973,19 @@ function DiagramEditorInner({
       return;
     }
     try {
-      const comp = await sidebarApi.createComponent({
+      const comp = await runMutation(() => sidebarApi.createComponent({
         name,
         componentTypeId: typeId,
         properties,
         description: ""
-      });
+      }));
+      if (!comp) return;
       onComponentCreated(comp);
-      const updated = await sidebarApi.updateDiagram(diagram.id, {
+      const updated = await runMutation(() => sidebarApi.updateDiagram(diagram.id, {
         componentIds: [...diagram.componentIds, comp.id],
         positions: { ...diagram.positions, [comp.id]: position }
-      });
+      }));
+      if (!updated) return;
       onDiagramChange(updated);
       setPendingCreate(null);
       setError("");
@@ -1042,11 +1052,12 @@ function DiagramEditorInner({
         if (!newPositions[id]) newPositions[id] = { x: position.x + 260, y: position.y + i * 110 };
       });
     }
-    const updated = await sidebarApi.updateDiagram(diagram.id, {
+    const updated = await runMutation(() => sidebarApi.updateDiagram(diagram.id, {
       componentIds: newCompIds,
       connectionIds: newConnIds,
       positions: newPositions
-    });
+    }));
+    if (!updated) return;
     onDiagramChange(updated);
   }
 
