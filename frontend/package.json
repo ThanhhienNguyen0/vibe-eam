@@ -6,7 +6,7 @@
   "scripts": {
     "test": "vitest run --config vitest.config.ts --cache=false",
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc && vite build",
+    "build": "tsc -p tsconfig.build.json && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },
