@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -81,6 +81,41 @@ interface ContextMenu {
   x: number;
   y: number;
   nodeId: string;
+}
+
+export type ConnectionModeAction =
+  | { type: "start"; sourceId: string }
+  | { type: "cancel" }
+  | { type: "viewpoint-changed"; localPreviewActive: boolean };
+
+export function connectionModeReducer(state: string | null, action: ConnectionModeAction): string | null {
+  if (action.type === "start") return action.sourceId;
+  if (action.type === "cancel") return null;
+  return action.localPreviewActive ? null : state;
+}
+
+export async function handleDiagramNodeClick({
+  connectingFrom,
+  targetId,
+  canWrite,
+  cancelConnectionMode,
+  selectComponent,
+  createConnection
+}: {
+  connectingFrom: string | null;
+  targetId: string;
+  canWrite: boolean;
+  cancelConnectionMode: () => void;
+  selectComponent: (id: string) => void;
+  createConnection: (sourceId: string, targetId: string) => Promise<void>;
+}): Promise<void> {
+  if (!connectingFrom) {
+    selectComponent(targetId);
+    return;
+  }
+  cancelConnectionMode();
+  if (!canWrite || targetId === connectingFrom) return;
+  await createConnection(connectingFrom, targetId);
 }
 
 const lineStyleDash: Record<string, string | undefined> = {
@@ -753,7 +788,7 @@ function DiagramEditorInner({
   const [pendingAddSaving, setPendingAddSaving] = useState(false);
   const [pendingCreate, setPendingCreate] = useState<{ typeId: string; position: DiagramPosition } | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenu>({ visible: false, x: 0, y: 0, nodeId: "" });
-  const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
+  const [connectingFrom, dispatchConnectionMode] = useReducer(connectionModeReducer, null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState("");
   const [validationResult, setValidationResult] = useState<DiagramValidationResult | null>(null);
@@ -797,7 +832,7 @@ function DiagramEditorInner({
     if (!localPreviewActive) return;
     setPendingAdd(null);
     setPendingCreate(null);
-    setConnectingFrom(null);
+    dispatchConnectionMode({ type: "viewpoint-changed", localPreviewActive });
     setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
     setIsDragOver(false);
   }, [localPreviewActive]);
@@ -873,16 +908,16 @@ function DiagramEditorInner({
 
   const onNodeClick = useCallback(
     async (_e: React.MouseEvent, node: Node) => {
-      if (!connectingFrom) {
-        onSelectComponent(node.id);
-        return;
-      }
-      const target = node.id;
-      setConnectingFrom(null);
-      if (target === connectingFrom) return;
-      await createConnectionBetween(connectingFrom, target);
+      await handleDiagramNodeClick({
+        connectingFrom,
+        targetId: node.id,
+        canWrite,
+        cancelConnectionMode: () => dispatchConnectionMode({ type: "cancel" }),
+        selectComponent: onSelectComponent,
+        createConnection: createConnectionBetween
+      });
     },
-    [connectingFrom, createConnectionBetween, onSelectComponent]
+    [canWrite, connectingFrom, createConnectionBetween, onSelectComponent]
   );
 
   const onEdgeClick = useCallback(
@@ -896,7 +931,7 @@ function DiagramEditorInner({
 
   const onNodeContextMenu = useCallback((e: React.MouseEvent, node: Node) => {
     e.preventDefault();
-    setConnectingFrom(null);
+    dispatchConnectionMode({ type: "cancel" });
     setContextMenu({ visible: true, x: e.clientX, y: e.clientY, nodeId: node.id });
   }, []);
 
@@ -1202,7 +1237,7 @@ function DiagramEditorInner({
           <div className="diagram-connect-banner">
             <GitBranch size={14} />
             <span>Verbindung von <strong>{fromComp?.name}</strong> — Klicke auf Ziel-Komponente</span>
-            <button onClick={() => setConnectingFrom(null)}>Abbrechen</button>
+            <button onClick={() => dispatchConnectionMode({ type: "cancel" })}>Abbrechen</button>
           </div>
         );
       })()}
@@ -1346,7 +1381,7 @@ function DiagramEditorInner({
           <button
             className="diagram-context-item"
             onClick={() => {
-              setConnectingFrom(contextMenu.nodeId);
+              dispatchConnectionMode({ type: "start", sourceId: contextMenu.nodeId });
               setContextMenu((m) => ({ ...m, visible: false }));
             }}
           >
