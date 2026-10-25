@@ -75,4 +75,10 @@ Eine nachgelagerte saubere Neuinstallation machte eine neue High-Einstufung für
 
 Endurteil: **keine offenen P0–P3-Befunde** im lokal geprüften Umfang. Der einmalige frühere Vitest-Workerabbruch wurde durch den separaten RBAC-Lauf 14/14 und vollständige erfolgreiche Wiederholungsläufe nicht reproduziert. Nicht belegt sind Push, Remote-CI, Aktualisierung von PR #90, erneutes Staging, Browser-/Touch-E2E, Produktion und menschliche Freigabe.
 
+## Unabhängige Kontrolle der Container-Buildkorrektur, 25.10.2026
+
+Remote-CI #42 legte nach dem ersten Push eine bisher lokal nicht sichtbare Buildkontextdifferenz offen: Der Frontend-Produktionsbuild erfasste einen Test mit Backend-Starterimport, während das Frontend-Dockerfile nur die für den Produktcode benötigte Backend-Policy kopiert. Commit `007be0c294f00ea5eff9f95b687ed8c3ac445699` trennt Produktions- und vollständigen TypeScript-Lauf über `frontend/tsconfig.build.json`.
+
+Die Kontrollinstanz bestätigte read-only: Der Produktionslauf erfasst 394 TypeScript-Eingaben ohne Tests und ohne `backend/src/Sidebar/sidebarStore.ts`; der normale Typecheck erfasst weiterhin alle drei Frontendtests samt Backend-Starter. Frontendtests 21/21, Typecheck, Root-Lint und der Vite-Bundle mit 1.754 Modulen bestanden. Ergebnis: **keine P0–P3-Befunde**. Der lokale Docker-Daemon war nicht verfügbar; der tatsächliche Image-Build bleibt bis zum erneuten Remote-CI-Lauf offen.
+
 Die Erstellung dieser Ausarbeitung wurde durch KI unterstützt.
