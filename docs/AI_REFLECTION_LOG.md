@@ -390,9 +390,10 @@ Stakeholder wurden bewusst als normale Diagrammelemente erhalten. Ein Stakeholde
 - Eine weitere Kontrolle fand eine stale Verbindungsinteraktion. Handler-Guards und Zustandsbereinigung schlossen den Funktionsfehler; erst der anschließende Verhaltenstest schloss auch die Prüflücke.
 - Ein zwischenzeitlicher jsdom-/Testing-Library-Test war funktional aussagekräftig, hätte aber Testpakete über das bestehende Backend-Dockerfile in das Laufzeit-Image übernommen und passte nicht zur gesamten deklarierten Node-Untergrenze. Die direkten Deklarationen und der dadurch zusätzlich aufgelöste Lockfile-Paketbaum wurden wieder entfernt; die schon vorher vorhandenen optionalen Vitest-Peer-Referenzen auf jsdom bleiben unverändert.
 - Ein vollständiger Prüflauf hatte einmalig einen unerwarteten Vitest-Workerabbruch. Der betroffene RBAC-Test bestand danach 14/14; der vollständige Wiederholungslauf bestand ohne Fehler. Daraus wurde kein Produktfehler abgeleitet.
+- Eine anschließende saubere Neuinstallation machte eine neue High-Einstufung für das transitive `body-parser` 1.20.8 sichtbar. Ein reguläres, nicht erzwungenes Lockfile-Update hob ausschließlich dieses Paket auf 1.20.9; danach meldeten Installation und Dependency-Gate null Schwachstellen.
 
 ### Abschluss
 
-- Finaler lokaler Head: `74aa718ee61bcaaed4a4cefe18341b99aa2ef5c0`.
+- Finaler Produkt-/Testcode der Viewpoint-Korrektur: `74aa718ee61bcaaed4a4cefe18341b99aa2ef5c0`; unabhängig geprüfter Security-Patch-Head vor der Abschlussdokumentation: `1cb2335c55c8873f9880bf60754e3e4e5893fcdf`.
 - Vollständiger lokaler Check: 88 Backendtests bestanden, 7 übersprungen; 21 Frontendtests bestanden; Lint, Typechecks und beide Builds erfolgreich; 112 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfigurationsprüfung bestanden.
-- Unabhängige read-only Kontrolle: keine offenen P0–P3. Remote-, Staging- und Produktionsnachweise bleiben getrennt offen.
+- Unabhängige read-only Kontrolle von Viewpoint-Korrektur und anschließendem Security-Patch: keine offenen P0–P3. `npm ci` auditierte 443 Pakete ohne Schwachstelle; das Dependency-Gate meldete null Findings. Remote-, Staging- und Produktionsnachweise bleiben getrennt offen.
