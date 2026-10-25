@@ -270,3 +270,18 @@ Umgesetzt wurde:
 Nach einem manuellen Rollenreview wurde gemeldet, dass die Viewer-Leseansicht für Komponenten Rohdaten ausgibt. Der Folgeauftrag verlangte, diesen Fehler zu beheben, die Änderung zu begründen und den unabhängigen Kontrollchat für die anschließende PR-Prüfung zu informieren.
 
 Umgesetzt wurde eine fachliche, nicht editierbare Komponentenansicht mit aufgelöstem Typ, Beschreibung, formatierten Eigenschaften und den vorhandenen Verknüpfungen. Ergänzt wurde ein Regressionstest gegen die Ausgabe interner ID-Feldnamen und Schreibaktionen. Da PR #90 bereits für denselben Branch offen ist, ist nach unabhängiger Freigabe dessen Aktualisierung vorgesehen; es wird kein zweiter PR angelegt.
+
+## REQ-24-Nachkorrektur: Rollen und Diagrammansichten am 25.10.2026
+
+Ausgangspunkt war ein iPad-Screenshot mit `viewer@test.de`: Im vollständigen Standarddiagramm erschien nach der Auswahl einer Ansicht eine Fehlermeldung für einen anderen Viewpoint. Zusätzlich war unklar, wo Benutzerrollen vergeben werden und wie Rollen und Diagrammansichten zusammenhängen. Der Auftrag verlangte eine vollständige Korrektur und einen getrennten Kontrollchat.
+
+Umgesetzt wurde:
+
+- Rollen werden im Kopfbereich erklärt; nur Admins erhalten die Nutzerverwaltung und können dort Rollen setzen. Die Nutzerverwaltung enthält eine Rollenübersicht für Admin, Architect und Viewer.
+- Diagrammansichten sind ausdrücklich lokale, nicht gespeicherte Inhaltsfilter und keine Benutzerrollen. Der Selector bleibt auch für Viewer bedienbar.
+- Projektionen filtern Komponenten und Beziehungen fail-closed nach Viewpoint- und Metamodellregeln. Eine lokale Vorschau ist für Admin und Architect schreibgeschützt.
+- Beim Wechsel in eine lokale Vorschau werden begonnene Add-, Drag-, Kontextmenü- und Verbindungsinteraktionen verworfen. Alle persistenten Diagrammmutationen verwenden zusätzlich eine zentrale Schreibschranke.
+- Der kanonische Fresh-Company-Starter wird durch alle fünf EAM-Viewpoints projiziert und validiert.
+- Der getrennte Kontrollchat `01a1699f-2854-7233-8203-0d9326bbddfe` prüfte jede Korrekturstufe read-only. Das finale Urteil für `74aa718e` lautet: keine offenen P0–P3.
+
+Nicht Teil dieses lokalen Abschlusses sind Push, Aktualisierung von PR #90, neues Staging-Deployment, Liveprüfung oder Produktion.

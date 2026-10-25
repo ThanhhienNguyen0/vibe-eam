@@ -135,4 +135,22 @@ Die Komponentenansicht löst den Typnamen nun über die vorhandenen Komponentent
 
 Lokaler Nachweis dieses noch nicht unabhängig freigegebenen Nachkorrekturstands: gezielter Frontendtest **10/10**; vollständiges `npm run check` mit Lint und Typecheck erfolgreich, **88 Backendtests bestanden und 7 übersprungen**, **10 Frontendtests bestanden**, beide Builds erfolgreich, 112 Compose-, 169 Workflow- und 17 Securityprüfungen bestanden. `git diff --check` war sauber. Remote-CI, Aktualisierung von PR #90 und erneute Staging-Bereitstellung sind zu diesem Zeitpunkt offen.
 
+## Nachkorrektur der Rollen- und Viewpoint-Bedienung am 25.10.2026
+
+Der Screenshotbefund entstand durch die Kopplung des Diagrammselectors an den gespeicherten Viewpoint. Eine engere Auswahl löste einen PATCH aus, validierte das vollständige Diagramm gegen den engeren Viewpoint und konnte fehlschlagen. Danach stand die Auswahl wieder auf dem gespeicherten Wert, während die Fehlermeldung des fehlgeschlagenen Viewpoints sichtbar blieb.
+
+Der finale lokale Stand `74aa718ee61bcaaed4a4cefe18341b99aa2ef5c0` trennt diese Konzepte:
+
+- RBAC-Rollen bestimmen Benutzeraktionen und API-Rechte. Nur Admins verwalten Nutzer und Rollen; Architects bearbeiten Architektur und Diagramme; Viewer lesen.
+- Viewpoints sind lokale Diagrammprojektionen für Zielgruppen. Der Selector speichert nichts und bleibt für Viewer verfügbar.
+- Projektionen enthalten nur Komponenten und Beziehungen, die durch Viewpoint und Metamodellregeln erlaubt sind. Unbekannte, verbotene und regellose Beziehungen werden entfernt.
+- Abweichende lokale Projektionen sind schreibgeschützt. Begonnene Interaktionen werden verworfen; jeder direkte Diagramm-Schreibaufruf läuft zusätzlich durch `runIfDiagramWritable`.
+- Der produktiv verwendete Verbindungszustand und Knotenklickpfad sind gegen den Ablauf Start -> lokale Vorschau -> Zielklick sowie gegen einen stale Handler-Aufruf abgesichert.
+
+Der kanonische Fresh-Company-Starter wurde in der unabhängigen Kontrolle ohne Fehler oder Warnungen durch alle fünf EAM-Viewpoints projiziert: Management 4/2, Business Owner 4/3, Application Owner 4/3, IT Operations 3/2 und Full Architecture 7/7 Komponenten/Beziehungen.
+
+Finale Selbstprüfung: `npm.cmd run check` erfolgreich mit **88 bestandenen Backendtests und 7 übersprungenen**, **21 bestandenen Frontendtests**, Lint, beiden Typechecks und beiden Produktionsbuilds, **112 Composeprüfungen**, **169 Workflowprüfungen**, **17 Securityprüfungen** und Prisma-Konfigurationsprüfung. Ein einmaliger Vitest-Workerabbruch war nicht reproduzierbar; der betroffene RBAC-Test bestand separat 14/14 und der vollständige Wiederholungslauf vollständig.
+
+Der unabhängige Kontrollchat `01a1699f-2854-7233-8203-0d9326bbddfe` prüfte den finalen Head read-only und meldete keine offenen P0–P3. Push, Remote-CI, Aktualisierung von PR #90, Staging-Deployment, Liveprüfung und Produktion sind für diesen neuen Head nicht belegt.
+
 Die Erstellung dieser Ausarbeitung wurde durch KI unterstützt.

@@ -62,4 +62,15 @@ Die Kontrollinstanz prüfte anschließend den finalen Commit `11be5f86a7d943bc0c
 
 Die Selbstprüfung sah 43 lokal verfügbare Commits, die getrennte Kontrollkopie 25; beide Secret-Scans waren fundfrei. Daraus folgt kein Nachweis der vollständigen Remote-Historie. Dieser ist erst nach Push und erfolgreichem Remote-CI-Lauf belegbar. Ebenso offen bleiben Browser-E2E, tatsächliche Containerausführung, produktive Migration und Seed-Ausführung, Bootstrapadmin-Prüfung, GitHub-Branch-/Security-Einstellungen, Deployment und menschliche Freigabe. Das Urteil bezieht sich ausschließlich auf den lokal geprüften Commit und belegt keine allgemeine Wartbarkeit oder Produktionsreife.
 
+## Unabhängige Kontrolle der Rollen- und Viewpoint-Nachkorrektur, 25.10.2026
+
+- Kontrollinstanz: Chat `01a1699f-2854-7233-8203-0d9326bbddfe`, read-only und getrennt von Implementierung und Dokumentation.
+- Prüfgegenstand: Rollenverständlichkeit, lokale nicht persistierende Viewpoint-Projektion, Filterung von Komponenten und Beziehungen, Schreibgrenzen, kanonischer Fresh-Company-Starter, iPad-taugliche responsive Struktur und Regressionstests.
+- Die Kontrolle meldete zunächst P2/P3-Befunde zu Smart Add und Startertest, danach einen P2 zu einer stale Verbindungsinteraktion und einen P3 zur fehlenden Verhaltensregression. Die Korrekturen ergänzten fail-closed Projektion, Read-only-Vorschau, Zustandsbereinigung, Handler-Guards und den produktiv verwendeten Verbindungstestpfad.
+- Ein zwischenzeitlicher UI-Test schloss die Funktionslücke, führte aber zu zwei P3-Befunden wegen neuer Browser-Testabhängigkeiten im bestehenden Containerpfad und deren Node-Engine-Grenze. Commit `74aa718e` entfernte diese Abhängigkeiten vollständig und prüft denselben Ablauf über die tatsächlich verwendete Zustandsmaschine und den Knotenklick-Handler.
+
+Final unabhängig reproduziert: Head `74aa718ee61bcaaed4a4cefe18341b99aa2ef5c0`; sauberer Arbeitsbaum und `git diff --check`; Backend 88 bestanden/7 übersprungen; Frontend 21/21; Lint und beide Typechecks; Vite-Produktbundle mit 1.754 Modulen. Manifest und Lockfile enthalten weder `@testing-library/react` noch `jsdom` oder deren hinzugefügten Paketbaum.
+
+Endurteil: **keine offenen P0–P3-Befunde** im lokal geprüften Umfang. Der einmalige frühere Vitest-Workerabbruch wurde durch den separaten RBAC-Lauf 14/14 und einen vollständigen erfolgreichen Wiederholungslauf nicht reproduziert. Nicht belegt sind Push, Remote-CI, Aktualisierung von PR #90, erneutes Staging, Browser-/Touch-E2E, Produktion und menschliche Freigabe.
+
 Die Erstellung dieser Ausarbeitung wurde durch KI unterstützt.

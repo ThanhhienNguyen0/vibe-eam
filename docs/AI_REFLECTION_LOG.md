@@ -369,3 +369,30 @@ Stakeholder wurden bewusst als normale Diagrammelemente erhalten. Ein Stakeholde
 - Ein eigener Viewer-Regressionstest fordert die fachlichen Inhalte und schließt interne ID-Feldnamen sowie die Schreibaktion aus.
 - Der gezielte Test bestand mit 10/10; `npm run check` bestand vollständig.
 - Die übrigen Entitätstypen verwenden weiterhin den vorhandenen generischen Read-only-Fallback. Gegenstand dieser Nachkorrektur ist der konkret gemeldete Komponentenfehler.
+
+## REQ-24: Rollen- und Viewpoint-Verwechslung im Diagrammeditor
+
+### Beobachtung und Ursache
+
+- Die ursprüngliche Auswahl änderte den gespeicherten `diagram.viewpointId`. Ein enger Viewpoint validierte dadurch das vollständige Diagramm, lehnte darin fachlich fremde Beziehungen ab und setzte die Auswahl nach dem fehlgeschlagenen Speichern zurück. Die sichtbare Auswahl und die stehengebliebene Fehlermeldung konnten deshalb verschiedene Ansichten nennen.
+- Rollen und Viewpoints waren in der Oberfläche nicht ausreichend getrennt erklärt. Rollen steuern Aktionen und API-Rechte; Viewpoints steuern sichtbare Diagramminhalte und fachliche Validierung.
+
+### Entscheidungen
+
+- Der Selector erzeugt nur eine lokale Projektion. Das Quelldiagramm bleibt unverändert.
+- Beziehungen werden nur gezeigt, wenn eine erlaubte ConnectionRule existiert und sie im gewählten Viewpoint zulässig ist. Unbekannte, verbotene oder regellose Beziehungen werden ausgeblendet.
+- Lokale Projektionen sind schreibgeschützt. Zustandsbereinigung und zentrale Mutationsschranke sichern auch bereits begonnene Interaktionen ab.
+- Eine kleine Zustandsmaschine und der produktiv verwendete Knotenklick-Handler bilden den Verbindungsmodus explizit ab und sind ohne zusätzliche Browser-Testabhängigkeiten testbar.
+
+### Kontrollschleife und Lernpunkte
+
+- Die erste Kontrolle fand einen Smart-Add-Pfad, der den lokalen Filter umgehen konnte, sowie einen Test gegen den falschen Starter. Beides wurde korrigiert.
+- Eine weitere Kontrolle fand eine stale Verbindungsinteraktion. Handler-Guards und Zustandsbereinigung schlossen den Funktionsfehler; erst der anschließende Verhaltenstest schloss auch die Prüflücke.
+- Ein zwischenzeitlicher jsdom-/Testing-Library-Test war funktional aussagekräftig, hätte aber Testpakete über das bestehende Backend-Dockerfile in das Laufzeit-Image übernommen und passte nicht zur gesamten deklarierten Node-Untergrenze. Die Pakete und ihr Lockfile-Baum wurden wieder entfernt.
+- Ein vollständiger Prüflauf hatte einmalig einen unerwarteten Vitest-Workerabbruch. Der betroffene RBAC-Test bestand danach 14/14; der vollständige Wiederholungslauf bestand ohne Fehler. Daraus wurde kein Produktfehler abgeleitet.
+
+### Abschluss
+
+- Finaler lokaler Head: `74aa718ee61bcaaed4a4cefe18341b99aa2ef5c0`.
+- Vollständiger lokaler Check: 88 Backendtests bestanden, 7 übersprungen; 21 Frontendtests bestanden; Lint, Typechecks und beide Builds erfolgreich; 112 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfigurationsprüfung bestanden.
+- Unabhängige read-only Kontrolle: keine offenen P0–P3. Remote-, Staging- und Produktionsnachweise bleiben getrennt offen.
