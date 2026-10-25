@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import starterStateJson from "../../../backend/src/data/sidebar.json";
-import { getApplicableViewpoints, projectDiagramToViewpoint, validateDiagram } from "./metamodelRules";
+import { buildInitialSidebarStateForCompany } from "../../../backend/src/Sidebar/sidebarStore";
+import { getApplicableViewpoints, isLocalViewpointPreview, projectDiagramToViewpoint, validateDiagram } from "./metamodelRules";
 import type { SidebarState } from "./sidebarTypes";
 
 const state: SidebarState = {
@@ -62,6 +62,12 @@ describe("viewpoint preview", () => {
     expect(state.diagrams[0].componentIds).toEqual(["p", "c", "a", "d"]);
   });
 
+  it("makes a local viewpoint projection read-only when it differs from the persisted diagram view", () => {
+    expect(isLocalViewpointPreview(state.diagrams[0], "business")).toBe(true);
+    expect(isLocalViewpointPreview(state.diagrams[0], "full")).toBe(false);
+    expect(isLocalViewpointPreview({ ...state.diagrams[0], viewpointId: undefined }, undefined)).toBe(false);
+  });
+
   it("hides connections without an allowed metamodel rule", () => {
     const unsafeState: SidebarState = {
       ...state,
@@ -87,12 +93,14 @@ describe("viewpoint preview", () => {
     expect(getApplicableViewpoints(state.diagrams[0], withUnrelatedView).map((viewpoint) => viewpoint.id)).toEqual(["business", "application", "full"]);
   });
 
-  it("projects the real full-architecture starter through every EAM viewpoint without errors", () => {
-    const starterState = starterStateJson as unknown as SidebarState;
-    const fullDiagram = starterState.diagrams.find((diagram) => diagram.id === "diagram-order-management-demo");
+  it("projects the canonical fresh-company starter through every EAM viewpoint without errors", () => {
+    const companyId = "viewpoint-preview-test";
+    const starterState = buildInitialSidebarStateForCompany(companyId) as unknown as SidebarState;
+    const fullDiagram = starterState.diagrams.find((diagram) => diagram.id.endsWith(":diagram-eam-overview-demo"));
     expect(fullDiagram).toBeDefined();
 
-    for (const viewpointId of ["vp-management", "vp-business-owner", "vp-application-owner", "vp-it-operations", "vp-full-architecture"]) {
+    for (const suffix of ["vp-management", "vp-business-owner", "vp-application-owner", "vp-it-operations", "vp-full-architecture"]) {
+      const viewpointId = `${companyId}:${suffix}`;
       const projected = projectDiagramToViewpoint(fullDiagram!, starterState, viewpointId);
       expect(projected.componentIds.length, viewpointId).toBeGreaterThan(0);
       expect(validateDiagram(projected, starterState).errors, viewpointId).toEqual([]);

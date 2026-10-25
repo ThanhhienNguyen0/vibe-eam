@@ -128,6 +128,10 @@ export function getApplicableViewpoints(diagram: Diagram, state: SidebarState): 
   });
 }
 
+export function isLocalViewpointPreview(diagram: Diagram, viewpointId?: string): boolean {
+  return (viewpointId ?? "") !== (diagram.viewpointId ?? "");
+}
+
 function matchingConnectionRule(connection: ConnectionInstance, state: SidebarState): ConnectionRule | undefined {
   const source = state.components.find((component) => component.id === connection.sourceComponentId);
   const target = state.components.find((component) => component.id === connection.targetComponentId);

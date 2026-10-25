@@ -22,6 +22,7 @@ import {
   getAllowedConnectionTypes,
   getApplicableViewpoints,
   getViewpointRule,
+  isLocalViewpointPreview,
   projectDiagramToViewpoint,
   validateDiagram,
   type DiagramValidationResult
@@ -703,7 +704,10 @@ function DiagramEditorInner({
   onSelectConnection,
   onClose
 }: Props) {
-  const { canWrite } = useAccess();
+  const { canWrite: roleCanWrite } = useAccess();
+  const [viewpointFilterId, setViewpointFilterId] = useState(diagram.viewpointId ?? "");
+  const localPreviewActive = isLocalViewpointPreview(diagram, viewpointFilterId || undefined);
+  const canWrite = roleCanWrite && !localPreviewActive;
   // Knotengröße nach Skalieren persistieren (inkl. Position, falls oben/links gezogen wurde)
   const diagramRef = useRef(diagram);
   diagramRef.current = diagram;
@@ -747,7 +751,6 @@ function DiagramEditorInner({
   const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState("");
   const [validationResult, setValidationResult] = useState<DiagramValidationResult | null>(null);
-  const [viewpointFilterId, setViewpointFilterId] = useState(diagram.viewpointId ?? "");
   const menuRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
   const activeViewpoint = viewpointFilterId ? viewpoints.find((viewpoint) => viewpoint.id === viewpointFilterId) : undefined;
@@ -1141,7 +1144,7 @@ function DiagramEditorInner({
           {activeViewpoint
             ? `Zielgruppe: ${activeViewpoint.stakeholderRole} · ${activeViewpoint.purpose} · keine Benutzerrolle`
             : "Alle Diagramminhalte · Ansichtsfilter speichert nichts"}
-          {!canWrite && " · Leseansicht"}
+          {localPreviewActive ? " · Vorschau, nicht bearbeitbar" : !roleCanWrite && " · Leseansicht"}
         </span>
         <button className="diagram-close-btn" onClick={onClose} title="Tab schließen"><X size={16} /></button>
       </div>
