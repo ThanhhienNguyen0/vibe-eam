@@ -788,6 +788,15 @@ function DiagramEditorInner({
   }, [diagram.id, diagram.viewpointId]);
 
   useEffect(() => {
+    if (!localPreviewActive) return;
+    setPendingAdd(null);
+    setPendingCreate(null);
+    setConnectingFrom(null);
+    setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
+    setIsDragOver(false);
+  }, [localPreviewActive]);
+
+  useEffect(() => {
     setNodes(buildNodes(displayedDiagram, components, componentTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, canWrite));
     setEdges(buildEdges(displayedDiagram, connections, connectionTypes));
   }, [canWrite, displayedDiagram, components, componentTypes, connections, connectionTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, setNodes, setEdges]);
@@ -810,6 +819,7 @@ function DiagramEditorInner({
 
   const createConnectionBetween = useCallback(
     async (sourceId: string, targetId: string) => {
+      if (!canWrite) return;
       const srcComp = components.find((c) => c.id === sourceId);
       const tgtComp = components.find((c) => c.id === targetId);
       if (!srcComp || !tgtComp) return;
@@ -841,7 +851,7 @@ function DiagramEditorInner({
         setError(err instanceof Error ? err.message : "Verbindung konnte nicht erstellt werden.");
       }
     },
-    [activeViewpoint, components, diagram, onConnectionCreated, onDiagramChange, sidebarState]
+    [activeViewpoint, canWrite, components, diagram, onConnectionCreated, onDiagramChange, sidebarState]
   );
 
   const onConnect = useCallback(
@@ -884,6 +894,7 @@ function DiagramEditorInner({
   }, []);
 
   async function removeFromDiagram(nodeId: string) {
+    if (!canWrite) return;
     const newCompIds = diagram.componentIds.filter((id) => id !== nodeId);
     const newConnIds = diagram.connectionIds.filter((id) => {
       const conn = connections.find((c) => c.id === id);
@@ -926,6 +937,7 @@ function DiagramEditorInner({
   }, []);
 
   function onCanvasDrop(e: React.DragEvent) {
+      if (!canWrite) return;
       setIsDragOver(false);
       const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
 
@@ -945,7 +957,7 @@ function DiagramEditorInner({
   }
 
   async function createAndPlaceComponent(name: string, properties: Record<string, string>) {
-    if (!pendingCreate) return;
+    if (!canWrite || !pendingCreate) return;
     const { typeId, position } = pendingCreate;
     if (activeViewpoint && activeVisibleTypeIds && !activeVisibleTypeIds.has(typeId)) {
       const type = componentTypes.find((item) => item.id === typeId);
@@ -975,6 +987,7 @@ function DiagramEditorInner({
   // ── Smart add ───────────────────────────────────────────────────────────────
 
   async function startAddComponent(compId: string, position?: DiagramPosition) {
+    if (!canWrite) return;
     if (diagram.componentIds.includes(compId)) return;
     const component = components.find((item) => item.id === compId);
     const componentType = componentTypes.find((type) => type.id === component?.componentTypeId);
@@ -1012,6 +1025,7 @@ function DiagramEditorInner({
   }
 
   async function doAdd(compId: string, extraCompIds: string[], extraConnIds: string[], position?: DiagramPosition) {
+    if (!canWrite) return;
     const newCompIds = [
       ...diagram.componentIds, compId,
       ...extraCompIds.filter((id) => !diagram.componentIds.includes(id))
@@ -1037,7 +1051,7 @@ function DiagramEditorInner({
   }
 
   async function confirmAdd() {
-    if (!pendingAdd || pendingAddSaving) return;
+    if (!canWrite || !pendingAdd || pendingAddSaving) return;
     setPendingAddSaving(true);
     setPendingAddError("");
     try {
@@ -1057,7 +1071,7 @@ function DiagramEditorInner({
   }
 
   async function addCompOnly() {
-    if (!pendingAdd || pendingAddSaving) return;
+    if (!canWrite || !pendingAdd || pendingAddSaving) return;
     setPendingAddSaving(true);
     setPendingAddError("");
     try {
