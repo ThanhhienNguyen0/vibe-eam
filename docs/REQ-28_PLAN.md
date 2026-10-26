@@ -28,14 +28,13 @@ Der JSON-Weg war im Browser außerdem praktisch tot: Login und Registrierung lau
 | `.env` beim lokalen Start | Musste man selbst in die Shell exportieren | Wird von allen Backend-Skripten automatisch geladen |
 | `readLegacySidebarState` | Legte `sidebar.json` an, falls sie fehlte | Liest nur noch (schreibgeschützte Seed-Quelle) |
 | `db:migrate-json` | Nur `sidebar.json`, nur in eine komplett leere DB | Alle alten Dateien pro Firma, überspringt Firmen mit Daten |
-| `db:seed` im Docker-Start | Stürzte ab (BPMN-Demo verwies auf fehlenden Viewpoint), Backend „unhealthy“ | Läuft durch, Backend „healthy“ |
 | API-Routen und -Formate | – | **Unverändert** |
 
 ### Befehle
 
 | Befehl | Vorher | Nachher |
 |---|---|---|
-| `docker compose up --build` | Backend hing in Restart-Schleife (Seed-Fehler) | Läuft, Ablauf unverändert |
+| `docker compose up --build` | Läuft | Läuft, Ablauf unverändert |
 | `npm run dev` | Startete nur mit manuell gesetzten Variablen | Braucht laufende PostgreSQL, liest `.env` selbst |
 | `npm run db:up` | – | **Neu:** startet nur PostgreSQL im Container |
 | `npm run db:setup` | – | **Neu:** Migrationen + Seed in einem Schritt |
@@ -52,7 +51,6 @@ Der JSON-Weg war im Browser außerdem praktisch tot: Login und Registrierung lau
 | `backend/src/server.ts` | Prüft die DB-Konfiguration beim Start |
 | `backend/src/persistence/jsonMigration.ts` | **Neu:** findet und prüft alte JSON-Dateien (ohne DB testbar) |
 | `backend/prisma/migrate-json.ts` | Überträgt alle alten Dateien pro Firma |
-| `backend/prisma/seed.ts` | Seed-Fix: Metamodell-JSON ergänzt die Beispieldaten, statt sie zu ersetzen |
 | `backend/package.json`, `package.json` | `.env`-Laden, neue Skripte `db:up` und `db:setup` |
 | `docker-compose*.yml`, `.env*.example` | `STORAGE_BACKEND` entfernt |
 | `scripts/validate-compose.mjs` | Prüft jetzt, dass `STORAGE_BACKEND` **nicht** gesetzt ist |
@@ -83,11 +81,19 @@ npm run dev                 # Backend + Frontend mit Hot Reload
 
 ## Wie es geprüft wurde
 
-- `npm run check` (Lint, Typecheck, 73 Tests inklusive 4 neuer Migrationstests, Build, alle Validatoren) läuft grün.
+- `npm run check` (Lint, Typecheck, Backend- und Frontend-Tests inklusive 4 neuer Migrationstests, Build, alle Validatoren) läuft grün, auch nach dem Merge von `main` mit REQ-24.
+- Die REQ-24-Datenbanktests (`rbac.database.test.ts`) laufen gegen eine isolierte PostgreSQL-Datenbank. Ein Fall braucht das Programm `psql` lokal und wurde deshalb nicht ausgeführt.
 - `db:migrate-json` gegen ein temporäres DB-Schema getestet: erster Lauf überträgt Model- und Sidebar-Dateien inklusive Audit-Log, zweiter Lauf überspringt alles.
 - Backend-Start ohne `DATABASE_URL` und mit `STORAGE_BACKEND=json` getestet: klare Fehlermeldungen.
 - `npm run dev:backend` mit automatisch geladener `.env`: Registrierung, `/api/model` und `/api/sidebar` funktionieren gegen PostgreSQL.
 - `docker compose up --build`: Backend wird „healthy“.
+
+## Merge mit `main` (REQ-24)
+
+Nach dem Merge von REQ-24 (#90) gab es zwei Konflikte:
+
+- `backend/src/server.ts`: beide Branches haben einen Import ergänzt, beide wurden übernommen.
+- `backend/prisma/seed.ts`: REQ-24 hatte denselben Seed-Fehler (BPMN-Demo verwies auf einen fehlenden Viewpoint) unabhängig behoben und Demo-Nutzer ergänzt. Diese Version wurde übernommen, der eigene Seed-Fix dieses Branches ist damit ersetzt.
 
 ## Risiken
 

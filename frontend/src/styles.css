@@ -1425,6 +1425,39 @@ tr.attention td {
   overflow-y: auto;
 }
 
+.sb-readonly-view > h3 {
+  margin: 16px 0 8px;
+  font-size: 13px;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.sb-readonly-fields {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.sb-readonly-fields > div {
+  display: grid;
+  gap: 3px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.sb-readonly-fields dt {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.sb-readonly-fields dd {
+  margin: 0;
+  color: #172033;
+  overflow-wrap: anywhere;
+}
+
 .sb-detail {
   padding: 20px;
 }
@@ -1799,6 +1832,15 @@ tr.attention td {
   background: #ffffff;
   color: #172033;
   font-size: 13px;
+}
+
+.diagram-viewpoint-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .diagram-validation-panel {
@@ -3616,6 +3658,20 @@ tr.attention td {
 .auth-error { padding: 10px 12px; border-radius: 8px; background: #fef2f2; color: #b91c1c; font-size: 13px; }
 .auth-hint { color: #64748b; line-height: 1.4; }
 .account-menu { margin-left: auto; display: flex; align-items: center; gap: 12px; }
-.account-menu span { display: flex; flex-direction: column; align-items: flex-end; font-size: 12px; }
+.account-identity { display: flex; flex-direction: column; align-items: flex-end; font-size: 12px; }
 .account-menu small { color: #64748b; }
 .account-menu button { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 7px; background: #fff; color: #334155; cursor: pointer; }
+.account-role-info { position: relative; }
+.account-role-info summary { list-style: none; cursor: pointer; padding: 6px 9px; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.account-role-info summary::-webkit-details-marker { display: none; }
+.account-role-info > div { position: absolute; z-index: 50; top: calc(100% + 8px); right: 0; width: min(300px, 80vw); padding: 12px 14px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; box-shadow: 0 12px 28px rgb(15 23 42 / 18%); color: #334155; font-size: 13px; line-height: 1.4; }
+.account-role-info p { margin: 7px 0 0; }
+.role-guide { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 16px 0 22px; }
+.role-guide-card { display: grid; gap: 5px; padding: 12px; border: 1px solid #d8dee8; border-radius: 8px; background: #f8fafc; }
+.role-guide-card span { color: #475569; font-size: 13px; line-height: 1.4; }
+
+@media (max-width: 760px) {
+  .role-guide { grid-template-columns: 1fr; }
+  .account-menu { margin-left: 0; flex-wrap: wrap; }
+  .account-identity { align-items: flex-start; }
+}

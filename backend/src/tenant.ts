@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import type { Role } from "./auth/policy.js";
 
 export const DEFAULT_COMPANY_ID = "company-default-demo";
 export const DEFAULT_COMPANY_NAME = "Default Demo Company";
@@ -6,7 +7,7 @@ export const DEFAULT_COMPANY_NAME = "Default Demo Company";
 export interface AuthPrincipal {
   userId: string;
   companyId: string;
-  role: string;
+  role: Role;
 }
 
 const storage = new AsyncLocalStorage<AuthPrincipal>();

@@ -4,6 +4,8 @@ Stakeholder bleiben im Metamodell normale, modellierbare Component Types. Ein St
 
 Viewpoints sind nicht dasselbe wie Stakeholder-Knoten. Ein Viewpoint ist eine Sicht bzw. ein Rollenfilter auf das Metamodell: Er legt fest, welche Component Types, Connection Types und Connection Rules fuer eine Rolle sichtbar, erlaubt oder verpflichtend sind.
 
+Im Diagrammeditor ist die Auswahl als nicht speichernder Ansichtsfilter umgesetzt. Sie projiziert ein vollständiges Diagramm auf die für den gewählten Viewpoint sichtbaren Komponenten und Beziehungen. Dadurch können auch Viewer zwischen Stakeholder-Sichten wechseln, ohne das Diagramm oder seine gespeicherte Viewpoint-Zuordnung zu verändern. Die Benutzerrollen Admin, Architect und Viewer bleiben davon getrennte Zugriffsrechte.
+
 Die konkrete Regelmenge liegt in `ViewpointRule`. Der `Viewpoint` beschreibt fachlich die Rolle und den Zweck, waehrend `ViewpointRule` die erlaubten und verpflichtenden Typen, Verbindungstypen und ConnectionRules enthaelt. Dadurch bleibt die Stakeholder-Perspektive als Sicht steuerbar, ohne Stakeholder als normale Diagrammelemente zu verlieren.
 
 In der Metamodel-UI kann ein Viewpoint als Filter ausgewaehlt werden. Dann werden Component Types, Connection Rules und der Rule Graph auf die fuer diese Rolle relevanten Regeln reduziert. Ohne Viewpoint-Filter zeigt die UI eine EAM-fokussierte Standardsicht; BPMN-Typen werden im Rule Graph erst sichtbar, wenn der Layer `BPMN` explizit gewaehlt wird.

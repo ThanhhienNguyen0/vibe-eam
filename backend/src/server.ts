@@ -1,14 +1,17 @@
 import cors from "cors";
 import express from "express";
+import { rateLimit } from "express-rate-limit";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import sidebarRouter from "./Sidebar/sidebarRoutes.js";
 import { createAuthRouter } from "./auth/authRoutes.js";
 import { requireAuth } from "./auth/authMiddleware.js";
-import { AuthService, requireJwtSecret } from "./auth/authService.js";
+import { AuthService, AuthHttpError, requireJwtSecret } from "./auth/authService.js";
+import { apiSecurity } from "./auth/routePolicies.js";
+import { createUserRouter } from "./auth/userRoutes.js";
 import { PrismaAuthRepository } from "./auth/prismaAuthRepository.js";
-import type { AuthRepository } from "./auth/authTypes.js";
+import type { AuthRepository, UserRepository } from "./auth/authTypes.js";
 import { requireDatabaseConfiguration } from "./persistence/databaseSidebarRepository.js";
 import {
   addElement,
@@ -33,23 +36,49 @@ import type { EamModel } from "./types.js";
 export interface AppOptions {
   jwtSecret: string;
   authRepository?: AuthRepository;
+  userRepository?: UserRepository;
 }
 
 export function createApp(options: AppOptions): express.Express {
   const app = express();
+  // Every documented public path has exactly one Nginx hop, which overwrites X-Forwarded-For.
+  app.set("trust proxy", 1);
   const corsOrigin = process.env.CORS_ORIGIN?.trim();
-  const authRepository = options.authRepository ?? new PrismaAuthRepository(new PrismaClient());
+  const databaseRepository = options.authRepository && options.userRepository ? undefined : new PrismaAuthRepository(new PrismaClient());
+  const authRepository = options.authRepository ?? databaseRepository!;
   const authService = new AuthService(authRepository, options.jwtSecret);
 
   app.use(cors(corsOrigin ? { origin: corsOrigin.split(",").map((origin) => origin.trim()) } : undefined));
+  app.use(rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 600,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    skip: (req) => req.method === "OPTIONS" || req.path === "/api/health"
+  }));
   app.use(express.json({ limit: "2mb" }));
+  // Precedes every API route, including auth and future routers.
+  app.use(apiSecurity(requireAuth(options.jwtSecret, authRepository)));
 
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok" });
   });
 
-  app.use("/api/auth", createAuthRouter(authService, options.jwtSecret));
-  app.use("/api", requireAuth(options.jwtSecret));
+  app.use("/api/auth/register", rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: "draft-8",
+    legacyHeaders: false
+  }));
+  app.use("/api/auth/login", rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 20,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    skipSuccessfulRequests: true
+  }));
+  app.use("/api/auth", createAuthRouter(authService));
+  app.use("/api/users", createUserRouter(options.userRepository ?? databaseRepository!));
   app.use("/api/sidebar", sidebarRouter);
 
   app.get("/api/model", async (_req, res, next) => {
@@ -156,7 +185,12 @@ export function createApp(options: AppOptions): express.Express {
   // Express recognizes error middleware by its four-argument signature.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Required Express error-handler arity.
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    console.error(error instanceof Error ? error.message : "Unexpected server error.");
+    if (error instanceof AuthHttpError) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    // Do not log database input/errors: those may contain credentials or password hashes.
+    console.error("Unexpected server error.");
     res.status(500).json({ error: "Unexpected server error." });
   });
 

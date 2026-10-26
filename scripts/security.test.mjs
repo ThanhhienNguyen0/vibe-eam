@@ -51,6 +51,17 @@ function failures(c = ci, q = codeql, d = dependabot, p = pkg, deployments = [["
   return securityWorkflowChecks(c, q, d, p, deployments).filter((result) => !result.condition);
 }
 test("current quality and security workflow definitions pass", () => assert.deepEqual(failures(), []));
+test("removing or making the REQ-24 database gate optional is detected", () => {
+  for (const mutation of [
+    (step) => { step.run = "echo omitted"; },
+    (step) => { step.if = "false"; },
+    (step) => { step["continue-on-error"] = true; }
+  ]) {
+    const changed = structuredClone(ci);
+    mutation(changed.jobs.verify.steps.find((step) => step.name === "Test RBAC against an isolated PostgreSQL cluster"));
+    assert.ok(failures(changed).length > 0);
+  }
+});
 for (const [jobId, command] of [["verify", "npm run lint"], ["verify", "npm run typecheck"], ["verify", "npm test"], ["verify", "npm run build"], ["dependencies", "npm run scan:dependencies"], ["secrets", "npm run scan:secrets"]]) {
   test(`removing ${command} is detected`, () => {
     const changed = structuredClone(ci);

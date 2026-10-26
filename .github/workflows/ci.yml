@@ -42,6 +42,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Test RBAC against an isolated PostgreSQL cluster
+        run: PG_BIN="$(pg_config --bindir)" npm run test:rbac:db
+
       - name: Build application
         run: npm run build
 
