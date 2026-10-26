@@ -65,10 +65,8 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
       }
       const entity = collections[selection.kind].find((entry) => entry.id === selection.id);
       if (!entity) return null;
-      return <DetailWrapper title={"name" in entity ? entity.name : "Verbindungsregel"} onClose={onClose}>
-        <p className="muted">Leseansicht</p>
-        <dl>{Object.entries(entity).map(([key, value]) => <div key={key}><dt>{key}</dt><dd style={{ overflowWrap: "anywhere" }}>{typeof value === "object" ? JSON.stringify(value) : String(value ?? "")}</dd></div>)}</dl>
-        {selection.kind === "diagram" && <button onClick={() => onOpenDiagram(selection.id)}>Diagramm öffnen</button>}
+      return <DetailWrapper title={"name" in entity && entity.name ? entity.name : READ_ONLY_TITLES[selection.kind]} onClose={onClose}>
+        <ReadOnlyDetails selection={{ kind: selection.kind, id: selection.id }} sidebarState={sidebarState} onSelect={onSelect} onOpenDiagram={onOpenDiagram} />
       </DetailWrapper>;
     }
   }
@@ -923,6 +921,138 @@ function ComponentReadOnly({
         isIncluded={(diagram) => diagram.componentIds.includes(comp.id)}
         onOpenDiagram={onOpenDiagram}
       />
+    </div>
+  );
+}
+
+type ReadOnlyKind = "componentType" | "connectionType" | "connectionRule" | "viewpoint" | "connection" | "diagram";
+
+const READ_ONLY_TITLES: Record<string, string> = {
+  componentType: "Komponenten-Typ", connectionType: "Verbindungs-Typ", connectionRule: "Verbindungsregel",
+  viewpoint: "Viewpoint", connection: "Beziehung", diagram: "Diagramm"
+};
+
+const LINE_STYLE_LABELS: Record<ConnectionType["lineStyle"], string> = { solid: "durchgezogen", dashed: "gestrichelt", dotted: "gepunktet" };
+
+function ReadOnlyFields({ fields }: { fields: [label: string, value: React.ReactNode][] }) {
+  return (
+    <dl className="sb-readonly-fields">
+      {fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value === "" || value == null ? "—" : value}</dd></div>)}
+    </dl>
+  );
+}
+
+/** Semantic read-only views: resolve referenced IDs to names and never show internal IDs or raw JSON. */
+function ReadOnlyDetails({
+  selection,
+  sidebarState,
+  onSelect,
+  onOpenDiagram
+}: {
+  selection: { kind: ReadOnlyKind; id: string };
+  sidebarState: SidebarState;
+  onSelect: (sel: SidebarSelection) => void;
+  onOpenDiagram: (id: string) => void;
+}) {
+  const { componentTypes, connectionTypes, connectionRules, viewpoints, components, connections, diagrams } = sidebarState;
+  const names = (items: { id: string; name: string }[], ids: string[] | undefined) =>
+    ids?.length ? ids.map((id) => items.find((item) => item.id === id)?.name ?? "Unbekannt").join(", ") : "";
+  const typeName = (id: string) => componentTypes.find((type) => type.id === id)?.name ?? "Unbekannter Typ";
+  const yesNo = (value: boolean | undefined) => (value ? "Ja" : "Nein");
+  let fields: [string, React.ReactNode][];
+  let extra: React.ReactNode = null;
+
+  if (selection.kind === "componentType") {
+    const ct = componentTypes.find((item) => item.id === selection.id);
+    if (!ct) return null;
+    fields = [
+      ["Beschreibung", ct.description],
+      ["Kategorie", ct.category || "Standard"],
+      ["Ebene", ct.layer],
+      ["Form", COMPONENT_SHAPES.find((shape) => shape.value === (ct.shape ?? "box"))?.label ?? ct.shape],
+      ["Farbe", <span className="sb-badge" style={{ background: ct.color }}>{ct.color}</span>],
+      ["Eigenschaftsfelder", ct.customPropertyKeys.join(", ")],
+      ["Abstrakt", yesNo(ct.isAbstract)],
+      ["Stakeholder-relevant", yesNo(ct.isStakeholderRelevant)],
+      ["Erlaubt in Viewpoints", names(viewpoints, ct.allowedInViewpointIds)]
+    ];
+  } else if (selection.kind === "connectionType") {
+    const ct = connectionTypes.find((item) => item.id === selection.id);
+    if (!ct) return null;
+    fields = [
+      ["Beschreibung", ct.description],
+      ["Kategorie", ct.category || "Standard"],
+      ["Linienstil", LINE_STYLE_LABELS[ct.lineStyle] ?? ct.lineStyle],
+      ["Farbe", <span className="sb-badge" style={{ background: ct.color }}>{ct.color}</span>],
+      ["Richtung", ct.directionDescription],
+      ["Erlaubte Quell-Typen", names(componentTypes, ct.allowedSourceTypeIds)],
+      ["Erlaubte Ziel-Typen", names(componentTypes, ct.allowedTargetTypeIds)]
+    ];
+  } else if (selection.kind === "connectionRule") {
+    const rule = connectionRules.find((item) => item.id === selection.id);
+    if (!rule) return null;
+    fields = [
+      ["Regel", `${typeName(rule.sourceComponentTypeId)} → ${connectionTypes.find((type) => type.id === rule.connectionTypeId)?.name ?? "?"} → ${typeName(rule.targetComponentTypeId)}`],
+      ["Erlaubt", yesNo(rule.allowed)],
+      ["Pflicht", yesNo(rule.required)],
+      ["Schweregrad", rule.severity === "error" ? "Fehler" : "Warnung"],
+      ["Beschreibung", rule.description],
+      ["Begründung", rule.rationale],
+      ["Gilt in Viewpoints", names(viewpoints, rule.viewpointIds) || "Alle"]
+    ];
+  } else if (selection.kind === "viewpoint") {
+    const vp = viewpoints.find((item) => item.id === selection.id);
+    if (!vp) return null;
+    fields = [
+      ["Beschreibung", vp.description],
+      ["Stakeholder", vp.stakeholderRole],
+      ["Zweck", vp.purpose],
+      ["Erlaubte Komponenten-Typen", names(componentTypes, vp.allowedComponentTypeIds)],
+      ["Erlaubte Verbindungs-Typen", names(connectionTypes, vp.allowedConnectionTypeIds)],
+      ["Pflicht-Komponenten-Typen", names(componentTypes, vp.requiredComponentTypeIds)],
+      ["Pflicht-Verbindungs-Typen", names(connectionTypes, vp.requiredConnectionTypeIds)]
+    ];
+  } else if (selection.kind === "connection") {
+    const conn = connections.find((item) => item.id === selection.id);
+    if (!conn) return null;
+    const componentLink = (id: string) => {
+      const comp = components.find((item) => item.id === id);
+      return comp ? (
+        <button className="sb-link-row" onClick={() => onSelect({ kind: "component", id })}>
+          <span className="sb-link-label"><strong>{comp.name}</strong></span>
+          <ArrowRight size={12} className="sb-link-arrow" />
+        </button>
+      ) : "Unbekannt";
+    };
+    fields = [
+      ["Typ", connectionTypes.find((type) => type.id === conn.connectionTypeId)?.name ?? "Unbekannter Typ"],
+      ["Von", componentLink(conn.sourceComponentId)],
+      ["Nach", componentLink(conn.targetComponentId)],
+      ["Beschreibung", conn.description]
+    ];
+    const properties = Object.entries(conn.properties ?? {});
+    extra = <>
+      <h3>Eigenschaften</h3>
+      {properties.length > 0 ? <ReadOnlyFields fields={properties} /> : <p className="muted">Keine Eigenschaften hinterlegt.</p>}
+      <LinkedDiagrams diagrams={diagrams} isIncluded={(diagram) => diagram.connectionIds.includes(conn.id)} onOpenDiagram={onOpenDiagram} />
+    </>;
+  } else {
+    const diagram = diagrams.find((item) => item.id === selection.id);
+    if (!diagram) return null;
+    fields = [
+      ["Beschreibung", diagram.description],
+      ["Viewpoint", viewpoints.find((vp) => vp.id === diagram.viewpointId)?.name ?? "Kein Viewpoint"],
+      ["Komponenten", diagram.componentIds.length],
+      ["Beziehungen", diagram.connectionIds.length]
+    ];
+    extra = <button onClick={() => onOpenDiagram(diagram.id)}>Diagramm öffnen</button>;
+  }
+
+  return (
+    <div className="sb-readonly-view">
+      <p className="muted">Leseansicht</p>
+      <ReadOnlyFields fields={fields} />
+      {extra}
     </div>
   );
 }

@@ -64,6 +64,33 @@ describe("role-aware rendering", () => {
     expect(html).not.toContain("Speichern");
   });
 
+  it.each([
+    ["componentType", "type", ["Kategorie", "Eigenschaftsfelder"]],
+    ["connectionType", "uses", ["Linienstil", "durchgezogen", "Application"]],
+    ["connectionRule", "rule", ["Application → uses → Application", "Warnung"]],
+    ["viewpoint", "vp", ["Stakeholder", "Architekten"]],
+    ["connection", "connection", ["Inventory", "uses", "<dt>protocol</dt><dd>HTTPS</dd>"]],
+    ["diagram", "diagram", ["Overview-Sicht", "Diagramm öffnen"]]
+  ] as const)("renders viewer %s details without raw data", (kind, id, expected) => {
+    const richState: SidebarState = {
+      ...state,
+      connectionTypes: [{ id: "uses", name: "uses", color: "#000", lineStyle: "solid", allowedSourceTypeIds: ["type"], allowedTargetTypeIds: ["type"], description: "" }],
+      connectionRules: [{ id: "rule", sourceComponentTypeId: "type", connectionTypeId: "uses", targetComponentTypeId: "type", allowed: true, required: false, severity: "warning", description: "", rationale: "" }],
+      viewpoints: [{ id: "vp", name: "Overview-Sicht", description: "", stakeholderRole: "Architekten", allowedComponentTypeIds: ["type"], allowedConnectionTypeIds: [], requiredComponentTypeIds: [], requiredConnectionTypeIds: [], purpose: "" }],
+      connections: [{ id: "connection", name: "", connectionTypeId: "uses", sourceComponentId: "component", targetComponentId: "component", description: "", properties: { protocol: "HTTPS" } }],
+      diagrams: [{ id: "diagram", name: "Overview", description: "", componentIds: ["component"], connectionIds: [], positions: {}, viewpointId: "vp" }]
+    };
+    const html = renderToStaticMarkup(<AccessContext.Provider value="Viewer">
+      <SidebarPanels selection={{ kind, id }} sidebarState={richState} onStateChange={noop} onSelect={noop} onOpenDiagram={noop} onClose={noop} />
+    </AccessContext.Provider>);
+
+    expect(html).toContain("Leseansicht");
+    for (const text of expected) expect(html).toContain(text);
+    expect(html).not.toMatch(/<dt>(id|componentTypeId|connectionTypeId|sourceComponentId|allowedSourceTypeIds|positions)<\/dt>/);
+    expect(html).not.toContain("&quot;");
+    expect(html).not.toContain("Speichern");
+  });
+
   it("keeps credentials on 403 and clears them only on 401", () => {
     const removeItem = vi.fn(); const dispatchEvent = vi.fn();
     vi.stubGlobal("window", { localStorage: { removeItem }, dispatchEvent });
