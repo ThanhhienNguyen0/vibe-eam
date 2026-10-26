@@ -7,10 +7,13 @@ import MetamodelView from "./MetamodelView";
 import { sidebarApi } from "./Sidebar/sidebarApi";
 import type { SidebarState } from "./Sidebar/sidebarTypes";
 import { authApi, clearAuthToken, getAuthToken, setAuthToken, type AuthUser } from "./authApi";
+import { AccessContext, ROLE_DESCRIPTIONS, ROLE_LABELS, useAccess } from "./access";
+import UserManagement from "./UserManagement";
 
 export default function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [authError, setAuthError] = useState("");
 
   useEffect(() => {
     const unauthorized = () => { clearAuthToken(); setUser(null); setCheckingAuth(false); };
@@ -18,12 +21,24 @@ export default function App() {
     if (!getAuthToken()) {
       setCheckingAuth(false);
     } else {
-      authApi.me().then(setUser).catch(unauthorized).finally(() => setCheckingAuth(false));
+      authApi.me().then(setUser).catch((e) => setAuthError(e.message)).finally(() => setCheckingAuth(false));
     }
     return () => window.removeEventListener("eam:unauthorized", unauthorized);
   }, []);
 
+  function refreshUser() {
+    void authApi.me().then((current) => { setUser(current); setAuthError(""); }).catch((e) => setAuthError(e.message));
+  }
+
+  useEffect(() => {
+    const refresh = () => { if (getAuthToken()) refreshUser(); };
+    window.addEventListener("focus", refresh);
+    window.addEventListener("eam:forbidden", refresh);
+    return () => { window.removeEventListener("focus", refresh); window.removeEventListener("eam:forbidden", refresh); };
+  }, []);
+
   if (checkingAuth) return <div className="auth-shell"><div className="auth-card">Anmeldung wird geprüft …</div></div>;
+  if (!user && getAuthToken() && authError) return <div className="auth-shell"><div className="auth-card" role="alert">{authError}<button onClick={refreshUser}>Erneut prüfen</button><button onClick={() => { clearAuthToken(); setAuthError(""); }}>Abmelden</button></div></div>;
   if (!user) return <AuthScreen onAuthenticated={(result) => { setAuthToken(result.token); setUser(result.user); }} />;
 
   async function logout() {
@@ -32,10 +47,11 @@ export default function App() {
     setUser(null);
   }
 
-  return <EamWorkspace user={user} onLogout={logout} />;
+  return <AccessContext.Provider value={user.role}><EamWorkspace key={user.role} user={user} onLogout={logout} onRoleChanged={refreshUser} /></AccessContext.Provider>;
 }
 
-function EamWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
+export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser; onLogout: () => void; onRoleChanged: () => void }) {
+  const { canWrite, canManageMetamodel, canManageUsers } = useAccess();
   const [sidebarState, setSidebarState] = useState<SidebarState>({
     metamodel: {
       id: "",
@@ -58,7 +74,7 @@ function EamWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => void
   });
   const [sidebarSelection, setSidebarSelection] = useState<SidebarSelection | null>(null);
   const [activeDiagramId, setActiveDiagramId] = useState<string | null>(null);
-  const [workspaceView, setWorkspaceView] = useState<"diagrams" | "metamodel">("diagrams");
+  const [workspaceView, setWorkspaceView] = useState<"diagrams" | "metamodel" | "users">("diagrams");
   const [error, setError] = useState("");
 
   const activeDiagram = sidebarState.diagrams.find((d) => d.id === activeDiagramId) ?? null;
@@ -92,12 +108,13 @@ function EamWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => void
           >
             <LayoutDashboard size={14} /> Diagramme
           </button>
-          <button
+          {canManageMetamodel && <button
             className={`tabs-diagram-tab${!activeDiagram && workspaceView === "metamodel" ? " active" : ""}`}
             onClick={() => { setActiveDiagramId(null); setWorkspaceView("metamodel"); }}
           >
             <GitBranch size={14} /> Metamodel
-          </button>
+          </button>}
+          {canManageUsers && <button className={`tabs-diagram-tab${workspaceView === "users" ? " active" : ""}`} onClick={() => { setActiveDiagramId(null); setWorkspaceView("users"); }}>Nutzerverwaltung</button>}
         </nav>
         {activeDiagram && (
           <nav className="tabs" aria-label="Geöffnetes Diagramm">
@@ -113,7 +130,15 @@ function EamWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => void
           </nav>
         )}
         <div className="account-menu">
-          <span><strong>{user.name ?? user.email}</strong><small>{user.companyName}</small></span>
+          <span className="account-identity"><strong>{user.name ?? user.email}</strong><small>{user.companyName}</small></span>
+          <details className="account-role-info">
+            <summary>{ROLE_LABELS[user.role]}</summary>
+            <div>
+              <strong>Deine Rolle: {ROLE_LABELS[user.role]}</strong>
+              <p>{ROLE_DESCRIPTIONS[user.role]}</p>
+              <p>{user.role === "Admin" ? "Rollen vergibst du unter Nutzerverwaltung." : "Rollen werden von einem Admin unter Nutzerverwaltung vergeben."}</p>
+            </div>
+          </details>
           <button type="button" onClick={onLogout} title="Abmelden"><LogOut size={16} /> Abmelden</button>
         </div>
       </header>
@@ -161,13 +186,16 @@ function EamWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => void
               onSelectConnection={(id) => setSidebarSelection({ kind: "connection", id })}
               onClose={() => setActiveDiagramId(null)}
             />
-          ) : workspaceView === "metamodel" ? (
+          ) : workspaceView === "users" && canManageUsers ? (
+            <UserManagement onRoleChanged={onRoleChanged} />
+          ) : workspaceView === "metamodel" && canManageMetamodel ? (
             <MetamodelView sidebarState={sidebarState} onStateChange={setSidebarState} />
           ) : (
             <HomeView
               sidebarState={sidebarState}
               onOpenDiagram={openDiagram}
               onCreateDiagram={createDiagram}
+              canWrite={canWrite}
             />
           )}
         </main>
@@ -240,14 +268,16 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (result: { token: st
 
 /* ── Startansicht: Diagrammübersicht ───────────────────────────────────────── */
 
-function HomeView({
+export function HomeView({
   sidebarState,
   onOpenDiagram,
-  onCreateDiagram
+  onCreateDiagram,
+  canWrite
 }: {
   sidebarState: SidebarState;
   onOpenDiagram: (id: string) => void;
   onCreateDiagram: () => void;
+  canWrite: boolean;
 }) {
   const { diagrams, components, connections } = sidebarState;
 
@@ -260,9 +290,9 @@ function HomeView({
             {components.length} Komponenten · {connections.length} Verbindungen im Modell
           </p>
         </div>
-        <button className="home-create-btn" onClick={onCreateDiagram}>
+        {canWrite && <button className="home-create-btn" onClick={onCreateDiagram}>
           <Plus size={16} /> Neues Diagramm
-        </button>
+        </button>}
       </div>
 
       {diagrams.length === 0 ? (
@@ -273,9 +303,9 @@ function HomeView({
             Definiere links unter „Architekturregeln" deine Komponenten- und Verbindungs-Typen,
             lege Komponenten an und erstelle dann dein erstes Diagramm.
           </span>
-          <button className="home-create-btn" onClick={onCreateDiagram}>
+          {canWrite && <button className="home-create-btn" onClick={onCreateDiagram}>
             <Plus size={16} /> Erstes Diagramm erstellen
-          </button>
+          </button>}
         </div>
       ) : (
         <div className="home-grid">

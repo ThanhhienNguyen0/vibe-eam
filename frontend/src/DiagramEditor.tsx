@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -17,7 +17,17 @@ import ReactFlow, {
 } from "reactflow";
 import { GitBranch, MousePointerClick, PanelLeftClose, PanelLeftOpen, Search, SlidersHorizontal, X } from "lucide-react";
 import { sidebarApi } from "./Sidebar/sidebarApi";
-import { getAllowedConnectionTypes, validateDiagram, type DiagramValidationResult } from "./Sidebar/metamodelRules";
+import { useAccess } from "./access";
+import {
+  getAllowedConnectionTypes,
+  getApplicableViewpoints,
+  getViewpointRule,
+  isLocalViewpointPreview,
+  projectDiagramToViewpoint,
+  runIfDiagramWritable,
+  validateDiagram,
+  type DiagramValidationResult
+} from "./Sidebar/metamodelRules";
 import { COMPONENT_DRAG_MIME, COMPONENT_TYPE_DRAG_MIME } from "./Sidebar/sidebarTypes";
 import type {
   ComponentInstance,
@@ -71,6 +81,41 @@ interface ContextMenu {
   x: number;
   y: number;
   nodeId: string;
+}
+
+export type ConnectionModeAction =
+  | { type: "start"; sourceId: string }
+  | { type: "cancel" }
+  | { type: "viewpoint-changed"; localPreviewActive: boolean };
+
+export function connectionModeReducer(state: string | null, action: ConnectionModeAction): string | null {
+  if (action.type === "start") return action.sourceId;
+  if (action.type === "cancel") return null;
+  return action.localPreviewActive ? null : state;
+}
+
+export async function handleDiagramNodeClick({
+  connectingFrom,
+  targetId,
+  canWrite,
+  cancelConnectionMode,
+  selectComponent,
+  createConnection
+}: {
+  connectingFrom: string | null;
+  targetId: string;
+  canWrite: boolean;
+  cancelConnectionMode: () => void;
+  selectComponent: (id: string) => void;
+  createConnection: (sourceId: string, targetId: string) => Promise<void>;
+}): Promise<void> {
+  if (!connectingFrom) {
+    selectComponent(targetId);
+    return;
+  }
+  cancelConnectionMode();
+  if (!canWrite || targetId === connectingFrom) return;
+  await createConnection(connectingFrom, targetId);
 }
 
 const lineStyleDash: Record<string, string | undefined> = {
@@ -450,7 +495,8 @@ function buildNodes(
   hoveredNodeId: string | null,
   activeNodeId: string | null,
   onInteractionStart: ShapedNodeData["onInteractionStart"],
-  onTransformEnd: ShapedNodeData["onTransformEnd"]
+  onTransformEnd: ShapedNodeData["onTransformEnd"],
+  canEdit: boolean
 ): Node[] {
   return diagram.componentIds.flatMap((id) => {
     const comp = components.find((c) => c.id === id);
@@ -474,7 +520,7 @@ function buildNodes(
         color: type?.color ?? "#cbd5e1",
         shape,
         isSource: connectingFrom === id,
-        showInteraction: id === hoveredNodeId || id === activeNodeId,
+        showInteraction: canEdit && (id === hoveredNodeId || id === activeNodeId),
         onInteractionStart,
         onTransformEnd
       } satisfies ShapedNodeData,
@@ -694,6 +740,14 @@ function DiagramEditorInner({
   onSelectConnection,
   onClose
 }: Props) {
+  const { canWrite: roleCanWrite } = useAccess();
+  const [viewpointFilterId, setViewpointFilterId] = useState(diagram.viewpointId ?? "");
+  const localPreviewActive = isLocalViewpointPreview(diagram, viewpointFilterId || undefined);
+  const canWrite = roleCanWrite && !localPreviewActive;
+  const runMutation = useCallback(
+    <T,>(mutation: () => Promise<T>) => runIfDiagramWritable(canWrite, mutation),
+    [canWrite]
+  );
   // Knotengröße nach Skalieren persistieren (inkl. Position, falls oben/links gezogen wurde)
   const diagramRef = useRef(diagram);
   diagramRef.current = diagram;
@@ -711,17 +765,19 @@ function DiagramEditorInner({
 
   const onNodeTransformEnd = useCallback(
     async (nodeId: string, pos: { x: number; y: number; width: number; height: number }) => {
+      if (!canWrite) return;
       setActiveNodeId(null);
       const current = diagramRef.current;
       const updatedPositions = { ...current.positions, [nodeId]: pos };
-      const updated = await sidebarApi.updateDiagram(current.id, { positions: updatedPositions });
+      const updated = await runMutation(() => sidebarApi.updateDiagram(current.id, { positions: updatedPositions }));
+      if (!updated) return;
       onDiagramChange(updated);
     },
-    [onDiagramChange]
+    [canWrite, onDiagramChange, runMutation]
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(
-    buildNodes(diagram, components, componentTypes, null, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd)
+    buildNodes(diagram, components, componentTypes, null, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, canWrite)
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState(
     buildEdges(diagram, connections, connectionTypes)
@@ -732,26 +788,59 @@ function DiagramEditorInner({
   const [pendingAddSaving, setPendingAddSaving] = useState(false);
   const [pendingCreate, setPendingCreate] = useState<{ typeId: string; position: DiagramPosition } | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenu>({ visible: false, x: 0, y: 0, nodeId: "" });
-  const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
+  const [connectingFrom, dispatchConnectionMode] = useReducer(connectionModeReducer, null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState("");
   const [validationResult, setValidationResult] = useState<DiagramValidationResult | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
-  const activeViewpoint = diagram.viewpointId ? viewpoints.find((viewpoint) => viewpoint.id === diagram.viewpointId) : undefined;
+  const activeViewpoint = viewpointFilterId ? viewpoints.find((viewpoint) => viewpoint.id === viewpointFilterId) : undefined;
   const sidebarState = useMemo(
     () => ({ metamodel, componentTypes, connectionTypes, connectionRules, viewpointRules, validationRules, viewpoints, components, connections, diagrams: [diagram] }),
     [metamodel, componentTypes, connectionTypes, connectionRules, viewpointRules, validationRules, viewpoints, components, connections, diagram]
   );
+  const displayedDiagram = useMemo(
+    () => projectDiagramToViewpoint(diagram, sidebarState, viewpointFilterId || undefined),
+    [diagram, sidebarState, viewpointFilterId]
+  );
+  const applicableViewpoints = useMemo(
+    () => getApplicableViewpoints(diagram, sidebarState),
+    [diagram, sidebarState]
+  );
+  const activeViewpointRule = useMemo(
+    () => getViewpointRule(sidebarState, viewpointFilterId || undefined),
+    [sidebarState, viewpointFilterId]
+  );
+  const activeVisibleTypeIds = useMemo(() => {
+    if (!activeViewpointRule) return null;
+    const visibleIds = activeViewpointRule.visibleComponentTypeIds ?? [];
+    const ids = visibleIds.length > 0 ? visibleIds : activeViewpointRule.allowedComponentTypeIds;
+    return ids.length > 0 ? new Set(ids) : null;
+  }, [activeViewpointRule]);
   const visibleComponentTypes = useMemo(
-    () => activeViewpoint ? componentTypes.filter((type) => activeViewpoint.allowedComponentTypeIds.includes(type.id)) : componentTypes,
-    [activeViewpoint, componentTypes]
+    () => activeVisibleTypeIds ? componentTypes.filter((type) => activeVisibleTypeIds.has(type.id)) : componentTypes,
+    [activeVisibleTypeIds, componentTypes]
   );
 
   useEffect(() => {
-    setNodes(buildNodes(diagram, components, componentTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd));
-    setEdges(buildEdges(diagram, connections, connectionTypes));
-  }, [diagram, components, componentTypes, connections, connectionTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, setNodes, setEdges]);
+    setViewpointFilterId(diagram.viewpointId ?? "");
+    setValidationResult(null);
+    setError("");
+  }, [diagram.id, diagram.viewpointId]);
+
+  useEffect(() => {
+    if (!localPreviewActive) return;
+    setPendingAdd(null);
+    setPendingCreate(null);
+    dispatchConnectionMode({ type: "viewpoint-changed", localPreviewActive });
+    setContextMenu({ visible: false, x: 0, y: 0, nodeId: "" });
+    setIsDragOver(false);
+  }, [localPreviewActive]);
+
+  useEffect(() => {
+    setNodes(buildNodes(displayedDiagram, components, componentTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, canWrite));
+    setEdges(buildEdges(displayedDiagram, connections, connectionTypes));
+  }, [canWrite, displayedDiagram, components, componentTypes, connections, connectionTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, setNodes, setEdges]);
 
   useEffect(() => () => window.clearTimeout(hoverLeaveTimer.current), []);
 
@@ -771,6 +860,7 @@ function DiagramEditorInner({
 
   const createConnectionBetween = useCallback(
     async (sourceId: string, targetId: string) => {
+      if (!canWrite) return;
       const srcComp = components.find((c) => c.id === sourceId);
       const tgtComp = components.find((c) => c.id === targetId);
       if (!srcComp || !tgtComp) return;
@@ -788,13 +878,14 @@ function DiagramEditorInner({
       }
 
       try {
-        const result = await sidebarApi.createDiagramConnection(diagram.id, {
+        const result = await runMutation(() => sidebarApi.createDiagramConnection(diagram.id, {
           name: "",
           connectionTypeId: connType.id,
           sourceComponentId: sourceId,
           targetComponentId: targetId,
           description: ""
-        });
+        }));
+        if (!result) return;
         if (result.created) onConnectionCreated(result.connection);
         onDiagramChange(result.diagram);
         setError("");
@@ -802,7 +893,7 @@ function DiagramEditorInner({
         setError(err instanceof Error ? err.message : "Verbindung konnte nicht erstellt werden.");
       }
     },
-    [activeViewpoint, components, diagram, onConnectionCreated, onDiagramChange, sidebarState]
+    [activeViewpoint, canWrite, components, diagram, onConnectionCreated, onDiagramChange, runMutation, sidebarState]
   );
 
   const onConnect = useCallback(
@@ -817,16 +908,16 @@ function DiagramEditorInner({
 
   const onNodeClick = useCallback(
     async (_e: React.MouseEvent, node: Node) => {
-      if (!connectingFrom) {
-        onSelectComponent(node.id);
-        return;
-      }
-      const target = node.id;
-      setConnectingFrom(null);
-      if (target === connectingFrom) return;
-      await createConnectionBetween(connectingFrom, target);
+      await handleDiagramNodeClick({
+        connectingFrom,
+        targetId: node.id,
+        canWrite,
+        cancelConnectionMode: () => dispatchConnectionMode({ type: "cancel" }),
+        selectComponent: onSelectComponent,
+        createConnection: createConnectionBetween
+      });
     },
-    [connectingFrom, createConnectionBetween, onSelectComponent]
+    [canWrite, connectingFrom, createConnectionBetween, onSelectComponent]
   );
 
   const onEdgeClick = useCallback(
@@ -840,11 +931,12 @@ function DiagramEditorInner({
 
   const onNodeContextMenu = useCallback((e: React.MouseEvent, node: Node) => {
     e.preventDefault();
-    setConnectingFrom(null);
+    dispatchConnectionMode({ type: "cancel" });
     setContextMenu({ visible: true, x: e.clientX, y: e.clientY, nodeId: node.id });
   }, []);
 
   async function removeFromDiagram(nodeId: string) {
+    if (!canWrite) return;
     const newCompIds = diagram.componentIds.filter((id) => id !== nodeId);
     const newConnIds = diagram.connectionIds.filter((id) => {
       const conn = connections.find((c) => c.id === id);
@@ -854,11 +946,12 @@ function DiagramEditorInner({
       Object.entries(diagram.positions).filter(([componentId]) => componentId !== nodeId)
     );
     try {
-      const updated = await sidebarApi.updateDiagram(diagram.id, {
+      const updated = await runMutation(() => sidebarApi.updateDiagram(diagram.id, {
         componentIds: newCompIds,
         connectionIds: newConnIds,
         positions: newPositions
-      });
+      }));
+      if (!updated) return;
       onDiagramChange(updated);
       setValidationResult(null);
       setError("");
@@ -887,6 +980,7 @@ function DiagramEditorInner({
   }, []);
 
   function onCanvasDrop(e: React.DragEvent) {
+      if (!canWrite) return;
       setIsDragOver(false);
       const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
 
@@ -906,25 +1000,27 @@ function DiagramEditorInner({
   }
 
   async function createAndPlaceComponent(name: string, properties: Record<string, string>) {
-    if (!pendingCreate) return;
+    if (!canWrite || !pendingCreate) return;
     const { typeId, position } = pendingCreate;
-    if (activeViewpoint && !activeViewpoint.allowedComponentTypeIds.includes(typeId)) {
+    if (activeViewpoint && activeVisibleTypeIds && !activeVisibleTypeIds.has(typeId)) {
       const type = componentTypes.find((item) => item.id === typeId);
       setError(`${type?.name ?? "This component type"} is not allowed in the selected ${activeViewpoint.name}.`);
       return;
     }
     try {
-      const comp = await sidebarApi.createComponent({
+      const comp = await runMutation(() => sidebarApi.createComponent({
         name,
         componentTypeId: typeId,
         properties,
         description: ""
-      });
+      }));
+      if (!comp) return;
       onComponentCreated(comp);
-      const updated = await sidebarApi.updateDiagram(diagram.id, {
+      const updated = await runMutation(() => sidebarApi.updateDiagram(diagram.id, {
         componentIds: [...diagram.componentIds, comp.id],
         positions: { ...diagram.positions, [comp.id]: position }
-      });
+      }));
+      if (!updated) return;
       onDiagramChange(updated);
       setPendingCreate(null);
       setError("");
@@ -936,10 +1032,11 @@ function DiagramEditorInner({
   // ── Smart add ───────────────────────────────────────────────────────────────
 
   async function startAddComponent(compId: string, position?: DiagramPosition) {
+    if (!canWrite) return;
     if (diagram.componentIds.includes(compId)) return;
     const component = components.find((item) => item.id === compId);
     const componentType = componentTypes.find((type) => type.id === component?.componentTypeId);
-    if (activeViewpoint && componentType && !activeViewpoint.allowedComponentTypeIds.includes(componentType.id)) {
+    if (activeViewpoint && activeVisibleTypeIds && componentType && !activeVisibleTypeIds.has(componentType.id)) {
       setError(`${componentType.name} is not allowed in the selected ${activeViewpoint.name}.`);
       return;
     }
@@ -973,6 +1070,7 @@ function DiagramEditorInner({
   }
 
   async function doAdd(compId: string, extraCompIds: string[], extraConnIds: string[], position?: DiagramPosition) {
+    if (!canWrite) return;
     const newCompIds = [
       ...diagram.componentIds, compId,
       ...extraCompIds.filter((id) => !diagram.componentIds.includes(id))
@@ -989,16 +1087,17 @@ function DiagramEditorInner({
         if (!newPositions[id]) newPositions[id] = { x: position.x + 260, y: position.y + i * 110 };
       });
     }
-    const updated = await sidebarApi.updateDiagram(diagram.id, {
+    const updated = await runMutation(() => sidebarApi.updateDiagram(diagram.id, {
       componentIds: newCompIds,
       connectionIds: newConnIds,
       positions: newPositions
-    });
+    }));
+    if (!updated) return;
     onDiagramChange(updated);
   }
 
   async function confirmAdd() {
-    if (!pendingAdd || pendingAddSaving) return;
+    if (!canWrite || !pendingAdd || pendingAddSaving) return;
     setPendingAddSaving(true);
     setPendingAddError("");
     try {
@@ -1018,7 +1117,7 @@ function DiagramEditorInner({
   }
 
   async function addCompOnly() {
-    if (!pendingAdd || pendingAddSaving) return;
+    if (!canWrite || !pendingAdd || pendingAddSaving) return;
     setPendingAddSaving(true);
     setPendingAddError("");
     try {
@@ -1032,8 +1131,12 @@ function DiagramEditorInner({
   }
 
   async function runDiagramValidation() {
-    const local = validateDiagram(diagram, sidebarState);
+    const local = validateDiagram(displayedDiagram, sidebarState);
     setValidationResult(local);
+    if (viewpointFilterId !== (diagram.viewpointId ?? "")) {
+      setError("");
+      return;
+    }
     try {
       const server = await sidebarApi.validateDiagram(diagram.id);
       setValidationResult(server);
@@ -1058,8 +1161,8 @@ function DiagramEditorInner({
   ].filter((group) => group.items.length > 0) : [];
   const validationStatus = validationResult
     ? validationResult.valid
-      ? validationResult.warnings.length > 0 ? "Diagramm gültig mit Warnungen" : "Diagramm gültig"
-      : "Diagramm ungültig"
+      ? validationResult.warnings.length > 0 ? "Ansicht gültig mit Warnungen" : "Ansicht gültig"
+      : "Ansicht ungültig"
     : "";
 
   return (
@@ -1067,7 +1170,7 @@ function DiagramEditorInner({
 
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
       <div className="diagram-toolbar">
-        <button
+        {canWrite && <button
           className="diagram-palette-toggle"
           onClick={() => setPaletteOpen((v) => !v)}
           title={paletteOpen ? "Palette ausblenden" : "Palette einblenden"}
@@ -1075,31 +1178,33 @@ function DiagramEditorInner({
         >
           {paletteOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
           Palette
-        </button>
+        </button>}
         <strong className="diagram-title">{diagram.name}</strong>
-        <select
-          className="diagram-viewpoint-select"
-          value={diagram.viewpointId ?? ""}
-          onChange={async (e) => {
-            try {
-              const updated = await sidebarApi.updateDiagram(diagram.id, { viewpointId: e.target.value || undefined });
-              onDiagramChange(updated);
+        <label className="diagram-viewpoint-filter">
+          <span>Ansicht</span>
+          <select
+            className="diagram-viewpoint-select"
+            aria-label="Diagrammansicht filtern"
+            value={viewpointFilterId}
+            onChange={(e) => {
+              setViewpointFilterId(e.target.value);
               setValidationResult(null);
               setError("");
-            } catch (err) {
-              setError(err instanceof Error ? err.message : "Viewpoint konnte nicht gesetzt werden.");
-            }
-          }}
-          title="Viewpoint fuer Diagramm"
-        >
-          <option value="">Kein Viewpoint</option>
-          {viewpoints.map((viewpoint) => <option key={viewpoint.id} value={viewpoint.id}>{viewpoint.name}</option>)}
-        </select>
+            }}
+            title="Filtert nur die sichtbaren Inhalte und ändert das Diagramm nicht"
+          >
+            <option value="">Alle Inhalte</option>
+            {applicableViewpoints.map((viewpoint) => <option key={viewpoint.id} value={viewpoint.id}>{viewpoint.name}</option>)}
+          </select>
+        </label>
         <button className="diagram-palette-toggle" onClick={runDiagramValidation}>
-          <SlidersHorizontal size={16} /> Validate diagram
+          <SlidersHorizontal size={16} /> Ansicht prüfen
         </button>
         <span className="muted diagram-hint">
-          Hover: Mitte = verschieben · Kanten = eine Richtung · Ecken = beide Richtungen
+          {activeViewpoint
+            ? `Zielgruppe: ${activeViewpoint.stakeholderRole} · ${activeViewpoint.purpose} · keine Benutzerrolle`
+            : "Alle Diagramminhalte · Ansichtsfilter speichert nichts"}
+          {localPreviewActive ? " · Vorschau, nicht bearbeitbar" : !roleCanWrite && " · Leseansicht"}
         </span>
         <button className="diagram-close-btn" onClick={onClose} title="Tab schließen"><X size={16} /></button>
       </div>
@@ -1132,14 +1237,14 @@ function DiagramEditorInner({
           <div className="diagram-connect-banner">
             <GitBranch size={14} />
             <span>Verbindung von <strong>{fromComp?.name}</strong> — Klicke auf Ziel-Komponente</span>
-            <button onClick={() => setConnectingFrom(null)}>Abbrechen</button>
+            <button onClick={() => dispatchConnectionMode({ type: "cancel" })}>Abbrechen</button>
           </div>
         );
       })()}
 
       {/* ── Palette + Canvas ────────────────────────────────────────────────── */}
       <div className="diagram-body">
-        {paletteOpen && (
+        {canWrite && paletteOpen && (
           <Palette
             components={availableComponents}
             componentTypes={visibleComponentTypes}
@@ -1149,21 +1254,24 @@ function DiagramEditorInner({
 
         <div
           className={`diagram-canvas${isDragOver ? " diagram-canvas--drop" : ""}`}
-          onDragOver={onCanvasDragOver}
+          onDragOver={canWrite ? onCanvasDragOver : undefined}
           onDragLeave={onCanvasDragLeave}
-          onDrop={onCanvasDrop}
+          onDrop={canWrite ? onCanvasDrop : undefined}
         >
           <ReactFlow
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
             nodesDraggable={false}
+            nodesConnectable={canWrite}
+            edgesFocusable={canWrite}
+            deleteKeyCode={canWrite ? "Backspace" : null}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
+            onConnect={canWrite ? onConnect : undefined}
             onNodeClick={onNodeClick}
             onEdgeClick={onEdgeClick}
-            onNodeContextMenu={onNodeContextMenu}
+            onNodeContextMenu={canWrite ? onNodeContextMenu : undefined}
             onNodeMouseEnter={(_e, node) => {
               window.clearTimeout(hoverLeaveTimer.current);
               setHoveredNodeId(node.id);
@@ -1177,7 +1285,7 @@ function DiagramEditorInner({
             fitView
           >
             <MiniMap nodeStrokeWidth={3} pannable zoomable />
-            <Controls />
+            <Controls showInteractive={canWrite} />
             <Background gap={24} />
           </ReactFlow>
 
@@ -1273,7 +1381,7 @@ function DiagramEditorInner({
           <button
             className="diagram-context-item"
             onClick={() => {
-              setConnectingFrom(contextMenu.nodeId);
+              dispatchConnectionMode({ type: "start", sourceId: contextMenu.nodeId });
               setContextMenu((m) => ({ ...m, visible: false }));
             }}
           >

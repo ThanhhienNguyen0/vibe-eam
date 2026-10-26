@@ -1,6 +1,5 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { AuthHttpError, AuthService } from "./authService.js";
-import { requireAuth } from "./authMiddleware.js";
 
 function sendAuthError(error: unknown, res: Response, next: NextFunction): void {
   if (error instanceof AuthHttpError) {
@@ -10,9 +9,8 @@ function sendAuthError(error: unknown, res: Response, next: NextFunction): void 
   next(error);
 }
 
-export function createAuthRouter(service: AuthService, jwtSecret: string): Router {
+export function createAuthRouter(service: AuthService): Router {
   const router = Router();
-  const authenticated = requireAuth(jwtSecret);
 
   router.post("/register", async (req, res, next) => {
     try {
@@ -30,7 +28,7 @@ export function createAuthRouter(service: AuthService, jwtSecret: string): Route
     }
   });
 
-  router.get("/me", authenticated, async (req: Request, res, next) => {
+  router.get("/me", async (req: Request, res, next) => {
     try {
       res.json(await service.me(req.user!));
     } catch (error) {
@@ -38,7 +36,7 @@ export function createAuthRouter(service: AuthService, jwtSecret: string): Route
     }
   });
 
-  router.post("/logout", authenticated, (_req, res) => {
+  router.post("/logout", (_req, res) => {
     res.status(204).send();
   });
 

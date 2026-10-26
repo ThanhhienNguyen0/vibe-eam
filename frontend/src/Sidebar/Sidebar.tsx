@@ -18,6 +18,7 @@ import {
 import { sidebarApi } from "./sidebarApi";
 import { COMPONENT_DRAG_MIME, COMPONENT_TYPE_DRAG_MIME, DEFAULT_TYPE_CATEGORY } from "./sidebarTypes";
 import type { ComponentType, SidebarState } from "./sidebarTypes";
+import { useAccess } from "../access";
 
 export type SidebarSelection =
   | { kind: "componentTypes" }
@@ -102,6 +103,7 @@ function Folder({ label, icon, open, onToggle, onAdd, addTitle, active, count, c
 }
 
 interface RowProps {
+  structural?: boolean;
   label: string;
   icon?: React.ReactNode;
   color?: string;
@@ -121,9 +123,12 @@ interface RowProps {
 }
 
 function Row({
+  structural,
   label, icon, color, active, onClick, onDoubleClick, onDelete, onOpen, openTitle,
   onContextMenu, draggable, onDragStart, dragHint, renaming, onRenameSubmit, onRenameCancel
 }: RowProps) {
+  const { canWrite, canManageMetamodel } = useAccess();
+  const canEdit = structural ? canManageMetamodel : canWrite;
   if (renaming) {
     return (
       <div className={`sb-row sb-row--renaming${active ? " sb-active" : ""}`}>
@@ -149,12 +154,12 @@ function Row({
       className={`sb-row${active ? " sb-active" : ""}${draggable ? " sb-row--draggable" : ""}`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
-      onContextMenu={onContextMenu}
+      onContextMenu={canEdit ? onContextMenu : undefined}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && onClick()}
-      draggable={draggable}
-      onDragStart={onDragStart}
+      draggable={canWrite && draggable}
+      onDragStart={canWrite ? onDragStart : undefined}
       title={dragHint}
     >
       {color && <span className="sb-color-dot" style={{ background: color }} />}
@@ -169,7 +174,7 @@ function Row({
           <ExternalLink size={12} />
         </button>
       )}
-      {onDelete && (
+      {canEdit && onDelete && (
         <button
           className="sb-delete-btn"
           title="Löschen"
@@ -196,6 +201,7 @@ function EmptyHint({ text, actionLabel, onAction }: { text: string; actionLabel?
 }
 
 export default function Sidebar({ onSelect, selection, sidebarState, onStateChange, onOpenDiagram, activeDiagramId }: Props) {
+  const { canWrite, canManageMetamodel } = useAccess();
   const { componentTypes, connectionTypes, connectionRules, viewpoints, components, connections, diagrams } = sidebarState;
 
   const [open, setOpen] = useState({
@@ -611,7 +617,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
         icon={<LayoutDashboard size={14} />}
         open={isOpen("componentTypes")}
         onToggle={() => toggle("componentTypes")}
-        onAdd={addComponentType}
+        onAdd={canManageMetamodel ? addComponentType : undefined}
         addTitle="Neuer Komponenten-Typ"
         active={isActive({ kind: "componentTypes" })}
         count={componentTypes.length}
@@ -630,6 +636,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               color={ct.color}
               active={isActive({ kind: "componentType", id: ct.id })}
               onClick={() => onSelect({ kind: "componentType", id: ct.id })}
+              structural
               onDelete={() => deleteComponentType(ct.id)}
               onContextMenu={(e) => openContextMenu(e, "componentType", ct.id, ct.name)}
               draggable
@@ -677,7 +684,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
           });
         })()}
         {componentTypes.length === 0 && (
-          <EmptyHint text="Noch keine Typen definiert." actionLabel="Typ anlegen" onAction={addComponentType} />
+          <EmptyHint text="Noch keine Typen definiert." actionLabel="Typ anlegen" onAction={canManageMetamodel ? addComponentType : undefined} />
         )}
         {componentTypes.length > 0 && visibleComponentTypes.length === 0 && (
           <EmptyHint text="Keine Treffer." />
@@ -689,7 +696,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
         icon={<GitBranch size={14} />}
         open={isOpen("connectionTypes")}
         onToggle={() => toggle("connectionTypes")}
-        onAdd={addConnectionType}
+        onAdd={canManageMetamodel ? addConnectionType : undefined}
         addTitle="Neuer Verbindungs-Typ"
         active={isActive({ kind: "connectionTypes" })}
         count={connectionTypes.length}
@@ -708,6 +715,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               color={ct.color}
               active={isActive({ kind: "connectionType", id: ct.id })}
               onClick={() => onSelect({ kind: "connectionType", id: ct.id })}
+              structural
               onDelete={() => deleteConnectionType(ct.id)}
               onContextMenu={(e) => openContextMenu(e, "connectionType", ct.id, ct.name)}
               renaming={isRenaming("connectionType", ct.id)}
@@ -750,7 +758,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
           });
         })()}
         {connectionTypes.length === 0 && (
-          <EmptyHint text="Noch keine Typen definiert." actionLabel="Typ anlegen" onAction={addConnectionType} />
+          <EmptyHint text="Noch keine Typen definiert." actionLabel="Typ anlegen" onAction={canManageMetamodel ? addConnectionType : undefined} />
         )}
         {connectionTypes.length > 0 && visibleConnectionTypes.length === 0 && (
           <EmptyHint text="Keine Treffer." />
@@ -763,7 +771,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
         icon={<GitBranch size={14} />}
         open={isOpen("connectionRules")}
         onToggle={() => toggle("connectionRules")}
-        onAdd={addConnectionRule}
+        onAdd={canManageMetamodel ? addConnectionRule : undefined}
         addTitle={componentTypes.length < 2 || connectionTypes.length === 0 ? "Benotigt Component Types und Connection Types" : "Neue Connection Rule"}
         active={isActive({ kind: "connectionRules" })}
         count={connectionRules.length}
@@ -780,6 +788,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               color={connectionType?.color}
               active={isActive({ kind: "connectionRule", id: rule.id })}
               onClick={() => onSelect({ kind: "connectionRule", id: rule.id })}
+              structural
               onDelete={() => deleteConnectionRule(rule.id)}
               onContextMenu={(e) => openContextMenu(e, "connectionRule", rule.id, label)}
               renaming={isRenaming("connectionRule", rule.id)}
@@ -789,7 +798,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
           );
         })}
         {connectionRules.length === 0 && (
-          <EmptyHint text="Noch keine Connection Rules definiert." actionLabel="Rule anlegen" onAction={addConnectionRule} />
+          <EmptyHint text="Noch keine Connection Rules definiert." actionLabel="Rule anlegen" onAction={canManageMetamodel ? addConnectionRule : undefined} />
         )}
         {connectionRules.length > 0 && visibleConnectionRules.length === 0 && <EmptyHint text="Keine Treffer." />}
       </Folder>
@@ -799,7 +808,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
         icon={<Eye size={14} />}
         open={isOpen("viewpoints")}
         onToggle={() => toggle("viewpoints")}
-        onAdd={addViewpoint}
+        onAdd={canManageMetamodel ? addViewpoint : undefined}
         addTitle="Neuer Viewpoint"
         active={isActive({ kind: "viewpoints" })}
         count={viewpoints.length}
@@ -811,6 +820,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
             icon={<Eye size={13} />}
             active={isActive({ kind: "viewpoint", id: vp.id })}
             onClick={() => onSelect({ kind: "viewpoint", id: vp.id })}
+            structural
             onDelete={() => deleteViewpoint(vp.id)}
             onContextMenu={(e) => openContextMenu(e, "viewpoint", vp.id, vp.name)}
             renaming={isRenaming("viewpoint", vp.id)}
@@ -819,7 +829,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
           />
         ))}
         {viewpoints.length === 0 && (
-          <EmptyHint text="Noch keine Viewpoints definiert." actionLabel="Viewpoint anlegen" onAction={addViewpoint} />
+          <EmptyHint text="Noch keine Viewpoints definiert." actionLabel="Viewpoint anlegen" onAction={canManageMetamodel ? addViewpoint : undefined} />
         )}
         {viewpoints.length > 0 && visibleViewpoints.length === 0 && <EmptyHint text="Keine Treffer." />}
       </Folder>
@@ -834,7 +844,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
         icon={<Server size={14} />}
         open={isOpen("components")}
         onToggle={() => toggle("components")}
-        onAdd={addComponent}
+        onAdd={canWrite ? addComponent : undefined}
         addTitle={componentTypes.length === 0 ? "Zuerst einen Komponenten-Typ anlegen" : "Neue Komponente"}
         active={isActive({ kind: "components" })}
         count={components.length}
@@ -896,7 +906,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
                 <EmptyHint
                   text={componentTypes.length === 0 ? "Lege zuerst einen Komponenten-Typ an." : "Noch keine Komponenten."}
                   actionLabel={componentTypes.length === 0 ? undefined : "Komponente anlegen"}
-                  onAction={componentTypes.length === 0 ? undefined : addComponent}
+                  onAction={!canWrite || componentTypes.length === 0 ? undefined : addComponent}
                 />
               )}
               {components.length > 0 && visibleComponents.length === 0 && <EmptyHint text="Keine Treffer." />}
@@ -910,7 +920,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
         icon={<GitBranch size={14} />}
         open={isOpen("connections")}
         onToggle={() => toggle("connections")}
-        onAdd={addConnection}
+        onAdd={canWrite ? addConnection : undefined}
         addTitle={connectionComponents.length < 2 || connectionTypes.length === 0 ? "Benötigt 2 sichtbare Komponenten und einen Verbindungs-Typ" : "Neue Verbindung"}
         active={isActive({ kind: "connections" })}
         count={connections.length}
@@ -944,7 +954,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
         icon={<LayoutDashboard size={14} />}
         open={isOpen("diagrams")}
         onToggle={() => toggle("diagrams")}
-        onAdd={addDiagram}
+        onAdd={canWrite ? addDiagram : undefined}
         addTitle="Neues Diagramm"
         active={isActive({ kind: "diagrams" })}
         count={diagrams.length}
@@ -966,7 +976,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
           />
         ))}
         {diagrams.length === 0 && (
-          <EmptyHint text="Noch keine Diagramme." actionLabel="Diagramm anlegen" onAction={addDiagram} />
+          <EmptyHint text="Noch keine Diagramme." actionLabel="Diagramm anlegen" onAction={canWrite ? addDiagram : undefined} />
         )}
         {diagrams.length > 0 && visibleDiagrams.length === 0 && <EmptyHint text="Keine Treffer." />}
       </Folder>

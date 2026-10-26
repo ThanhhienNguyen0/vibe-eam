@@ -1,5 +1,47 @@
 # AI Reflection Log
 
+## REQ-24 – technische Umsetzung, unabhängige Kontrolle und PR-Fortschreibung (20.10.2026)
+
+Geltung: Implementierungsprotokoll; die ursprüngliche lokale Umsetzung ist unabhängig bestätigt. Maßgebliche Belege sind `REQ-24_IMPLEMENTATION_EVIDENCE.md` und `REQ-24_REVIEW.md`; Draft-PR #88 und sein erster Remote-Lauf existieren. Die beiden dort zusätzlich erkannten CodeQL-Befunde sind lokal korrigiert; der erneute Remote-Lauf des Korrekturcommits, Containerausführung, Deployment und menschliche Freigabe werden separat belegt. Frühere Abschnitte bleiben historische Entwicklungsstände.
+
+### KI-Beitrag und Entscheidungen
+
+KI-gestützt entstanden Policy-/Routenvokabular, frischer Identitätsadapter, Prisma-Enummigration, company-lokale Nutzerverwaltung mit Sperrprüfung, rollenabhängige UI, abgesicherter Demo-Seed, API-/Frontend-/DB-Regressionen sowie die Dokumentation. Es wird kein gemessener menschlicher Zeitanteil und kein allgemeiner Qualitätsvorsprung von KI behauptet. Der Änderungsumfang bleibt auf Auth/RBAC und die für einen reproduzierbaren Seed nachweislich nötige Referenzkorrektur begrenzt.
+
+Entscheidungsalternativen: verteilte Route-Stringchecks, reine UI-Prüfung, acht Stunden autoritative Tokenrollen, zusätzliche Tokenversionsverwaltung und pauschale Hochstufung aller Mitglieder. Gründe und Konsequenzen sind im ADR dokumentiert. Zur Konkurrenzkontrolle wird dieselbe Companyzeile vor Akteursprüfung/Adminzählung gesperrt. Der lokale Identitätsadapter reicht nur interne DB-Rollen weiter; ein späterer OIDC-Adapter darf keine Providerrollen unmittelbar übernehmen.
+
+### Tatsächliche Fehlversuche und Korrekturen
+
+- Der neue verwaltete Worktree lag außerhalb des ursprünglichen Sandbox-Schreibbereichs. Git-/Installationsversuche im Sandboxkontext scheiterten mit fehlendem Worktreezugriff beziehungsweise `EPERM`; die ausdrücklich beauftragten lokalen Operationen wurden im freigegebenen Ausführungskontext wiederholt. Keine destruktiven Git-Befehle und keine Übernahme der Dependabot-Arbeit.
+- Zwei Patchentwürfe wurden vor Anwendung durch Format-/Kontextprüfung abgewiesen; danach wurden geordnete, getrennte Änderungen angewandt. Kein daraus abgeleiteter Codeerfolg behauptet.
+- Ein Frontend-Propname (`componentId` statt vorhandenem `compId`) wurde durch Typecheck gefunden und korrigiert. Ein Komponententest erwartete einen nicht vorhandenen Tooltiptext; die Erwartung wurde an die belegte vorhandene Beschriftung angepasst, ohne Rollenprüfung zu entfernen.
+- PostgreSQL 16 lag nur als Restverzeichnis vor; vorhandene PostgreSQL-14-Binaries wurden für eine separate temporäre Instanz verwendet. Docker war zunächst nicht erreichbar; Docker Desktop wurde im Hintergrund angestoßen, die endgültigen DB-Tests verwenden es nicht. Keine bestehende Datenbank wurde verändert.
+- Windows-`pg_ctl` hielt erfasste Ausgabehandles offen, obwohl der Testserver erreichbar war. Der identifizierte Teststarter und nur dessen Cluster wurden gestoppt; Start/Stop verwenden keine geerbten Ausgabepipes mehr.
+- Der erste DB-Lauf hatte ein abweichendes Test-Arbeitsverzeichnis; Seed-/Migrationspfade wurden durch explizites Backend-CWD korrigiert.
+- Der reale Seed scheiterte reproduzierbar an einer BPMN-Viewpointreferenz: vorhandene Legacy-Beispiele wurden mit einer EAM-only-Definition vermischt. Der Seed verwendet jetzt die bereits getestete konsistente Starterfunktion und erhält bestehende Metamodelle. Beide echten Seed-Durchläufe und drei Rollenlogins werden geprüft.
+- Der Migrations-Negativtest sah zunächst Exitcode 0 trotz korrekter Ablehnung/Rollback. Erfasste `psql`-Ausgabe zeigte ignorierte Optionen hinter einer positionalen Datenbank-URL unter Windows. Explizites `-d` vor `-f -`, `-X` und `ON_ERROR_STOP` machen den Fehlerpfad reproduzierbar. Die Migration wurde nicht permissiver gemacht.
+- Beim Dockerabgleich wurde die neue Frontend-Quelleinbindung der reinen Policy sichtbar; die kanonische Datei wird nun ausdrücklich in den Frontend-Buildkontext kopiert. Ein lokaler normaler Build allein wäre für diesen Containerpfad kein Beleg gewesen.
+
+### Sicherheitsabwägungen, Wartbarkeit und offene Prüfung
+
+Beobachtbar sind ein zentraler Ort für Grants, eine vollständige inventarisierte Routenzuordnung, gemeinsame Passwortvalidierung/Hashkosten und zusätzliche echte DB-/UI-Vertragstests. Bewertung: Diese Struktur begrenzt konkrete Drift- und Auslassungsrisiken. Eine kausale Verbesserung allgemeiner Wartbarkeit ist nicht gemessen. Große Editor-/Storedateien, zwei Fachmodelle und bestehende Architektur-Persistenzkonkurrenz bleiben erhalten. Konkrete Gründe der Professorenkritik sind weiterhin nicht vollständig übermittelt und werden nicht erfunden.
+
+Vor Produktion sind Backup, Bootstrapadmin-Zuordnung und menschliche fachliche/Sicherheitsfreigabe nötig. 401/403, direkte Requests und echte parallele Herabstufungen wurden lokal und anschließend getrennt kontrolliert; Browser-E2E, OIDC, Passwortreset und Container-/Deploymentausführung sind dadurch nicht belegt. Rate-Limiting ist jetzt lokal regressionsgeprüft, bleibt jedoch pro Backendprozess. Globale E-Mail-Eindeutigkeit bleibt über einen generischen Anlagekonflikt erkennbar; keine fremden Company-/Nutzerinformationen werden zurückgegeben. Ein vollständiger Anti-Enumeration-Registrierungsprozess wäre zusätzlicher Scope. Direkte DB-Administration kann Repositoryinvarianten umgehen. Bereits laufende fachliche Requests werden bei Rollenänderungen nicht rückwirkend abgebrochen.
+
+Getrennter Kontrollprozess: `01a154a2-d3b0-70c3-9a30-a130659a071d` erhielt erst den vollständig selbstgeprüften lokalen Commit. Die Kontrollinstanz fand keinen P0–P2-Befund und meldete als P3, dass Statussätze und eigener Auditdatensatz noch fehlten. `REQ-24_REVIEW.md` sowie die eng begrenzten Statuskorrekturen behoben diesen Dokumentationsbefund; die reine Dokumentationsnachprüfung schloss P3 und meldete im lokal geprüften Umfang keine offenen P0–P3. Keine Selbstfreigabe, kein Push/PR/Merge/Issue-Close.
+
+### PR-CodeQL-Korrekturschleife vom 20.10.2026
+
+Nach Veröffentlichung von Draft-PR #88 waren die GitHub-Actions-Jobs erfolgreich, während GitHub Advanced Security zwei hohe Befunde als eigenen fehlgeschlagenen Check auswies. Die frühere lokale Prüfung hatte diese beiden statischen Sicherheitsbefunde nicht erkannt: Die kompakte E-Mail-Regulärformel konnte auf kontrollierten Eingaben übermäßig lange laufen, und vor der zentralen Autorisierung fehlte ein Requestlimit. Die Korrektur verwendet eine explizit längenbegrenzte lineare E-Mail-Prüfung sowie ein allgemeines und zwei Auth-spezifische IP-Limits vor den geschützten Routen.
+
+Die getrennte Folgekontrolle des ersten Korrekturcommits fand weitere konkrete Randbedingungen: Das Vertrauen in alle privaten Proxyadressen ermöglichte bei privaten Proxyketten manipulierbare Client-IPs; der JSON-Parser lief vor dem allgemeinen Limit; und das Überspringen aller erfolgreichen Authantworten ließ erfolgreiche Registrierungen ungezählt. Daraufhin wurde die tatsächlich dokumentierte Topologie festgeschrieben: genau ein vertrauenswürdiger Nginx-Hop, Überschreiben statt Anhängen von `X-Forwarded-For` und Loopbackbindung des direkt veröffentlichten Backend-Ports. Das allgemeine Limit läuft vor dem JSON-Parser. Registrierung zählt zehn Versuche einschließlich Erfolg, während nur erfolgreiche Logins vom separaten 20er-Login-Limit ausgenommen werden. Regressionstests variieren die nicht vertrauenswürdigen linken Headerwerte bei konstanter tatsächlicher Client-IP. Der Prozessspeicher des Limiters bleibt eine dokumentierte Skalierungsgrenze.
+
+Der Branch wurde mit dem inzwischen fortgeschrittenen `main` zusammengeführt, ohne veröffentlichte Historie umzuschreiben. Die gezielten Tests und das vollständige lokale Gate liefen nach der Korrektur erneut; konkrete Resultate stehen in `REQ-24_IMPLEMENTATION_EVIDENCE.md`. Erst der erneute GitHub-Advanced-Security-Check kann belegen, dass beide Remote-Befunde für den neuen Head geschlossen sind.
+
+Nach `npm ci` wurde einmal ein einzelner Auth-Test direkt gestartet und scheiterte vor der Testausführung, weil die saubere Installation den generierten Prisma-Client erwartungsgemäß nicht enthält. Das ist kein Produktbefund: Das kanonische `npm run check` führt `db:generate` zuerst aus. Dieser vollständige Ablauf wurde direkt aus der sauberen Installation wiederholt und bestand vollständig.
+
+Ein späterer gemeinsamer Zwei-Dateien-Vitest-Aufruf meldete unter Windows einen unerwartet beendeten Worker für `rbac.test.ts` (Exitcode `3221226505`), während die Auth-Datei bestand. Das vollständige Gate war zuvor grün; die beiden Dateien wurden anschließend einzeln wiederholt und bestanden mit 11/11 beziehungsweise 14/14 Tests. Nach der Proxyhärtung wurde der Authumfang auf zwölf Tests erweitert; der erste neue Registrierungstest verwendete für den erfolgreichen Request versehentlich keinen gemeinsamen Proxyheader und erwartete deshalb fälschlich denselben Limit-Bucket. Der Testaufbau wurde korrigiert und bestand anschließend 12/12. Es wurde kein Produktcode verändert, um diese Testfehler zu kaschieren.
+
 ## REQ-30 – belegte Selbstprüfung, 18.10.2026
 
 **Geltung:** Frühere Entwicklungszyklen sind historische Aufzeichnungen. Aktuell sind JWT/bcrypt-Authentifizierung und Company-Isolation implementiert, PostgreSQL wird auch für Company-bezogene Legacy-JSONB-Aggregate verwendet, 69 Backendtests bestehen als zu prüfender Umfang. Frühere Impact-/Portfolio-/Heatmap-/Capability-/Lifecycle-UI-Aussagen sind keine Zusage der heutigen Oberfläche. Der datierte Abschlussbeleg ist `REQ-30_IMPLEMENTATION_EVIDENCE.md`.
@@ -308,3 +350,52 @@ Stakeholder wurden bewusst als normale Diagrammelemente erhalten. Ein Stakeholde
 - Backup und Restore bleiben manuell; die Pipeline bestätigt nur, dass vor Produktion ein Backup existiert.
 - GitHub Environments, Secrets, Required Reviewers und der erste reale Workflowlauf sind externe Konfigurationsschritte.
 - Kein Zero-Downtime-Deployment und kein automatisches Prisma-Rollback.
+
+## REQ-24-Nachkorrektur: fachliche Viewer-Leseansicht
+
+### Beobachtung
+
+- Ein manueller Staging-Test zeigte bei Viewer-Komponenten die internen Felder `id` und `componentTypeId` sowie Eigenschaften als rohes JSON.
+- Die automatisierten Rollentests erkannten den Fehler nicht, weil sie nur Schreibaktionen und den Komponentennamen prüften.
+
+### Ursache und Entscheidung
+
+- Der generische Read-only-Fallback serialisierte jede Entität mit `Object.entries` und Objektwerte mit `JSON.stringify`.
+- Für Komponenten wurde deshalb eine eigene fachliche Leseansicht ergänzt: aufgelöster Typname, Beschreibung, einzeln beschriftete Eigenschaften sowie die bestehenden Verknüpfungen.
+- Die Korrektur ändert keine Backendberechtigung und keine Tenantabfrage. Die bereits autorisierten, company-gefilterten Lesedaten werden anders dargestellt.
+
+### Verifikation und Grenze
+
+- Ein eigener Viewer-Regressionstest fordert die fachlichen Inhalte und schließt interne ID-Feldnamen sowie die Schreibaktion aus.
+- Der gezielte Test bestand mit 10/10; `npm run check` bestand vollständig.
+- Die übrigen Entitätstypen verwenden weiterhin den vorhandenen generischen Read-only-Fallback. Gegenstand dieser Nachkorrektur ist der konkret gemeldete Komponentenfehler.
+
+## REQ-24: Rollen- und Viewpoint-Verwechslung im Diagrammeditor
+
+### Beobachtung und Ursache
+
+- Die ursprüngliche Auswahl änderte den gespeicherten `diagram.viewpointId`. Ein enger Viewpoint validierte dadurch das vollständige Diagramm, lehnte darin fachlich fremde Beziehungen ab und setzte die Auswahl nach dem fehlgeschlagenen Speichern zurück. Die sichtbare Auswahl und die stehengebliebene Fehlermeldung konnten deshalb verschiedene Ansichten nennen.
+- Rollen und Viewpoints waren in der Oberfläche nicht ausreichend getrennt erklärt. Rollen steuern Aktionen und API-Rechte; Viewpoints steuern sichtbare Diagramminhalte und fachliche Validierung.
+
+### Entscheidungen
+
+- Der Selector erzeugt nur eine lokale Projektion. Das Quelldiagramm bleibt unverändert.
+- Beziehungen werden nur gezeigt, wenn eine erlaubte ConnectionRule existiert und sie im gewählten Viewpoint zulässig ist. Unbekannte, verbotene oder regellose Beziehungen werden ausgeblendet.
+- Lokale Projektionen sind schreibgeschützt. Zustandsbereinigung und zentrale Mutationsschranke sichern auch bereits begonnene Interaktionen ab.
+- Eine kleine Zustandsmaschine und der produktiv verwendete Knotenklick-Handler bilden den Verbindungsmodus explizit ab und sind ohne zusätzliche Browser-Testabhängigkeiten testbar.
+
+### Kontrollschleife und Lernpunkte
+
+- Die erste Kontrolle fand einen Smart-Add-Pfad, der den lokalen Filter umgehen konnte, sowie einen Test gegen den falschen Starter. Beides wurde korrigiert.
+- Eine weitere Kontrolle fand eine stale Verbindungsinteraktion. Handler-Guards und Zustandsbereinigung schlossen den Funktionsfehler; erst der anschließende Verhaltenstest schloss auch die Prüflücke.
+- Ein zwischenzeitlicher jsdom-/Testing-Library-Test war funktional aussagekräftig, hätte aber Testpakete über das bestehende Backend-Dockerfile in das Laufzeit-Image übernommen und passte nicht zur gesamten deklarierten Node-Untergrenze. Die direkten Deklarationen und der dadurch zusätzlich aufgelöste Lockfile-Paketbaum wurden wieder entfernt; die schon vorher vorhandenen optionalen Vitest-Peer-Referenzen auf jsdom bleiben unverändert.
+- Ein vollständiger Prüflauf hatte einmalig einen unerwarteten Vitest-Workerabbruch. Der betroffene RBAC-Test bestand danach 14/14; der vollständige Wiederholungslauf bestand ohne Fehler. Daraus wurde kein Produktfehler abgeleitet.
+- Eine anschließende saubere Neuinstallation machte eine neue High-Einstufung für das transitive `body-parser` 1.20.8 sichtbar. Ein reguläres, nicht erzwungenes Lockfile-Update hob ausschließlich dieses Paket auf 1.20.9; danach meldeten Installation und Dependency-Gate null Schwachstellen.
+- Der erste Remote-CI-Lauf des veröffentlichten Viewpoint-Stands bestand alle fachlichen und statischen Gates, scheiterte aber beim Frontend-Containerbuild: Der allgemeine TypeScript-Build erfasste den kanonischen Startertest, während das Frontend-Dockerfile dessen Backend-Testquelle bewusst nicht kopiert. Ein eigener `tsconfig.build.json` schließt nur Testdateien vom Produktionsbuild aus; der unveränderte normale Typecheck prüft weiterhin alle Tests und deren Backend-Importe.
+
+### Abschluss
+
+- Finaler Produkt-/Testcode der Viewpoint-Korrektur: `74aa718ee61bcaaed4a4cefe18341b99aa2ef5c0`; unabhängig geprüfter Security-Patch-Head vor der Abschlussdokumentation: `1cb2335c55c8873f9880bf60754e3e4e5893fcdf`.
+- Vollständiger lokaler Check: 88 Backendtests bestanden, 7 übersprungen; 21 Frontendtests bestanden; Lint, Typechecks und beide Builds erfolgreich; 112 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfigurationsprüfung bestanden.
+- Unabhängige read-only Kontrolle von Viewpoint-Korrektur und anschließendem Security-Patch: keine offenen P0–P3. `npm ci` auditierte 443 Pakete ohne Schwachstelle; das Dependency-Gate meldete null Findings. Remote-, Staging- und Produktionsnachweise bleiben getrennt offen.
+- Die Buildpfad-Korrektur `007be0c2` wurde ebenfalls unabhängig ohne P0–P3 freigegeben. Vollständiger Check und Produktbundle waren lokal erfolgreich; ein lokaler Docker-Image-Build war mangels laufender Docker-Engine nicht möglich und muss durch den erneuten Remote-CI-Lauf belegt werden.

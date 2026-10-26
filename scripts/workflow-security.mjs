@@ -18,6 +18,7 @@ export function securityWorkflowChecks(ci, codeql, dependabot, pkg, deploymentWo
       check(job?.steps?.some((step) => !step.if && !step["continue-on-error"] && step.run?.split("\n").map((line) => line.trim()).includes(command)), `${name}: mandatory command missing or conditional: ${command}`);
     }
   }
+  check(jobs.verify?.steps?.some((step) => step.run === 'PG_BIN="$(pg_config --bindir)" npm run test:rbac:db' && !step.if && !step["continue-on-error"]), "REQ-24 isolated PostgreSQL gate must run and block on failure");
   const secretCheckout = jobs.secrets?.steps?.find((step) => step.uses?.startsWith("actions/checkout@"));
   check(secretCheckout?.with?.["fetch-depth"] === 0, "Secret scan requires full history");
   check(secretCheckout?.with?.["persist-credentials"] === false, "Secret scan checkout must not persist credentials");

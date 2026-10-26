@@ -1,10 +1,12 @@
+import type { Role } from "./access";
+
 export interface AuthUser {
   id: string;
   email: string;
   name: string | null;
   companyId: string;
   companyName: string;
-  role: string;
+  role: Role;
 }
 
 interface AuthResult {
@@ -13,7 +15,7 @@ interface AuthResult {
 }
 
 const sidebarBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "/api/sidebar";
-const API_ROOT = sidebarBase.endsWith("/sidebar") ? sidebarBase.slice(0, -8) : "/api";
+export const API_ROOT = sidebarBase.endsWith("/sidebar") ? sidebarBase.slice(0, -8) : "/api";
 const TOKEN_KEY = "eam.auth.token";
 
 export function getAuthToken(): string | null {
@@ -28,9 +30,22 @@ export function clearAuthToken(): void {
   window.localStorage.removeItem(TOKEN_KEY);
 }
 
-async function authRequest<T>(path: string, init?: RequestInit): Promise<T> {
+export class ApiError extends Error {
+  constructor(public readonly status: number, message: string) { super(message); }
+}
+
+export function handleAuthStatus(status: number): void {
+  if (status === 401) {
+    clearAuthToken();
+    window.dispatchEvent(new Event("eam:unauthorized"));
+  } else if (status === 403) {
+    window.dispatchEvent(new Event("eam:forbidden"));
+  }
+}
+
+export async function apiRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const token = getAuthToken();
-  const response = await fetch(`${API_ROOT}/auth${path}`, {
+  const response = await fetch(url, {
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -39,12 +54,15 @@ async function authRequest<T>(path: string, init?: RequestInit): Promise<T> {
     }
   });
   if (!response.ok) {
+    if (response.status !== 403 || !url.endsWith("/auth/me")) handleAuthStatus(response.status);
     const body = await response.json().catch(() => ({}));
-    throw new Error((body as { error?: string }).error ?? `HTTP ${response.status}`);
+    throw new ApiError(response.status, (body as { error?: string }).error ?? `HTTP ${response.status}`);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
+
+const authRequest = <T,>(path: string, init?: RequestInit) => apiRequest<T>(`${API_ROOT}/auth${path}`, init);
 
 export const authApi = {
   register: (data: { email: string; password: string; companyName: string; name?: string }) =>
