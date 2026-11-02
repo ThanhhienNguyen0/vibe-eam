@@ -132,8 +132,10 @@ describe.skipIf(!url)("real PostgreSQL migration, RBAC and seed", () => {
   it("migrates real member rows deterministically, preserving hashes and existing Admins", async () => {
     const migrations = path.resolve("prisma/migrations");
     const folders = (await readdir(migrations)).filter((name) => /^\d/.test(name)).sort();
-    const legacy = (await Promise.all(folders.slice(0, -1).map((name) => readFile(path.join(migrations, name, "migration.sql"), "utf8")))).join("\n");
-    const migration = await readFile(path.join(migrations, folders.at(-1)!, "migration.sql"), "utf8");
+    // Later migrations (e.g. REQ-31) are independent of this scenario: only what precedes the roles migration is the legacy schema.
+    const rolesFolder = folders.find((name) => name.endsWith("_req24_roles"))!;
+    const legacy = (await Promise.all(folders.slice(0, folders.indexOf(rolesFolder)).map((name) => readFile(path.join(migrations, name, "migration.sql"), "utf8")))).join("\n");
+    const migration = await readFile(path.join(migrations, rolesFolder, "migration.sql"), "utf8");
     const sql = `CREATE SCHEMA legacy_req24; SET search_path TO legacy_req24; ${legacy}
 INSERT INTO "Company" ("id", "name", "updatedAt") VALUES ('legacy-a', 'A', NOW()), ('legacy-b', 'B', NOW());
 INSERT INTO "User" ("id", "email", "passwordHash", "companyId", "role", "createdAt", "updatedAt") VALUES
