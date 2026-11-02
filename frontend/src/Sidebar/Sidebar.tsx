@@ -50,6 +50,8 @@ interface Props {
   activeDiagramId: string | null;
   onOpenCatalog?: (id: string) => void;
   activeCatalogId?: string | null;
+  /** All folders start collapsed; tests and callers can opt into expanded folders. */
+  defaultOpen?: boolean;
 }
 
 interface TreeContextMenu {
@@ -205,21 +207,21 @@ function EmptyHint({ text, actionLabel, onAction }: { text: string; actionLabel?
   );
 }
 
-export default function Sidebar({ onSelect, selection, sidebarState, onStateChange, onOpenDiagram, activeDiagramId, onOpenCatalog, activeCatalogId }: Props) {
+export default function Sidebar({ onSelect, selection, sidebarState, onStateChange, onOpenDiagram, activeDiagramId, onOpenCatalog, activeCatalogId, defaultOpen = false }: Props) {
   const { canWrite, canManageMetamodel } = useAccess();
   const { componentTypes, connectionTypes, connectionRules, viewpoints, components, connections, diagrams, catalogs } = sidebarState;
 
   const [open, setOpen] = useState({
-    rules: false,
-    componentTypes: false,
-    connectionTypes: false,
-    connectionRules: false,
-    viewpoints: false,
-    mgmt: false,
-    components: false,
-    connections: false,
-    diagrams: false,
-    catalogs: false
+    rules: defaultOpen,
+    componentTypes: defaultOpen,
+    connectionTypes: defaultOpen,
+    connectionRules: defaultOpen,
+    viewpoints: defaultOpen,
+    mgmt: defaultOpen,
+    components: defaultOpen,
+    connections: defaultOpen,
+    diagrams: defaultOpen,
+    catalogs: defaultOpen
   });
 
   const [query, setQuery] = useState("");
@@ -261,13 +263,13 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
   }, [contextMenu]);
 
   const [openTypeGroups, setOpenTypeGroups] = useState<Record<string, boolean>>({});
-  const isTypeGroupOpen = (typeId: string) => openTypeGroups[typeId] ?? false;
+  const isTypeGroupOpen = (typeId: string) => openTypeGroups[typeId] ?? defaultOpen;
   function toggleTypeGroup(typeId: string) {
     setOpenTypeGroups((p) => ({ ...p, [typeId]: !isTypeGroupOpen(typeId) }));
   }
 
   const [openTypeCategories, setOpenTypeCategories] = useState<Record<string, boolean>>({});
-  const isTypeCategoryOpen = (cat: string) => openTypeCategories[cat] ?? false;
+  const isTypeCategoryOpen = (cat: string) => openTypeCategories[cat] ?? defaultOpen;
   function toggleTypeCategory(cat: string) {
     setOpenTypeCategories((p) => ({ ...p, [cat]: !isTypeCategoryOpen(cat) }));
   }

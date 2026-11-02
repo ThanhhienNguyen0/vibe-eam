@@ -21,7 +21,7 @@ describe("role-aware rendering", () => {
   it.each([...ROLES, null])("renders usable controls for %s only", (role: Role | null) => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {}); // React SSR useLayoutEffect notice in existing tree.
     const html = renderToStaticMarkup(<AccessContext.Provider value={role}>
-      <Sidebar selection={null} onSelect={noop} sidebarState={state} onStateChange={noop} onOpenDiagram={noop} activeDiagramId={null} />
+      <Sidebar selection={null} onSelect={noop} sidebarState={state} onStateChange={noop} onOpenDiagram={noop} activeDiagramId={null} defaultOpen />
       <HomeView sidebarState={state} onOpenDiagram={noop} onCreateDiagram={noop} canWrite={role === "Admin" || role === "Architect"} />
       <UserManagement onRoleChanged={noop} />
     </AccessContext.Provider>);
