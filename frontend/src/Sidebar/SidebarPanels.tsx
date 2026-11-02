@@ -1079,10 +1079,20 @@ function ComponentEditor({
   onSave: (p: Partial<ComponentInstance>) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(comp);
+  const [saveError, setSaveError] = useState("");
   const dirty = JSON.stringify(draft) !== JSON.stringify(comp);
 
   function set<K extends keyof ComponentInstance>(key: K, val: ComponentInstance[K]) {
     setDraft((prev) => ({ ...prev, [key]: val }));
+  }
+
+  async function save() {
+    setSaveError("");
+    try {
+      await onSave(draft);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
+    }
   }
 
   const selectedType = componentTypes.find((t) => t.id === draft.componentTypeId);
@@ -1096,6 +1106,7 @@ function ComponentEditor({
           {componentTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </label>
+      <label>Externe ID (optional)<input value={draft.externalId ?? ""} maxLength={200} onChange={(e) => set("externalId", e.target.value)} /></label>
       <label>Beschreibung<textarea value={draft.description} onChange={(e) => set("description", e.target.value)} /></label>
 
       {typeKeys.length > 0 && (
@@ -1115,7 +1126,8 @@ function ComponentEditor({
         onChange={(next) => set("properties", next)}
       />
 
-      <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft)}>Speichern</button>
+      <button className="sb-save-btn" disabled={!dirty} onClick={save}>Speichern</button>
+      {saveError && <p className="sb-error" role="alert">{saveError}</p>}
 
       <LinkedConnections
         compId={comp.id}
@@ -1154,10 +1166,20 @@ function ConnectionEditor({
   onSave: (p: Partial<ConnectionInstance>) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<ConnectionInstance>({ ...conn, properties: conn.properties ?? {} });
+  const [saveError, setSaveError] = useState("");
   const dirty = JSON.stringify(draft) !== JSON.stringify({ ...conn, properties: conn.properties ?? {} });
 
   function set<K extends keyof ConnectionInstance>(key: K, val: ConnectionInstance[K]) {
     setDraft((prev) => ({ ...prev, [key]: val }));
+  }
+
+  async function save() {
+    setSaveError("");
+    try {
+      await onSave(draft);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
+    }
   }
 
   return (
@@ -1196,6 +1218,7 @@ function ConnectionEditor({
           </button>
         </div>
       </label>
+      <label>Externe ID (optional)<input value={draft.externalId ?? ""} maxLength={200} onChange={(e) => set("externalId", e.target.value)} /></label>
       <label>Beschreibung<textarea value={draft.description} onChange={(e) => set("description", e.target.value)} /></label>
 
       <CustomPropertiesSection
@@ -1204,7 +1227,8 @@ function ConnectionEditor({
         onChange={(next) => set("properties", next)}
       />
 
-      <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft)}>Speichern</button>
+      <button className="sb-save-btn" disabled={!dirty} onClick={save}>Speichern</button>
+      {saveError && <p className="sb-error" role="alert">{saveError}</p>}
 
       <LinkedDiagrams
         diagrams={diagrams}

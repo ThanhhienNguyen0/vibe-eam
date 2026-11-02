@@ -8,8 +8,10 @@ COPY frontend/package.json frontend/package.json
 RUN npm ci
 
 COPY frontend frontend
-# Frontend consumes the pure authorization vocabulary from its canonical module.
+# Frontend consumes these pure, import-free backend modules from their canonical location:
+# the authorization vocabulary and the catalog filter shared with the exporter (REQ-31).
 COPY backend/src/auth/policy.ts backend/src/auth/policy.ts
+COPY backend/src/catalog/catalogModel.ts backend/src/catalog/catalogModel.ts
 ARG VITE_API_BASE_URL=/api/sidebar
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN npm run build --workspace frontend

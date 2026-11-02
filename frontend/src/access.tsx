@@ -15,6 +15,7 @@ export function useAccess() {
   return {
     canWrite: permits(role, "architecture:write"),
     canManageMetamodel: permits(role, "metamodel:write"),
-    canManageUsers: permits(role, "users:manage")
+    canManageUsers: permits(role, "users:manage"),
+    canReadAudit: permits(role, "audit:read")
   };
 }

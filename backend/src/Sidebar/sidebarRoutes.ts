@@ -45,9 +45,9 @@ const MAX_EXTERNAL_ID_LENGTH = 200;
 /** Empty/null clears the external id; anything else must be a short string. */
 function parseExternalId(value: unknown): { value?: string; error?: string } {
   if (value === undefined || value === null || value === "") return {};
-  if (typeof value !== "string") return { error: "externalId must be a string." };
+  if (typeof value !== "string") return { error: "Die Externe ID muss ein Text sein." };
   const trimmed = value.trim();
-  if (trimmed.length > MAX_EXTERNAL_ID_LENGTH) return { error: `externalId must not be longer than ${MAX_EXTERNAL_ID_LENGTH} characters.` };
+  if (trimmed.length > MAX_EXTERNAL_ID_LENGTH) return { error: `Die Externe ID darf höchstens ${MAX_EXTERNAL_ID_LENGTH} Zeichen lang sein.` };
   return { value: trimmed || undefined };
 }
 
@@ -386,7 +386,7 @@ router.post("/components", async (req, res, next) => {
     const external = parseExternalId(externalId);
     if (external.error) return res.status(400).json({ error: external.error });
     if (external.value && (await getComponents()).some((item) => item.externalId === external.value)) {
-      return res.status(409).json({ error: "This external ID is already used by another component." });
+      return res.status(409).json({ error: "Diese Externe ID wird bereits von einer anderen Komponente verwendet." });
     }
     const comp = await addComponent({
       id: crypto.randomUUID(),
@@ -409,7 +409,7 @@ router.patch("/components/:id", async (req, res, next) => {
       const external = parseExternalId(patch.externalId);
       if (external.error) return res.status(400).json({ error: external.error });
       if (external.value && (await getComponents()).some((item) => item.externalId === external.value && item.id !== req.params.id)) {
-        return res.status(409).json({ error: "This external ID is already used by another component." });
+        return res.status(409).json({ error: "Diese Externe ID wird bereits von einer anderen Komponente verwendet." });
       }
       patch.externalId = external.value;
     }
@@ -469,7 +469,7 @@ router.post("/connections", async (req, res, next) => {
     };
     const state = await readSidebarState();
     if (external.value && state.connections.some((item) => item.externalId === external.value)) {
-      return res.status(409).json({ error: "This external ID is already used by another connection." });
+      return res.status(409).json({ error: "Diese Externe ID wird bereits von einer anderen Verbindung verwendet." });
     }
     const validation = validateConnectionInstance(candidate, state);
     if (!validation.valid) return res.status(400).json({ error: validation.errors[0]?.message ?? "Connection is not valid.", ...validation });
@@ -490,7 +490,7 @@ router.patch("/connections/:id", async (req, res, next) => {
       const external = parseExternalId(patch.externalId);
       if (external.error) return res.status(400).json({ error: external.error });
       if (external.value && state.connections.some((item) => item.externalId === external.value && item.id !== req.params.id)) {
-        return res.status(409).json({ error: "This external ID is already used by another connection." });
+        return res.status(409).json({ error: "Diese Externe ID wird bereits von einer anderen Verbindung verwendet." });
       }
       patch.externalId = external.value;
     }

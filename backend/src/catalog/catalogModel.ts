@@ -1,23 +1,55 @@
-import type {
-  ComponentInstance,
-  ComponentType,
-  ConnectionInstance,
-  ConnectionType,
-  Diagram
-} from "../Sidebar/sidebarTypes.js";
-
 /**
  * Pure catalog logic (REQ-31). It is shared by the catalog UI and the exporter so that
  * "what you see in a catalog" and "what you export" always use the same filter.
- * Keep this file free of Node/React imports.
+ *
+ * This file must stay free of imports: the frontend image build copies it on its own
+ * (see frontend/Dockerfile). The interfaces below are structural subsets of the sidebar types.
  */
 
+export interface CatalogComponentType {
+  id: string;
+  name: string;
+  layer?: string;
+  isAbstract?: boolean;
+  customPropertyKeys?: string[];
+}
+
+export interface CatalogConnectionType {
+  id: string;
+  name: string;
+}
+
+export interface CatalogComponent {
+  id: string;
+  externalId?: string;
+  name: string;
+  componentTypeId: string;
+  description: string;
+  properties?: Record<string, string>;
+}
+
+export interface CatalogConnection {
+  id: string;
+  externalId?: string;
+  name: string;
+  connectionTypeId: string;
+  sourceComponentId: string;
+  targetComponentId: string;
+  description: string;
+}
+
+export interface CatalogDiagram {
+  id: string;
+  name: string;
+  componentIds: string[];
+}
+
 export interface CatalogSource {
-  componentTypes: ComponentType[];
-  connectionTypes: ConnectionType[];
-  components: ComponentInstance[];
-  connections: ConnectionInstance[];
-  diagrams: Pick<Diagram, "id" | "name" | "componentIds">[];
+  componentTypes: CatalogComponentType[];
+  connectionTypes: CatalogConnectionType[];
+  components: CatalogComponent[];
+  connections: CatalogConnection[];
+  diagrams: CatalogDiagram[];
 }
 
 export interface ElementFilter {
@@ -40,10 +72,10 @@ function matchesQuery(haystack: Array<string | undefined>, query: string | undef
   return haystack.some((value) => normalize(value).includes(needle));
 }
 
-export function filterElements(
-  source: Pick<CatalogSource, "components" | "componentTypes">,
+export function filterElements<C extends CatalogComponent>(
+  source: { components: C[]; componentTypes: CatalogComponentType[] },
   filter: ElementFilter = {}
-): ComponentInstance[] {
+): C[] {
   const typeNames = new Map(source.componentTypes.map((type) => [type.id, type.name]));
   const typeIds = filter.typeIds && filter.typeIds.length > 0 ? new Set(filter.typeIds) : null;
   return source.components.filter((component) => {
@@ -58,10 +90,10 @@ export function filterElements(
   });
 }
 
-export function filterRelations(
-  source: Pick<CatalogSource, "components" | "connections" | "connectionTypes">,
+export function filterRelations<R extends CatalogConnection>(
+  source: { components: CatalogComponent[]; connections: R[]; connectionTypes: CatalogConnectionType[] },
   filter: RelationFilter = {}
-): ConnectionInstance[] {
+): R[] {
   const typeNames = new Map(source.connectionTypes.map((type) => [type.id, type.name]));
   const componentNames = new Map(source.components.map((component) => [component.id, component.name]));
   const typeIds = filter.connectionTypeIds && filter.connectionTypeIds.length > 0 ? new Set(filter.connectionTypeIds) : null;
@@ -79,7 +111,7 @@ export function filterRelations(
 }
 
 /** Ordered union of the custom property keys of the given types. */
-export function propertyKeysForTypes(types: ComponentType[]): string[] {
+export function propertyKeysForTypes(types: CatalogComponentType[]): string[] {
   const keys: string[] = [];
   for (const type of types) {
     for (const key of type.customPropertyKeys ?? []) {

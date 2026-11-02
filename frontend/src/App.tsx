@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { GitBranch, LayoutDashboard, LogOut, Plus } from "lucide-react";
+import { GitBranch, LayoutDashboard, LogOut, Plus, ScrollText, Table2 } from "lucide-react";
 import Sidebar, { type SidebarSelection } from "./Sidebar/Sidebar";
 import SidebarPanels from "./Sidebar/SidebarPanels";
 import DiagramEditor from "./DiagramEditor";
@@ -9,6 +9,8 @@ import type { SidebarState } from "./Sidebar/sidebarTypes";
 import { authApi, clearAuthToken, getAuthToken, setAuthToken, type AuthUser } from "./authApi";
 import { AccessContext, ROLE_DESCRIPTIONS, ROLE_LABELS, useAccess } from "./access";
 import UserManagement from "./UserManagement";
+import CatalogView from "./CatalogView";
+import AuditLogView from "./AuditLogView";
 
 export default function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -51,7 +53,7 @@ export default function App() {
 }
 
 export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser; onLogout: () => void; onRoleChanged: () => void }) {
-  const { canWrite, canManageMetamodel, canManageUsers } = useAccess();
+  const { canWrite, canManageMetamodel, canManageUsers, canReadAudit } = useAccess();
   const [sidebarState, setSidebarState] = useState<SidebarState>({
     metamodel: {
       id: "",
@@ -74,7 +76,7 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
   });
   const [sidebarSelection, setSidebarSelection] = useState<SidebarSelection | null>(null);
   const [activeDiagramId, setActiveDiagramId] = useState<string | null>(null);
-  const [workspaceView, setWorkspaceView] = useState<"diagrams" | "metamodel" | "users">("diagrams");
+  const [workspaceView, setWorkspaceView] = useState<"diagrams" | "catalogs" | "metamodel" | "users" | "audit">("diagrams");
   const [error, setError] = useState("");
 
   const activeDiagram = sidebarState.diagrams.find((d) => d.id === activeDiagramId) ?? null;
@@ -108,6 +110,12 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
           >
             <LayoutDashboard size={14} /> Diagramme
           </button>
+          <button
+            className={`tabs-diagram-tab${!activeDiagram && workspaceView === "catalogs" ? " active" : ""}`}
+            onClick={() => { setActiveDiagramId(null); setWorkspaceView("catalogs"); }}
+          >
+            <Table2 size={14} /> Kataloge
+          </button>
           {canManageMetamodel && <button
             className={`tabs-diagram-tab${!activeDiagram && workspaceView === "metamodel" ? " active" : ""}`}
             onClick={() => { setActiveDiagramId(null); setWorkspaceView("metamodel"); }}
@@ -115,6 +123,7 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
             <GitBranch size={14} /> Metamodel
           </button>}
           {canManageUsers && <button className={`tabs-diagram-tab${workspaceView === "users" ? " active" : ""}`} onClick={() => { setActiveDiagramId(null); setWorkspaceView("users"); }}>Nutzerverwaltung</button>}
+          {canReadAudit && <button className={`tabs-diagram-tab${!activeDiagram && workspaceView === "audit" ? " active" : ""}`} onClick={() => { setActiveDiagramId(null); setWorkspaceView("audit"); }}><ScrollText size={14} /> Protokoll</button>}
         </nav>
         {activeDiagram && (
           <nav className="tabs" aria-label="Geöffnetes Diagramm">
@@ -186,6 +195,15 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
               onSelectConnection={(id) => setSidebarSelection({ kind: "connection", id })}
               onClose={() => setActiveDiagramId(null)}
             />
+          ) : workspaceView === "catalogs" ? (
+            <CatalogView
+              sidebarState={sidebarState}
+              onStateChange={setSidebarState}
+              selection={sidebarSelection}
+              onSelect={setSidebarSelection}
+            />
+          ) : workspaceView === "audit" && canReadAudit ? (
+            <AuditLogView />
           ) : workspaceView === "users" && canManageUsers ? (
             <UserManagement onRoleChanged={onRoleChanged} />
           ) : workspaceView === "metamodel" && canManageMetamodel ? (
