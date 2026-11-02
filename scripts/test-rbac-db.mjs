@@ -30,7 +30,7 @@ try {
   const environment = { ...process.env, DATABASE_URL: url, TEST_DATABASE_URL: url, STORAGE_BACKEND: "database", NODE_ENV: "test", PG_TEST_PSQL: executable("psql") };
   const node = process.execPath;
   execFileSync(node, ["node_modules/prisma/build/index.js", "migrate", "deploy", "--schema", "backend/prisma/schema.prisma"], { env: environment, stdio: "inherit", windowsHide: true });
-  execFileSync(node, [path.resolve("node_modules/vitest/vitest.mjs"), "run", "--config", "vitest.config.ts", "src/auth/rbac.database.test.ts", "--cache=false"], { cwd: path.resolve("backend"), env: environment, stdio: "inherit", windowsHide: true });
+  execFileSync(node, [path.resolve("node_modules/vitest/vitest.mjs"), "run", "--config", "vitest.config.ts", "src/auth/rbac.database.test.ts", "src/importExport/transfer.database.test.ts", "--cache=false"], { cwd: path.resolve("backend"), env: environment, stdio: "inherit", windowsHide: true });
 } finally {
   if (started) execFileSync(executable("pg_ctl"), ["-D", data, "-m", "fast", "-w", "stop"], { stdio: "ignore", windowsHide: true, timeout: 90000 });
   if (directory.startsWith(cache + path.sep)) await rm(directory, { recursive: true, force: true });

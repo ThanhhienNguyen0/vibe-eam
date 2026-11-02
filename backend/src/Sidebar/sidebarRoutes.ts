@@ -40,6 +40,17 @@ import {
 
 const router = Router();
 
+const MAX_EXTERNAL_ID_LENGTH = 200;
+
+/** Empty/null clears the external id; anything else must be a short string. */
+function parseExternalId(value: unknown): { value?: string; error?: string } {
+  if (value === undefined || value === null || value === "") return {};
+  if (typeof value !== "string") return { error: "externalId must be a string." };
+  const trimmed = value.trim();
+  if (trimmed.length > MAX_EXTERNAL_ID_LENGTH) return { error: `externalId must not be longer than ${MAX_EXTERNAL_ID_LENGTH} characters.` };
+  return { value: trimmed || undefined };
+}
+
 // ── Full sidebar state ───────────────────────────────────────────────────────
 
 router.get("/", async (_req, res, next) => {
@@ -363,20 +374,27 @@ router.get("/components", async (_req, res, next) => {
 
 router.post("/components", async (req, res, next) => {
   try {
-    const { name, componentTypeId, properties, description } = req.body as {
+    const { name, componentTypeId, properties, description, externalId } = req.body as {
       name?: string;
       componentTypeId?: string;
       properties?: Record<string, string>;
       description?: string;
+      externalId?: unknown;
     };
     if (!name?.trim()) return res.status(400).json({ error: "name is required." });
     if (!componentTypeId) return res.status(400).json({ error: "componentTypeId is required." });
+    const external = parseExternalId(externalId);
+    if (external.error) return res.status(400).json({ error: external.error });
+    if (external.value && (await getComponents()).some((item) => item.externalId === external.value)) {
+      return res.status(409).json({ error: "This external ID is already used by another component." });
+    }
     const comp = await addComponent({
       id: crypto.randomUUID(),
       name: name.trim(),
       componentTypeId,
       properties: properties ?? {},
-      description: description ?? ""
+      description: description ?? "",
+      ...(external.value ? { externalId: external.value } : {})
     });
     res.status(201).json(comp);
   } catch (err) {
@@ -386,7 +404,16 @@ router.post("/components", async (req, res, next) => {
 
 router.patch("/components/:id", async (req, res, next) => {
   try {
-    const updated = await updateComponent(req.params.id, req.body);
+    const patch = { ...req.body } as Record<string, unknown>;
+    if ("externalId" in patch) {
+      const external = parseExternalId(patch.externalId);
+      if (external.error) return res.status(400).json({ error: external.error });
+      if (external.value && (await getComponents()).some((item) => item.externalId === external.value && item.id !== req.params.id)) {
+        return res.status(409).json({ error: "This external ID is already used by another component." });
+      }
+      patch.externalId = external.value;
+    }
+    const updated = await updateComponent(req.params.id, patch);
     if (!updated) return res.status(404).json({ error: "Component not found." });
     res.json(updated);
   } catch (err) {
@@ -416,17 +443,20 @@ router.get("/connections", async (_req, res, next) => {
 
 router.post("/connections", async (req, res, next) => {
   try {
-    const { name, connectionTypeId, sourceComponentId, targetComponentId, description, properties } = req.body as {
+    const { name, connectionTypeId, sourceComponentId, targetComponentId, description, properties, externalId } = req.body as {
       name?: string;
       connectionTypeId?: string;
       sourceComponentId?: string;
       targetComponentId?: string;
       description?: string;
       properties?: Record<string, string>;
+      externalId?: unknown;
     };
     if (!connectionTypeId) return res.status(400).json({ error: "connectionTypeId is required." });
     if (!sourceComponentId) return res.status(400).json({ error: "sourceComponentId is required." });
     if (!targetComponentId) return res.status(400).json({ error: "targetComponentId is required." });
+    const external = parseExternalId(externalId);
+    if (external.error) return res.status(400).json({ error: external.error });
     const candidate = {
       id: crypto.randomUUID(),
       name: name ?? "",
@@ -434,9 +464,13 @@ router.post("/connections", async (req, res, next) => {
       sourceComponentId,
       targetComponentId,
       description: description ?? "",
-      properties: properties ?? {}
+      properties: properties ?? {},
+      ...(external.value ? { externalId: external.value } : {})
     };
     const state = await readSidebarState();
+    if (external.value && state.connections.some((item) => item.externalId === external.value)) {
+      return res.status(409).json({ error: "This external ID is already used by another connection." });
+    }
     const validation = validateConnectionInstance(candidate, state);
     if (!validation.valid) return res.status(400).json({ error: validation.errors[0]?.message ?? "Connection is not valid.", ...validation });
     const conn = await addConnection(candidate);
@@ -451,10 +485,19 @@ router.patch("/connections/:id", async (req, res, next) => {
     const state = await readSidebarState();
     const existing = state.connections.find((connection) => connection.id === req.params.id);
     if (!existing) return res.status(404).json({ error: "Connection not found." });
-    const candidate = { ...existing, ...req.body, id: req.params.id };
+    const patch = { ...req.body } as Record<string, unknown>;
+    if ("externalId" in patch) {
+      const external = parseExternalId(patch.externalId);
+      if (external.error) return res.status(400).json({ error: external.error });
+      if (external.value && state.connections.some((item) => item.externalId === external.value && item.id !== req.params.id)) {
+        return res.status(409).json({ error: "This external ID is already used by another connection." });
+      }
+      patch.externalId = external.value;
+    }
+    const candidate = { ...existing, ...patch, id: req.params.id };
     const validation = validateConnectionInstance(candidate, state);
     if (!validation.valid) return res.status(400).json({ error: validation.errors[0]?.message ?? "Connection is not valid.", ...validation });
-    const updated = await updateConnection(req.params.id, req.body);
+    const updated = await updateConnection(req.params.id, patch);
     if (!updated) return res.status(404).json({ error: "Connection not found." });
     res.json(updated);
   } catch (err) {

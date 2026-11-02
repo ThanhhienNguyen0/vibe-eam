@@ -4,11 +4,14 @@ import type {
   ConnectionInstance,
   SidebarState
 } from "../Sidebar/sidebarTypes.js";
+import type { AuditEntry, AuditWrite } from "../audit/auditTypes.js";
 import { removeDanglingInstanceReferences } from "./stateOperations.js";
 
 export interface SidebarStateRepository {
   read(companyId: string): Promise<SidebarState | null>;
-  write(state: SidebarState, companyId: string): Promise<SidebarState>;
+  /** Writes the whole state; an optional audit entry is stored in the same transaction. */
+  write(state: SidebarState, companyId: string, audit?: AuditWrite): Promise<SidebarState>;
+  listAudit(companyId: string, limit: number): Promise<AuditEntry[]>;
   disconnect(): Promise<void>;
 }
 
@@ -178,15 +181,17 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           message: item.message,
           active: item.active
         })),
-        components: components.map((item): ComponentInstance => ({
+        components: components.map((item): ComponentInstance => withoutUndefined({
           id: item.id,
+          externalId: item.externalId ?? undefined,
           name: item.name,
           componentTypeId: item.componentTypeId,
           description: item.description,
           properties: objectValue(item.properties, {}) as Record<string, string>
         })),
-        connections: connections.map((item): ConnectionInstance => ({
+        connections: connections.map((item): ConnectionInstance => withoutUndefined({
           id: item.id,
+          externalId: item.externalId ?? undefined,
           name: item.name,
           connectionTypeId: item.connectionTypeId,
           sourceComponentId: item.sourceComponentId,
@@ -229,7 +234,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
     }
   }
 
-  async write(state: SidebarState, companyId: string): Promise<SidebarState> {
+  async write(state: SidebarState, companyId: string, audit?: AuditWrite): Promise<SidebarState> {
     state = removeDanglingInstanceReferences(state);
     assertDiagramMemberships(state);
     const metamodelId = state.metamodel.id;
@@ -372,6 +377,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         const data = {
           companyId,
           componentTypeId: item.componentTypeId,
+          externalId: item.externalId ?? null,
           name: item.name,
           description: item.description,
           properties: json(item.properties)
@@ -384,6 +390,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           connectionTypeId: item.connectionTypeId,
           sourceComponentId: item.sourceComponentId,
           targetComponentId: item.targetComponentId,
+          externalId: item.externalId ?? null,
           name: item.name,
           description: item.description,
           properties: json(item.properties ?? {})
@@ -420,9 +427,44 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
       await tx.viewpoint.deleteMany({ where: { metamodelId, ...missing(state.viewpoints.map((item) => item.id)) } });
       await tx.connectionType.deleteMany({ where: { metamodelId, ...missing(state.connectionTypes.map((item) => item.id)) } });
       await tx.componentType.deleteMany({ where: { metamodelId, ...missing(state.componentTypes.map((item) => item.id)) } });
+
+      if (audit) {
+        const actor = audit.userId
+          ? await tx.user.findFirst({ where: { id: audit.userId, companyId }, select: { id: true, email: true } })
+          : null;
+        await tx.auditLogEntry.create({
+          data: {
+            companyId,
+            userId: actor?.id ?? null,
+            userEmail: actor?.email ?? null,
+            action: audit.action,
+            entityType: audit.entityType,
+            summary: audit.summary,
+            details: json(audit.details ?? {})
+          }
+        });
+      }
     }, { timeout: 30_000 });
 
     return (await this.read(companyId)) ?? structuredClone(state);
+  }
+
+  async listAudit(companyId: string, limit: number): Promise<AuditEntry[]> {
+    const entries = await this.prisma.auditLogEntry.findMany({
+      where: { companyId },
+      orderBy: { createdAt: "desc" },
+      take: limit
+    });
+    return entries.map((entry) => ({
+      id: entry.id,
+      createdAt: entry.createdAt.toISOString(),
+      userId: entry.userId,
+      userEmail: entry.userEmail,
+      action: entry.action,
+      entityType: entry.entityType,
+      summary: entry.summary,
+      details: objectValue(entry.details, {}) as Record<string, unknown>
+    }));
   }
 
   async disconnect(): Promise<void> {

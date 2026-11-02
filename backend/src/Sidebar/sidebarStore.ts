@@ -32,7 +32,8 @@ import {
   removeComponentWithConnections
 } from "../persistence/stateOperations.js";
 import { cloneSidebarStateForCompany } from "../persistence/tenantState.js";
-import { requireCompanyId } from "../tenant.js";
+import { currentPrincipal, requireCompanyId } from "../tenant.js";
+import type { AuditEntry, AuditEntryInput } from "../audit/auditTypes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.resolve(__dirname, "../data");
@@ -1124,18 +1125,58 @@ export async function importMetamodelDefinition(input: unknown): Promise<Metamod
   };
 }
 
-export async function writeSidebarState(state: SidebarState): Promise<SidebarState> {
+export async function writeSidebarState(state: SidebarState, audit?: AuditEntryInput): Promise<SidebarState> {
   const companyId = requireCompanyId();
+  const auditWrite = audit ? { ...audit, userId: currentPrincipal()?.userId } : undefined;
   let cached = structuredClone(state);
   if (databasePersistenceEnabled()) {
-    cached = await databaseSidebarRepository().write(cached, companyId);
+    cached = await databaseSidebarRepository().write(cached, companyId, auditWrite);
     cachedByCompany.set(companyId, cached);
     return structuredClone(cached);
   }
   await fs.mkdir(dataDir, { recursive: true });
   await fs.writeFile(path.join(dataDir, `sidebar.${companyId}.json`), JSON.stringify(cached, null, 2), "utf-8");
   cachedByCompany.set(companyId, cached);
+  if (auditWrite) await appendJsonAuditEntry(companyId, auditWrite);
   return structuredClone(cached);
+}
+
+// ── Audit log ────────────────────────────────────────────────────────────────
+
+const MAX_JSON_AUDIT_ENTRIES = 1000;
+const auditFile = (companyId: string) => path.join(dataDir, `audit.${companyId}.json`);
+
+async function readJsonAudit(companyId: string): Promise<AuditEntry[]> {
+  try {
+    const parsed = JSON.parse(await fs.readFile(auditFile(companyId), "utf-8")) as unknown;
+    return Array.isArray(parsed) ? parsed as AuditEntry[] : [];
+  } catch {
+    return [];
+  }
+}
+
+/** JSON fallback storage (STORAGE_BACKEND=json): newest entry first, capped. */
+async function appendJsonAuditEntry(companyId: string, entry: AuditEntryInput & { userId?: string }): Promise<void> {
+  const entries = await readJsonAudit(companyId);
+  entries.unshift({
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    userId: entry.userId ?? null,
+    userEmail: null,
+    action: entry.action,
+    entityType: entry.entityType,
+    summary: entry.summary,
+    details: entry.details ?? {}
+  });
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(auditFile(companyId), JSON.stringify(entries.slice(0, MAX_JSON_AUDIT_ENTRIES), null, 2), "utf-8");
+}
+
+export async function listAuditLog(limit = 200): Promise<AuditEntry[]> {
+  const companyId = requireCompanyId();
+  const bounded = Math.min(Math.max(Math.trunc(limit) || 200, 1), 500);
+  if (databasePersistenceEnabled()) return databaseSidebarRepository().listAudit(companyId, bounded);
+  return (await readJsonAudit(companyId)).slice(0, bounded);
 }
 
 // ── Component Types ──────────────────────────────────────────────────────────
