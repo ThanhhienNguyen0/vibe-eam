@@ -52,6 +52,32 @@ beforeEach(() => {
   store.writes = [];
 });
 
+describe("catalog export", () => {
+  it("exports a catalog selection for every role and rejects unknown catalogs", async () => {
+    for (const role of ROLES) {
+      const response = await binary(request(application()).get("/api/sidebar/export?format=csv&catalogId=cat-apps").set("Authorization", bearer(role)));
+      expect(response.status, role).toBe(200);
+      const rows = parseCsv(response.body.toString("utf-8"));
+      expect(rows[0]).toEqual(["ID", "Typ", "Name", "Beschreibung", "owner"]);
+      expect(rows).toHaveLength(3);
+    }
+    const missing = await request(application()).get("/api/sidebar/export?catalogId=nope").set("Authorization", bearer("Viewer"));
+    expect(missing.status).toBe(404);
+  });
+
+  it("only lets writers change catalogs", async () => {
+    const body = { name: "Neu", kind: "elements" };
+    expect((await request(application()).post("/api/sidebar/catalogs").set("Authorization", bearer("Viewer")).send(body)).status).toBe(403);
+    expect((await request(application()).delete("/api/sidebar/catalogs/cat-apps").set("Authorization", bearer("Viewer"))).status).toBe(403);
+    // invalid payloads are rejected before anything is stored
+    const invalid = await request(application()).post("/api/sidebar/catalogs").set("Authorization", bearer("Architect")).send({ name: "X", componentTypeIds: ["unknown"] });
+    expect(invalid.status).toBe(400);
+    const badColumn = await request(application()).post("/api/sidebar/catalogs").set("Authorization", bearer("Architect")).send({ name: "X", columns: ["bogus"] });
+    expect(badColumn.status).toBe(400);
+    expect(store.writes).toHaveLength(0);
+  });
+});
+
 describe("export routes", () => {
   it("lets every role download the model as XLSX with both sheets", async () => {
     for (const role of ROLES) {

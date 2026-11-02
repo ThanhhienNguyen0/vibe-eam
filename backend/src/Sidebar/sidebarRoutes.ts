@@ -1,5 +1,6 @@
 import { Router } from "express";
-import type { ComponentShape } from "./sidebarTypes.js";
+import type { Catalog, ComponentShape, SidebarState } from "./sidebarTypes.js";
+import { catalogColumnKeys } from "../catalog/catalogModel.js";
 import { validateConnectionInstance, validateDiagram } from "./metamodelRules.js";
 import {
   addComponent,
@@ -35,7 +36,10 @@ import {
   updateConnectionRule,
   updateConnectionType,
   updateDiagram,
-  updateViewpoint
+  updateViewpoint,
+  addCatalog,
+  updateCatalog,
+  deleteCatalog
 } from "./sidebarStore.js";
 
 const router = Router();
@@ -50,6 +54,83 @@ function parseExternalId(value: unknown): { value?: string; error?: string } {
   if (trimmed.length > MAX_EXTERNAL_ID_LENGTH) return { error: `Die Externe ID darf höchstens ${MAX_EXTERNAL_ID_LENGTH} Zeichen lang sein.` };
   return { value: trimmed || undefined };
 }
+
+const MAX_CATALOG_NAME = 120;
+
+const stringList = (value: unknown): string[] | null =>
+  Array.isArray(value) && value.every((item) => typeof item === "string") ? [...new Set(value as string[])] : null;
+
+/** Validates a catalog payload against the model; unknown ids and keys are rejected, never silently dropped. */
+function parseCatalog(body: Record<string, unknown>, state: SidebarState, existing?: Catalog): { value?: Omit<Catalog, "id">; error?: string } {
+  const merged = { ...(existing ?? {}), ...body } as Record<string, unknown>;
+  const name = typeof merged.name === "string" ? merged.name.trim() : "";
+  if (!name) return { error: "Der Name des Katalogs ist erforderlich." };
+  if (name.length > MAX_CATALOG_NAME) return { error: `Der Name darf höchstens ${MAX_CATALOG_NAME} Zeichen lang sein.` };
+  const kind = merged.kind === "relations" ? "relations" : merged.kind === "elements" || merged.kind === undefined ? "elements" : null;
+  if (!kind) return { error: "Die Art des Katalogs muss „elements“ oder „relations“ sein." };
+  if (merged.description !== undefined && typeof merged.description !== "string") return { error: "Die Beschreibung muss ein Text sein." };
+  const lists = {
+    componentTypeIds: stringList(merged.componentTypeIds ?? []),
+    connectionTypeIds: stringList(merged.connectionTypeIds ?? []),
+    propertyKeys: stringList(merged.propertyKeys ?? []),
+    columns: stringList(merged.columns ?? [])
+  };
+  if (Object.values(lists).some((list) => list === null)) return { error: "Auswahllisten müssen aus Texten bestehen." };
+  const componentTypeIds = kind === "elements" ? lists.componentTypeIds! : [];
+  const connectionTypeIds = kind === "relations" ? lists.connectionTypeIds! : [];
+  const propertyKeys = kind === "elements" ? lists.propertyKeys! : [];
+  const columns = lists.columns!;
+  const knownComponentTypes = new Set(state.componentTypes.map((type) => type.id));
+  const knownConnectionTypes = new Set(state.connectionTypes.map((type) => type.id));
+  if (componentTypeIds.some((id) => !knownComponentTypes.has(id))) return { error: "Mindestens ein ausgewählter Elementtyp existiert nicht." };
+  if (connectionTypeIds.some((id) => !knownConnectionTypes.has(id))) return { error: "Mindestens ein ausgewählter Verbindungstyp existiert nicht." };
+  const allowedColumns = new Set(catalogColumnKeys(kind));
+  if (columns.some((key) => !allowedColumns.has(key))) return { error: "Mindestens eine ausgewählte Spalte ist ungültig." };
+  if (propertyKeys.length > 200 || propertyKeys.some((key) => key.length > 200)) return { error: "Zu viele oder zu lange Eigenschaftsnamen." };
+  return { value: { name, description: (merged.description as string | undefined) ?? "", kind, componentTypeIds, connectionTypeIds, propertyKeys, columns } };
+}
+
+// ── Catalogs (REQ-31) ────────────────────────────────────────────────────────
+
+router.get("/catalogs", async (_req, res, next) => {
+  try {
+    res.json((await readSidebarState()).catalogs);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/catalogs", async (req, res, next) => {
+  try {
+    const parsed = parseCatalog((req.body ?? {}) as Record<string, unknown>, await readSidebarState());
+    if (!parsed.value) return res.status(400).json({ error: parsed.error });
+    res.status(201).json(await addCatalog({ id: crypto.randomUUID(), ...parsed.value }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch("/catalogs/:id", async (req, res, next) => {
+  try {
+    const state = await readSidebarState();
+    const existing = state.catalogs.find((item) => item.id === req.params.id);
+    if (!existing) return res.status(404).json({ error: "Katalog nicht gefunden." });
+    const parsed = parseCatalog((req.body ?? {}) as Record<string, unknown>, state, existing);
+    if (!parsed.value) return res.status(400).json({ error: parsed.error });
+    res.json(await updateCatalog(req.params.id, parsed.value));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/catalogs/:id", async (req, res, next) => {
+  try {
+    if (!(await deleteCatalog(req.params.id))) return res.status(404).json({ error: "Katalog nicht gefunden." });
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
 
 // ── Full sidebar state ───────────────────────────────────────────────────────
 

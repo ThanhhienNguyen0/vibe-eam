@@ -796,7 +796,7 @@ function DiagramEditorInner({
   const { screenToFlowPosition } = useReactFlow();
   const activeViewpoint = viewpointFilterId ? viewpoints.find((viewpoint) => viewpoint.id === viewpointFilterId) : undefined;
   const sidebarState = useMemo(
-    () => ({ metamodel, componentTypes, connectionTypes, connectionRules, viewpointRules, validationRules, viewpoints, components, connections, diagrams: [diagram] }),
+    () => ({ metamodel, componentTypes, connectionTypes, connectionRules, viewpointRules, validationRules, viewpoints, components, connections, diagrams: [diagram], catalogs: [] }),
     [metamodel, componentTypes, connectionTypes, connectionRules, viewpointRules, validationRules, viewpoints, components, connections, diagram]
   );
   const displayedDiagram = useMemo(

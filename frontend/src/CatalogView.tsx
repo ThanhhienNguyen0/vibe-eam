@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Download, FileSpreadsheet, Search, Upload } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, FileSpreadsheet, Search, Upload, X } from "lucide-react";
 import {
+  catalogComponentTypes,
+  catalogElementFilter,
+  catalogPropertyKeys,
+  catalogRelationFilter,
   elementCatalogRows,
-  elementCatalogs,
-  propertyKeysForTypes,
   relationCatalogRows,
   type ElementCatalogRow,
   type RelationCatalogRow
@@ -12,14 +14,16 @@ import { useAccess } from "./access";
 import ImportDialog from "./ImportDialog";
 import { sidebarApi } from "./Sidebar/sidebarApi";
 import type { SidebarSelection } from "./Sidebar/Sidebar";
-import type { SidebarState } from "./Sidebar/sidebarTypes";
+import type { Catalog, SidebarState } from "./Sidebar/sidebarTypes";
 import { transferApi, type TransferFormat } from "./transferApi";
 
 interface Props {
+  catalog: Catalog;
   sidebarState: SidebarState;
   onStateChange: (state: SidebarState) => void;
   selection: SidebarSelection | null;
   onSelect: (selection: SidebarSelection) => void;
+  onClose: () => void;
 }
 
 type SortDirection = "asc" | "desc";
@@ -32,7 +36,6 @@ interface Column<Row> {
   numeric?: boolean;
 }
 
-const RELATIONS = "relations";
 const collator = new Intl.Collator("de", { numeric: true, sensitivity: "base" });
 
 function sortRows<Row>(rows: Row[], columns: Column<Row>[], sort: Sort): Row[] {
@@ -48,63 +51,56 @@ function sortRows<Row>(rows: Row[], columns: Column<Row>[], sort: Sort): Row[] {
 
 function DiagramList({ names }: { names: string[] }) {
   if (names.length === 0) return <span className="muted">–</span>;
-  const shown = names.slice(0, 2).join(", ");
-  return <span title={names.join(", ")}>{shown}{names.length > 2 ? ` +${names.length - 2}` : ""}</span>;
+  return <span title={names.join(", ")}>{names.slice(0, 2).join(", ")}{names.length > 2 ? ` +${names.length - 2}` : ""}</span>;
 }
 
-export default function CatalogView({ sidebarState, onStateChange, selection, onSelect }: Props) {
+/** Table view of one saved catalog: its types, property columns and standard columns. */
+export default function CatalogView({ catalog, sidebarState, onStateChange, selection, onSelect, onClose }: Props) {
   const { canWrite } = useAccess();
-  const [catalogId, setCatalogId] = useState("all");
   const [query, setQuery] = useState("");
-  const [connectionTypeId, setConnectionTypeId] = useState("");
   const [sort, setSort] = useState<Sort>({ key: "name", direction: "asc" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [importOpen, setImportOpen] = useState(false);
 
-  const catalogs = useMemo(() => elementCatalogs(sidebarState), [sidebarState]);
-  const showingRelations = catalogId === RELATIONS;
-  const activeCatalog = catalogs.find((item) => item.id === catalogId) ?? catalogs[0];
-  const types = activeCatalog.typeIds.length > 0
-    ? sidebarState.componentTypes.filter((type) => activeCatalog.typeIds.includes(type.id))
-    : sidebarState.componentTypes.filter((type) => !type.isAbstract);
-  const propertyKeys = activeCatalog.typeIds.length > 0 ? propertyKeysForTypes(types) : [];
+  const showingRelations = catalog.kind === "relations";
+  const propertyKeys = useMemo(() => catalogPropertyKeys(catalog, sidebarState), [catalog, sidebarState]);
+  const typeLabel = useMemo(
+    () => (catalog.componentTypeIds.length === 0 ? "alle Typen" : catalogComponentTypes(catalog, sidebarState).map((type) => type.name).join(", ")),
+    [catalog, sidebarState]
+  );
 
   const elementRows = useMemo(
-    () => (showingRelations ? [] : elementCatalogRows(sidebarState, { typeIds: activeCatalog.typeIds, query })),
-    [sidebarState, showingRelations, activeCatalog, query]
+    () => (showingRelations ? [] : elementCatalogRows(sidebarState, catalogElementFilter(catalog, sidebarState, query))),
+    [sidebarState, catalog, showingRelations, query]
   );
   const relationRows = useMemo(
-    () => (showingRelations ? relationCatalogRows(sidebarState, { connectionTypeIds: connectionTypeId ? [connectionTypeId] : [], query }) : []),
-    [sidebarState, showingRelations, connectionTypeId, query]
+    () => (showingRelations ? relationCatalogRows(sidebarState, catalogRelationFilter(catalog, sidebarState, query)) : []),
+    [sidebarState, catalog, showingRelations, query]
   );
 
+  const has = (key: string) => catalog.columns.includes(key);
   const elementColumns: Column<ElementCatalogRow>[] = [
     { key: "name", title: "Name", value: (row) => row.name, render: (row) => <strong>{row.name}</strong> },
-    ...(activeCatalog.typeIds.length === 0 ? [
-      { key: "type", title: "Typ", value: (row: ElementCatalogRow) => row.typeName },
-      { key: "layer", title: "Ebene", value: (row: ElementCatalogRow) => row.layer }
-    ] : []),
-    { key: "externalId", title: "Externe ID", value: (row) => row.externalId },
-    { key: "description", title: "Beschreibung", value: (row) => row.description, render: (row) => <span className="catalog-description">{row.description}</span> },
+    ...(has("type") ? [{ key: "type", title: "Typ", value: (row: ElementCatalogRow) => row.typeName }] : []),
+    ...(has("layer") ? [{ key: "layer", title: "Ebene", value: (row: ElementCatalogRow) => row.layer }] : []),
+    ...(has("externalId") ? [{ key: "externalId", title: "Externe ID", value: (row: ElementCatalogRow) => row.externalId }] : []),
+    ...(has("description") ? [{ key: "description", title: "Beschreibung", value: (row: ElementCatalogRow) => row.description, render: (row: ElementCatalogRow) => <span className="catalog-description">{row.description}</span> }] : []),
     ...propertyKeys.map((key): Column<ElementCatalogRow> => ({ key: `prop:${key}`, title: key, value: (row) => row.properties[key] ?? "" })),
-    { key: "outgoing", title: "Ausgehend", value: (row) => row.outgoing, numeric: true },
-    { key: "incoming", title: "Eingehend", value: (row) => row.incoming, numeric: true },
-    { key: "diagrams", title: "Diagramme", value: (row) => row.diagrams.length, render: (row) => <DiagramList names={row.diagrams} /> }
+    ...(has("outgoing") ? [{ key: "outgoing", title: "Ausgehend", value: (row: ElementCatalogRow) => row.outgoing, numeric: true }] : []),
+    ...(has("incoming") ? [{ key: "incoming", title: "Eingehend", value: (row: ElementCatalogRow) => row.incoming, numeric: true }] : []),
+    ...(has("diagrams") ? [{ key: "diagrams", title: "Diagramme", value: (row: ElementCatalogRow) => row.diagrams.length, render: (row: ElementCatalogRow) => <DiagramList names={row.diagrams} /> }] : [])
   ];
   const relationColumns: Column<RelationCatalogRow>[] = [
     { key: "source", title: "Quelle", value: (row) => row.sourceName, render: (row) => <strong>{row.sourceName}</strong> },
-    { key: "type", title: "Typ", value: (row) => row.typeName },
+    ...(has("type") ? [{ key: "type", title: "Typ", value: (row: RelationCatalogRow) => row.typeName }] : []),
     { key: "target", title: "Ziel", value: (row) => row.targetName, render: (row) => <strong>{row.targetName}</strong> },
-    { key: "name", title: "Name", value: (row) => row.name },
-    { key: "externalId", title: "Externe ID", value: (row) => row.externalId },
-    { key: "description", title: "Beschreibung", value: (row) => row.description, render: (row) => <span className="catalog-description">{row.description}</span> }
+    ...(has("name") ? [{ key: "name", title: "Name", value: (row: RelationCatalogRow) => row.name }] : []),
+    ...(has("externalId") ? [{ key: "externalId", title: "Externe ID", value: (row: RelationCatalogRow) => row.externalId }] : []),
+    ...(has("description") ? [{ key: "description", title: "Beschreibung", value: (row: RelationCatalogRow) => row.description, render: (row: RelationCatalogRow) => <span className="catalog-description">{row.description}</span> }] : [])
   ];
 
-  const total = showingRelations ? sidebarState.connections.length : activeCatalog.count;
   const shown = showingRelations ? relationRows.length : elementRows.length;
-  const effectiveSort = (columns: Column<unknown>[]): Sort =>
-    columns.some((column) => column.key === sort.key) ? sort : { key: columns[0].key, direction: "asc" };
 
   function toggleSort(key: string) {
     setSort((current) => current.key === key ? { key, direction: current.direction === "asc" ? "desc" : "asc" } : { key, direction: "asc" });
@@ -122,21 +118,12 @@ export default function CatalogView({ sidebarState, onStateChange, selection, on
     }
   }
 
-  const exportAs = (format: TransferFormat) => run(() => transferApi.exportModel({
-    format,
-    // XLSX of an element catalog contains both sheets (relations between the exported elements); CSV is one table.
-    sheet: showingRelations ? "relations" : format === "csv" ? "elements" : undefined,
-    typeIds: showingRelations ? [] : activeCatalog.typeIds,
-    connectionTypeIds: showingRelations && connectionTypeId ? [connectionTypeId] : [],
-    query
-  }));
-
+  const exportAs = (format: TransferFormat) => run(() => transferApi.exportModel({ format, catalogId: catalog.id, query }));
   const selectedId = selection && "id" in selection ? selection.id : null;
-  const filtered = query.trim() !== "" || (showingRelations && connectionTypeId !== "") || activeCatalog.typeIds.length > 0;
 
   function renderTable<Row extends { id: string }>(rows: Row[], columns: Column<Row>[], kind: "component" | "connection") {
-    const ordered = sortRows(rows, columns, effectiveSort(columns as Column<unknown>[]));
-    const activeSort = effectiveSort(columns as Column<unknown>[]);
+    const activeSort = columns.some((column) => column.key === sort.key) ? sort : { key: columns[0].key, direction: "asc" as SortDirection };
+    const ordered = sortRows(rows, columns, activeSort);
     return (
       <div className="catalog-table-wrap">
         <table className="catalog-table">
@@ -170,7 +157,7 @@ export default function CatalogView({ sidebarState, onStateChange, selection, on
             ))}
           </tbody>
         </table>
-        {ordered.length === 0 && <p className="catalog-empty">Keine Einträge{filtered ? " für diese Auswahl" : ""}.</p>}
+        {ordered.length === 0 && <p className="catalog-empty">Keine Einträge{query.trim() ? " für diese Suche" : ""}.</p>}
       </div>
     );
   }
@@ -179,8 +166,15 @@ export default function CatalogView({ sidebarState, onStateChange, selection, on
     <div className="catalog-view">
       <header className="catalog-header">
         <div>
-          <h2>Kataloge</h2>
-          <p className="muted">Überblick über alle Elemente und Verbindungen. Die Auswahl hier ist auch die Grundlage für den Export.</p>
+          <h2>{catalog.name}</h2>
+          <p className="muted">
+            {catalog.description || (showingRelations ? "Verbindungen" : "Elemente")}
+            {" · "}
+            {showingRelations
+              ? (catalog.connectionTypeIds.length === 0 ? "alle Verbindungstypen" : `${catalog.connectionTypeIds.length} Verbindungstyp(en)`)
+              : typeLabel}
+            {" · Spalten und Auswahl im rechten Panel unter dem Katalog anpassen."}
+          </p>
         </div>
         <div className="catalog-actions">
           <button type="button" onClick={() => run(() => transferApi.downloadTemplate("xlsx"))} disabled={busy} title="Excel-Vorlage mit Hinweisen herunterladen">
@@ -191,60 +185,31 @@ export default function CatalogView({ sidebarState, onStateChange, selection, on
               <Upload size={14} /> Importieren…
             </button>
           )}
+          <button type="button" onClick={onClose} aria-label="Katalog schließen" title="Katalog schließen"><X size={14} /></button>
         </div>
       </header>
 
       {error && <div className="error-banner" role="alert">{error}</div>}
 
-      <div className="catalog-body">
-        <nav className="catalog-nav" aria-label="Kataloge">
-          {catalogs.map((catalog) => (
-            <button
-              key={catalog.id}
-              type="button"
-              className={`catalog-nav-item${catalog.id === activeCatalog.id && !showingRelations ? " active" : ""}`}
-              onClick={() => setCatalogId(catalog.id)}
-            >
-              <span>{catalog.label}{catalog.layer && <small>{catalog.layer}</small>}</span>
-              <em>{catalog.count}</em>
-            </button>
-          ))}
-          <button
-            type="button"
-            className={`catalog-nav-item catalog-nav-separated${showingRelations ? " active" : ""}`}
-            onClick={() => setCatalogId(RELATIONS)}
-          >
-            <span>Verbindungen</span>
-            <em>{sidebarState.connections.length}</em>
+      <section className="catalog-main catalog-main--single" aria-live="polite">
+        <div className="catalog-toolbar">
+          <label className="catalog-search">
+            <Search size={14} />
+            <input type="search" placeholder="Suchen in Name, Beschreibung, Externe ID, Eigenschaften…" value={query} onChange={(event) => setQuery(event.target.value)} />
+          </label>
+          <span className="catalog-count">{shown} Einträge</span>
+          <button type="button" onClick={() => exportAs("xlsx")} disabled={busy} title="Katalog als Excel exportieren">
+            <Download size={14} /> Excel
           </button>
-        </nav>
+          <button type="button" onClick={() => exportAs("csv")} disabled={busy} title="Katalog als CSV exportieren">
+            <Download size={14} /> CSV
+          </button>
+        </div>
 
-        <section className="catalog-main" aria-live="polite">
-          <div className="catalog-toolbar">
-            <label className="catalog-search">
-              <Search size={14} />
-              <input type="search" placeholder="Suchen in Name, Beschreibung, Externe ID, Eigenschaften…" value={query} onChange={(event) => setQuery(event.target.value)} />
-            </label>
-            {showingRelations && (
-              <select value={connectionTypeId} onChange={(event) => setConnectionTypeId(event.target.value)} aria-label="Verbindungstyp">
-                <option value="">Alle Verbindungstypen</option>
-                {sidebarState.connectionTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
-              </select>
-            )}
-            <span className="catalog-count">{shown} von {total}</span>
-            <button type="button" onClick={() => exportAs("xlsx")} disabled={busy} title={showingRelations ? "Aktuelle Auswahl als Excel exportieren" : "Aktuelle Auswahl als Excel (Elemente und Relationen) exportieren"}>
-              <Download size={14} /> Excel
-            </button>
-            <button type="button" onClick={() => exportAs("csv")} disabled={busy} title="Aktuelle Auswahl als CSV exportieren">
-              <Download size={14} /> CSV
-            </button>
-          </div>
-
-          {showingRelations
-            ? renderTable(relationRows, relationColumns, "connection")
-            : renderTable(elementRows, elementColumns, "component")}
-        </section>
-      </div>
+        {showingRelations
+          ? renderTable(relationRows, relationColumns, "connection")
+          : renderTable(elementRows, elementColumns, "component")}
+      </section>
 
       {importOpen && (
         <ImportDialog

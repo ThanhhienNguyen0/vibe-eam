@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { GitBranch, LayoutDashboard, LogOut, Plus, ScrollText, Table2 } from "lucide-react";
+import { GitBranch, LayoutDashboard, LogOut, Plus, ScrollText } from "lucide-react";
 import Sidebar, { type SidebarSelection } from "./Sidebar/Sidebar";
 import SidebarPanels from "./Sidebar/SidebarPanels";
 import DiagramEditor from "./DiagramEditor";
@@ -72,20 +72,30 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
     components: [],
     connections: [],
     diagrams: [],
-    viewpoints: []
+    viewpoints: [],
+    catalogs: []
   });
   const [sidebarSelection, setSidebarSelection] = useState<SidebarSelection | null>(null);
   const [activeDiagramId, setActiveDiagramId] = useState<string | null>(null);
-  const [workspaceView, setWorkspaceView] = useState<"diagrams" | "catalogs" | "metamodel" | "users" | "audit">("diagrams");
+  const [activeCatalogId, setActiveCatalogId] = useState<string | null>(null);
+  const [workspaceView, setWorkspaceView] = useState<"diagrams" | "metamodel" | "users" | "audit">("diagrams");
   const [error, setError] = useState("");
 
   const activeDiagram = sidebarState.diagrams.find((d) => d.id === activeDiagramId) ?? null;
+  const activeCatalog = sidebarState.catalogs.find((c) => c.id === activeCatalogId) ?? null;
 
   useEffect(() => {
     sidebarApi.getAll().then(setSidebarState).catch((e) => setError(e instanceof Error ? e.message : "Daten konnten nicht geladen werden."));
   }, []);
 
+  function openCatalog(id: string) {
+    setActiveDiagramId(null);
+    setActiveCatalogId(id);
+    setWorkspaceView("diagrams");
+  }
+
   function openDiagram(id: string) {
+    setActiveCatalogId(null);
     setActiveDiagramId(id);
     setWorkspaceView("diagrams");
   }
@@ -105,25 +115,19 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
         </div>
         <nav className="tabs" aria-label="Workspace">
           <button
-            className={`tabs-diagram-tab${!activeDiagram && workspaceView === "diagrams" ? " active" : ""}`}
-            onClick={() => { setActiveDiagramId(null); setWorkspaceView("diagrams"); }}
+            className={`tabs-diagram-tab${!activeDiagram && !activeCatalog && workspaceView === "diagrams" ? " active" : ""}`}
+            onClick={() => { setActiveDiagramId(null); setActiveCatalogId(null); setWorkspaceView("diagrams"); }}
           >
             <LayoutDashboard size={14} /> Diagramme
           </button>
-          <button
-            className={`tabs-diagram-tab${!activeDiagram && workspaceView === "catalogs" ? " active" : ""}`}
-            onClick={() => { setActiveDiagramId(null); setWorkspaceView("catalogs"); }}
-          >
-            <Table2 size={14} /> Kataloge
-          </button>
           {canManageMetamodel && <button
             className={`tabs-diagram-tab${!activeDiagram && workspaceView === "metamodel" ? " active" : ""}`}
-            onClick={() => { setActiveDiagramId(null); setWorkspaceView("metamodel"); }}
+            onClick={() => { setActiveDiagramId(null); setActiveCatalogId(null); setWorkspaceView("metamodel"); }}
           >
             <GitBranch size={14} /> Metamodel
           </button>}
-          {canManageUsers && <button className={`tabs-diagram-tab${workspaceView === "users" ? " active" : ""}`} onClick={() => { setActiveDiagramId(null); setWorkspaceView("users"); }}>Nutzerverwaltung</button>}
-          {canReadAudit && <button className={`tabs-diagram-tab${!activeDiagram && workspaceView === "audit" ? " active" : ""}`} onClick={() => { setActiveDiagramId(null); setWorkspaceView("audit"); }}><ScrollText size={14} /> Protokoll</button>}
+          {canManageUsers && <button className={`tabs-diagram-tab${workspaceView === "users" ? " active" : ""}`} onClick={() => { setActiveDiagramId(null); setActiveCatalogId(null); setWorkspaceView("users"); }}>Nutzerverwaltung</button>}
+          {canReadAudit && <button className={`tabs-diagram-tab${!activeDiagram && workspaceView === "audit" ? " active" : ""}`} onClick={() => { setActiveDiagramId(null); setActiveCatalogId(null); setWorkspaceView("audit"); }}><ScrollText size={14} /> Protokoll</button>}
         </nav>
         {activeDiagram && (
           <nav className="tabs" aria-label="Geöffnetes Diagramm">
@@ -134,6 +138,19 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
                 role="button"
                 title="Diagramm schließen"
                 onClick={(e) => { e.stopPropagation(); setActiveDiagramId(null); }}
+              >×</span>
+            </button>
+          </nav>
+        )}
+        {activeCatalog && !activeDiagram && workspaceView === "diagrams" && (
+          <nav className="tabs" aria-label="Geöffneter Katalog">
+            <button className="tabs-diagram-tab active">
+              {activeCatalog.name}
+              <span
+                className="tabs-diagram-close"
+                role="button"
+                title="Katalog schließen"
+                onClick={(e) => { e.stopPropagation(); setActiveCatalogId(null); }}
               >×</span>
             </button>
           </nav>
@@ -165,6 +182,8 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
           onStateChange={setSidebarState}
           onOpenDiagram={openDiagram}
           activeDiagramId={activeDiagramId}
+          onOpenCatalog={openCatalog}
+          activeCatalogId={activeCatalog?.id ?? null}
         />
 
         <main className="workspace workspace--full">
@@ -195,12 +214,15 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
               onSelectConnection={(id) => setSidebarSelection({ kind: "connection", id })}
               onClose={() => setActiveDiagramId(null)}
             />
-          ) : workspaceView === "catalogs" ? (
+          ) : activeCatalog && workspaceView === "diagrams" ? (
             <CatalogView
+              key={activeCatalog.id}
+              catalog={activeCatalog}
               sidebarState={sidebarState}
               onStateChange={setSidebarState}
               selection={sidebarSelection}
               onSelect={setSidebarSelection}
+              onClose={() => setActiveCatalogId(null)}
             />
           ) : workspaceView === "audit" && canReadAudit ? (
             <AuditLogView />
@@ -226,6 +248,7 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
               onStateChange={setSidebarState}
               onSelect={setSidebarSelection}
               onOpenDiagram={(id) => { openDiagram(id); setSidebarSelection(null); }}
+              onOpenCatalog={openCatalog}
               onClose={() => setSidebarSelection(null)}
             />
           </div>

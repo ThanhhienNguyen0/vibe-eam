@@ -19,6 +19,9 @@ model Company {
   connectionInstances ConnectionInstance[]
   architectureModel   ArchitectureModel?
   auditLogEntries     AuditLogEntry[]
+  catalogs            Catalog[]
+  /// False until the starter catalogs were stored once (so deleted starters never reappear).
+  catalogsInitialized Boolean              @default(false)
 }
 
 enum Role {
@@ -309,4 +312,20 @@ model AuditLogEntry {
   company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, createdAt])
+}
+
+model Catalog {
+  id          String   @id
+  companyId   String
+  name        String
+  description String   @default("")
+  kind        String
+  /// componentTypeIds, connectionTypeIds, propertyKeys, columns
+  config      Json
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, sortOrder])
 }

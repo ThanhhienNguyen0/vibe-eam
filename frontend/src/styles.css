@@ -3747,3 +3747,10 @@ tr.attention td {
   .catalog-body { grid-template-columns: 1fr; }
   .catalog-nav { flex-direction: row; overflow-x: auto; }
 }
+
+/* REQ-31: user defined catalogs */
+.catalog-main--single { flex: 1; padding: 0 24px 18px; }
+.catalog-fieldset { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px; margin: 0; }
+.catalog-fieldset legend { font-size: 12px; font-weight: 700; color: #475569; padding: 0 4px; }
+.catalog-checklist { display: grid; gap: 4px; max-height: 180px; overflow-y: auto; }
+.catalog-check { display: flex; align-items: center; gap: 8px; font-size: 13px; }

@@ -144,6 +144,7 @@ const state: SidebarState = {
     { id: "stakeholder-depends-tech", name: "", connectionTypeId: "conn-depends-on", sourceComponentId: "stakeholder", targetComponentId: "tech", description: "" },
     { id: "proc-realizes-cap", name: "", connectionTypeId: "conn-realizes", sourceComponentId: "proc", targetComponentId: "cap", description: "" }
   ],
+  catalogs: [],
   diagrams: [],
   viewpoints: [
     {

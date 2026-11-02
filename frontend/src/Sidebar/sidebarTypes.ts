@@ -170,6 +170,24 @@ export interface Diagram {
   viewpointId?: string;
 }
 
+export type CatalogKind = "elements" | "relations";
+
+/** User defined catalog (REQ-31): a saved selection of types, properties and columns. */
+export interface Catalog {
+  id: string;
+  name: string;
+  description: string;
+  kind: CatalogKind;
+  /** elements: included component types. Empty = all concrete types. */
+  componentTypeIds: string[];
+  /** relations: included connection types. Empty = all. */
+  connectionTypeIds: string[];
+  /** elements: property columns to show (explicit, empty = none). */
+  propertyKeys: string[];
+  /** Optional standard columns, see catalogModel (ELEMENT_COLUMNS / RELATION_COLUMNS). */
+  columns: string[];
+}
+
 export interface Viewpoint {
   id: string;
   name: string;
@@ -237,4 +255,5 @@ export interface SidebarState {
   connections: ConnectionInstance[];
   diagrams: Diagram[];
   viewpoints: Viewpoint[];
+  catalogs: Catalog[];
 }

@@ -105,6 +105,7 @@ const baseState: SidebarState = {
     { id: "app-serves-proc", name: "", connectionTypeId: "conn-serves", sourceComponentId: "app", targetComponentId: "proc", description: "" },
     { id: "owner-responsible-app", name: "", connectionTypeId: "conn-responsible-for", sourceComponentId: "stakeholder", targetComponentId: "app", description: "" }
   ],
+  catalogs: [],
   diagrams: [
     { id: "diagram", name: "Diagram", description: "", componentIds: ["stakeholder", "app", "proc"], connectionIds: ["app-serves-proc", "owner-responsible-app"], positions: {}, metamodelId: "old-mm", viewpointId: "vp-business-owner" }
   ]

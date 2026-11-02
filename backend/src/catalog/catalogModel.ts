@@ -200,33 +200,85 @@ export function relationCatalogRows(source: CatalogSource, filter: RelationFilte
   }));
 }
 
-export interface ElementCatalog {
-  /** "all" or the component type id. */
-  id: string;
-  label: string;
-  typeIds: string[];
-  count: number;
-  layer: string;
+// ── User defined catalogs ────────────────────────────────────────────────────
+
+export const ELEMENT_COLUMNS = [
+  { key: "type", label: "Typ" },
+  { key: "layer", label: "Ebene" },
+  { key: "externalId", label: "Externe ID" },
+  { key: "description", label: "Beschreibung" },
+  { key: "outgoing", label: "Ausgehende Verbindungen" },
+  { key: "incoming", label: "Eingehende Verbindungen" },
+  { key: "diagrams", label: "Diagramme" }
+] as const;
+
+export const RELATION_COLUMNS = [
+  { key: "type", label: "Typ" },
+  { key: "name", label: "Name" },
+  { key: "externalId", label: "Externe ID" },
+  { key: "description", label: "Beschreibung" }
+] as const;
+
+export function catalogColumnKeys(kind: "elements" | "relations"): string[] {
+  return (kind === "elements" ? ELEMENT_COLUMNS : RELATION_COLUMNS).map((column) => column.key);
 }
 
-/** One catalog per component type plus an "all elements" catalog. */
-export function elementCatalogs(source: Pick<CatalogSource, "componentTypes" | "components">): ElementCatalog[] {
-  const counts = new Map<string, number>();
-  for (const component of source.components) {
-    counts.set(component.componentTypeId, (counts.get(component.componentTypeId) ?? 0) + 1);
-  }
-  const perType = source.componentTypes
-    .filter((type) => !type.isAbstract)
-    .map((type): ElementCatalog => ({
-      id: type.id,
-      label: type.name,
-      typeIds: [type.id],
-      count: counts.get(type.id) ?? 0,
-      layer: type.layer ?? ""
-    }))
-    .sort((a, b) => a.layer.localeCompare(b.layer, "de") || a.label.localeCompare(b.label, "de"));
-  return [
-    { id: "all", label: "Alle Elemente", typeIds: [], count: source.components.length, layer: "" },
-    ...perType
-  ];
+/** The subset of a catalog that drives filtering and export. */
+export interface CatalogDefinition {
+  kind: "elements" | "relations";
+  componentTypeIds: string[];
+  connectionTypeIds: string[];
+  propertyKeys: string[];
+  columns: string[];
+}
+
+/** Matches nothing: used when a catalog only references types that no longer exist. */
+export const NO_MATCH_ID = "__no-match__";
+
+function existingIds(selected: string[], existing: Array<{ id: string }>): string[] {
+  if (selected.length === 0) return [];
+  const known = new Set(existing.map((item) => item.id));
+  const kept = selected.filter((id) => known.has(id));
+  return kept.length > 0 ? kept : [NO_MATCH_ID];
+}
+
+/** Component types the catalog includes (all concrete types when none are selected). */
+export function catalogComponentTypes(
+  catalog: Pick<CatalogDefinition, "componentTypeIds">,
+  source: { componentTypes: CatalogComponentType[] }
+): CatalogComponentType[] {
+  const ids = existingIds(catalog.componentTypeIds, source.componentTypes);
+  return ids.length > 0
+    ? source.componentTypes.filter((type) => ids.includes(type.id))
+    : source.componentTypes.filter((type) => !type.isAbstract);
+}
+
+/** Property keys that can be chosen for a catalog (union over its types). */
+export function availablePropertyKeys(
+  catalog: Pick<CatalogDefinition, "componentTypeIds">,
+  source: { componentTypes: CatalogComponentType[] }
+): string[] {
+  return propertyKeysForTypes(catalogComponentTypes(catalog, source));
+}
+
+/** Selected property keys that still exist on the catalog's types, in the order of the types. */
+export function catalogPropertyKeys(catalog: CatalogDefinition, source: { componentTypes: CatalogComponentType[] }): string[] {
+  const selected = new Set(catalog.propertyKeys);
+  return availablePropertyKeys(catalog, source).filter((key) => selected.has(key));
+}
+
+export function catalogElementFilter(
+  catalog: Pick<CatalogDefinition, "componentTypeIds">,
+  source: { componentTypes: CatalogComponentType[] },
+  query?: string
+): ElementFilter {
+  return { typeIds: existingIds(catalog.componentTypeIds, source.componentTypes), query };
+}
+
+export function catalogRelationFilter(
+  catalog: Pick<CatalogDefinition, "connectionTypeIds">,
+  source: { connectionTypes: CatalogConnectionType[] },
+  query?: string
+): RelationFilter {
+  return { connectionTypeIds: existingIds(catalog.connectionTypeIds, source.connectionTypes), query };
 }

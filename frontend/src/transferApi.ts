@@ -48,6 +48,8 @@ export interface AuditEntry {
 
 export interface ExportParams {
   format: TransferFormat;
+  /** Export a saved catalog (its types, properties and columns). */
+  catalogId?: string;
   sheet?: TransferSheet;
   typeIds?: string[];
   connectionTypeIds?: string[];
@@ -56,6 +58,7 @@ export interface ExportParams {
 
 export function buildExportQuery(params: ExportParams): string {
   const search = new URLSearchParams({ format: params.format });
+  if (params.catalogId) search.set("catalogId", params.catalogId);
   if (params.sheet) search.set("sheet", params.sheet);
   if (params.typeIds && params.typeIds.length > 0) search.set("typeIds", params.typeIds.join(","));
   if (params.connectionTypeIds && params.connectionTypeIds.length > 0) search.set("connectionTypeIds", params.connectionTypeIds.join(","));

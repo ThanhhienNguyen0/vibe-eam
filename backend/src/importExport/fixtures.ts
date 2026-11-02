@@ -28,6 +28,10 @@ export function sampleState(): SidebarState {
     connections: [
       { id: "c-1", externalId: "REL-1", name: "", connectionTypeId: "conn-uses", sourceComponentId: "app-1", targetComponentId: "data-1", description: "", properties: {} }
     ],
+    catalogs: [
+      { id: "cat-apps", name: "Anwendungen", description: "", kind: "elements", componentTypeIds: ["ct-app"], connectionTypeIds: [], propertyKeys: ["owner"], columns: ["description"] },
+      { id: "cat-rel", name: "Nutzung", description: "", kind: "relations", componentTypeIds: [], connectionTypeIds: ["conn-uses"], propertyKeys: [], columns: ["externalId"] }
+    ],
     diagrams: [
       { id: "d-1", name: "Overview", description: "", metamodelId: "mm", componentIds: ["app-1", "data-1"], connectionIds: ["c-1"], positions: {} }
     ]

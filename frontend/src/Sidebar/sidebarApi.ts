@@ -4,6 +4,7 @@ import type {
   ComponentType,
   ConnectionInstance,
   ConnectionType,
+  Catalog,
   Diagram,
   MetamodelDefinition,
   MetamodelImportResult,
@@ -74,6 +75,14 @@ export const sidebarApi = {
     request<ConnectionInstance>(`${BASE}/connections/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteConnection: (id: string) =>
     request<void>(`${BASE}/connections/${id}`, { method: "DELETE" }),
+
+  // Catalogs
+  createCatalog: (data: Partial<Omit<Catalog, "id">> & { name: string }) =>
+    request<Catalog>(`${BASE}/catalogs`, { method: "POST", body: JSON.stringify(data) }),
+  updateCatalog: (id: string, data: Partial<Omit<Catalog, "id">>) =>
+    request<Catalog>(`${BASE}/catalogs/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteCatalog: (id: string) =>
+    request<void>(`${BASE}/catalogs/${id}`, { method: "DELETE" }),
 
   // Diagrams
   createDiagram: (data: { name: string; description?: string }) =>

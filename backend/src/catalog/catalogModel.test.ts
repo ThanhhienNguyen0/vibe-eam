@@ -3,7 +3,12 @@ import { sampleState } from "../importExport/fixtures.js";
 import { buildExportSheets, buildTemplateSheets } from "../importExport/exportBuilder.js";
 import {
   elementCatalogRows,
-  elementCatalogs,
+  NO_MATCH_ID,
+  availablePropertyKeys,
+  catalogComponentTypes,
+  catalogElementFilter,
+  catalogPropertyKeys,
+  catalogRelationFilter,
   filterElements,
   filterRelations,
   propertyKeysForTypes,
@@ -13,9 +18,17 @@ import {
 describe("catalog model", () => {
   const state = sampleState();
 
-  it("lists one catalog per concrete type plus 'all', sorted by layer", () => {
-    const catalogs = elementCatalogs(state);
-    expect(catalogs.map((item) => [item.id, item.count])).toEqual([["all", 3], ["ct-app", 2], ["ct-data", 1]]);
+  it("resolves catalog selections against existing types", () => {
+    const apps = { componentTypeIds: ["ct-app"], connectionTypeIds: [], propertyKeys: ["owner", "gone"], columns: [], kind: "elements" as const };
+    expect(catalogComponentTypes(apps, state).map((type) => type.id)).toEqual(["ct-app"]);
+    expect(availablePropertyKeys(apps, state)).toEqual(["owner", "criticality"]);
+    expect(catalogPropertyKeys(apps, state)).toEqual(["owner"]);
+    expect(catalogElementFilter(apps, state).typeIds).toEqual(["ct-app"]);
+    // empty selection means all concrete types, a selection of deleted types matches nothing
+    expect(catalogComponentTypes({ componentTypeIds: [] }, state).map((type) => type.id)).toEqual(["ct-app", "ct-data"]);
+    expect(filterElements(state, catalogElementFilter({ componentTypeIds: ["deleted"] }, state))).toEqual([]);
+    expect(catalogElementFilter({ componentTypeIds: ["deleted"] }, state).typeIds).toEqual([NO_MATCH_ID]);
+    expect(catalogRelationFilter({ connectionTypeIds: ["conn-uses"] }, state).connectionTypeIds).toEqual(["conn-uses"]);
   });
 
   it("filters elements by type and by a case-insensitive query over name, type, external id and properties", () => {
@@ -72,5 +85,26 @@ describe("export builder", () => {
     expect(notes.some((line) => line.includes("Application – uses → Data Object"))).toBe(true);
     expect(notes.some((line) => line.includes("Abstract"))).toBe(false);
     expect(buildTemplateSheets(state, "relations").map((sheet) => sheet.name)).toEqual(["Relationen"]);
+  });
+});
+
+describe("catalog export", () => {
+  const state = sampleState();
+
+  it("restricts property and standard columns but keeps ID, type and name for re-import", () => {
+    const [sheet] = buildExportSheets(state, {
+      sheet: "elements",
+      elementFilter: catalogElementFilter(state.catalogs[0], state),
+      propertyKeys: catalogPropertyKeys(state.catalogs[0], state),
+      columns: state.catalogs[0].columns
+    });
+    expect(sheet.rows[0]).toEqual(["ID", "Typ", "Name", "Beschreibung", "owner"]);
+    expect(sheet.rows.map((row) => row[0])).toEqual(["ID", "app-1", "app-2"]);
+  });
+
+  it("exports a relation catalog with its own columns", () => {
+    const [sheet] = buildExportSheets(state, { sheet: "relations", relationFilter: catalogRelationFilter(state.catalogs[1], state), columns: state.catalogs[1].columns });
+    expect(sheet.rows[0]).toEqual(["ID", "Externe ID", "Typ", "Quelle", "Ziel", "Quelle (Name)", "Ziel (Name)"]);
+    expect(sheet.rows).toHaveLength(2);
   });
 });

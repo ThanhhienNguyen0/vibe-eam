@@ -2,6 +2,11 @@ import express, { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import { createHash } from "node:crypto";
 import { readSidebarState, writeSidebarState, listAuditLog } from "../Sidebar/sidebarStore.js";
+import {
+  catalogElementFilter,
+  catalogPropertyKeys,
+  catalogRelationFilter
+} from "../catalog/catalogModel.js";
 import { buildExportSheets, buildTemplateSheets } from "./exportBuilder.js";
 import { countErrors, planImport, type ImportPlan } from "./importPlan.js";
 import {
@@ -75,6 +80,24 @@ const today = (): string => new Date().toISOString().slice(0, 10);
 router.get("/export", async (req, res, next) => {
   try {
     const format = formatParam(req.query.format) ?? "xlsx";
+    const catalogId = firstString(req.query.catalogId);
+    if (catalogId) {
+      // A catalog defines type filter, property and standard columns. The search text narrows it further.
+      const state = await readSidebarState();
+      const catalog = state.catalogs.find((item) => item.id === catalogId);
+      if (!catalog) throw new TransferError(404, "Katalog nicht gefunden.");
+      const query = firstString(req.query.q);
+      const sheets = catalog.kind === "relations"
+        ? buildExportSheets(state, { sheet: "relations", relationFilter: catalogRelationFilter(catalog, state, query), columns: catalog.columns })
+        : buildExportSheets(state, {
+          sheet: "elements",
+          elementFilter: catalogElementFilter(catalog, state, query),
+          propertyKeys: catalogPropertyKeys(catalog, state),
+          columns: catalog.columns
+        });
+      await sendTable(res, format, sheets, `eam-katalog-${safeFileName(catalog.name).replace(/[^\p{L}\p{N}_-]+/gu, "-")}-${today()}`);
+      return;
+    }
     const sheet = sheetParam(req.query.sheet);
     if (format === "csv" && !sheet) throw new TransferError(400, "Für CSV muss sheet=elements oder sheet=relations angegeben werden.");
     const query = firstString(req.query.q);

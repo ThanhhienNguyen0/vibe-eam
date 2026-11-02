@@ -42,6 +42,7 @@ const state: SidebarState = {
   connections: [
     { id: "connection", name: "", connectionTypeId: "conn-dep", sourceComponentId: "source", targetComponentId: "target", description: "", properties: { protocol: "HTTPS" } }
   ],
+  catalogs: [],
   diagrams: [
     { id: "diagram", name: "Diagram", description: "", metamodelId: "mm", componentIds: ["source", "target"], connectionIds: ["connection"], positions: { source: { x: 10, y: 20 }, target: { x: 30, y: 40 } } }
   ]

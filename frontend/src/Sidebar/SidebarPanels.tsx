@@ -4,6 +4,7 @@ import { sidebarApi } from "./sidebarApi";
 import type { SidebarSelection } from "./Sidebar";
 import { COMPONENT_SHAPES } from "./sidebarTypes";
 import { useAccess } from "../access";
+import CatalogEditor from "./CatalogEditor";
 import type {
   ComponentInstance,
   ComponentShape,
@@ -22,6 +23,7 @@ interface Props {
   onStateChange: (next: SidebarState) => void;
   onSelect: (sel: SidebarSelection) => void;
   onOpenDiagram: (id: string) => void;
+  onOpenCatalog: (id: string) => void;
   onClose: () => void;
 }
 
@@ -37,11 +39,48 @@ function DetailWrapper({ title, onClose, children }: { title: string; onClose: (
   );
 }
 
-export default function SidebarPanels({ selection, sidebarState, onStateChange, onSelect, onOpenDiagram, onClose }: Props) {
+export default function SidebarPanels({ selection, sidebarState, onStateChange, onSelect, onOpenDiagram, onOpenCatalog, onClose }: Props) {
   const { canWrite, canManageMetamodel } = useAccess();
   if (!selection) return null;
 
   const { componentTypes, connectionTypes, connectionRules, viewpoints, components, connections, diagrams } = sidebarState;
+
+  if (selection.kind === "catalogs") {
+    return (
+      <DetailWrapper title="Kataloge" onClose={onClose}>
+        <p className="muted">Kataloge sind gespeicherte Auswahlen aus Typen, Eigenschaften und Spalten. Klicke auf einen Katalog, um ihn zu öffnen.</p>
+        <div className="sb-instance-list">
+          {sidebarState.catalogs.map((catalog) => (
+            <div key={catalog.id} className="sb-instance-row sb-diagram-row" onClick={() => onOpenCatalog(catalog.id)}>
+              <strong>{catalog.name}</strong>
+              <span className="muted">{catalog.kind === "elements" ? "Elemente" : "Verbindungen"}</span>
+            </div>
+          ))}
+          {sidebarState.catalogs.length === 0 && <p className="muted">Keine Kataloge vorhanden.</p>}
+        </div>
+      </DetailWrapper>
+    );
+  }
+
+  if (selection.kind === "catalog") {
+    const catalog = sidebarState.catalogs.find((item) => item.id === selection.id);
+    if (!catalog) return null;
+    return (
+      <DetailWrapper title={catalog.name} onClose={onClose}>
+        <CatalogEditor
+          key={catalog.id}
+          catalog={catalog}
+          sidebarState={sidebarState}
+          canWrite={canWrite}
+          onSave={async (patch) => {
+            const updated = await sidebarApi.updateCatalog(catalog.id, patch);
+            onStateChange({ ...sidebarState, catalogs: sidebarState.catalogs.map((item) => (item.id === catalog.id ? updated : item)) });
+          }}
+          onOpen={() => onOpenCatalog(catalog.id)}
+        />
+      </DetailWrapper>
+    );
+  }
 
   const collections = { componentType: componentTypes, connectionType: connectionTypes, connectionRule: connectionRules, viewpoint: viewpoints, component: components, connection: connections, diagram: diagrams };
   if ("id" in selection) {

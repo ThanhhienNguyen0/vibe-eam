@@ -147,4 +147,42 @@ describe.skipIf(!url)("REQ-31 import/export against real PostgreSQL", () => {
     expect((await request(app).get("/api/sidebar/audit-log").set("Authorization", `Bearer ${first.token}`)).body).toHaveLength(1);
     expect((await request(app).get("/api/sidebar/audit-log").set("Authorization", `Bearer ${second.token}`)).body).toHaveLength(0);
   });
+
+  it("seeds starter catalogs once and persists create, update, delete and catalog export per company", async () => {
+    const admin = await registerCompany();
+    const other = await registerCompany();
+    const viewer = await addUser(admin.token, "Viewer");
+    const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
+
+    const state = await sidebar(admin.token);
+    expect(state.catalogs.length).toBeGreaterThan(3);
+    const starterCount = state.catalogs.length;
+    const apps = state.catalogs.find((item) => item.name === "Anwendungslandschaft")!;
+    expect(apps.componentTypeIds.every((id) => state.componentTypes.some((type) => type.id === id))).toBe(true);
+
+    const created = await request(app).post("/api/sidebar/catalogs").set(auth(admin.token))
+      .send({ name: "Eigener Katalog", kind: "elements", componentTypeIds: apps.componentTypeIds, propertyKeys: ["owner"], columns: ["description"] });
+    expect(created.status).toBe(201);
+    expect((await request(app).post("/api/sidebar/catalogs").set(auth(viewer)).send({ name: "x" })).status).toBe(403);
+    expect((await request(app).patch(`/api/sidebar/catalogs/${created.body.id}`).set(auth(admin.token)).send({ name: "Umbenannt", columns: ["bogus"] })).status).toBe(400);
+    expect((await request(app).patch(`/api/sidebar/catalogs/${created.body.id}`).set(auth(admin.token)).send({ name: "Umbenannt" })).status).toBe(200);
+
+    // Persisted and isolated: the other company neither sees nor can change the catalog.
+    const reloaded = await sidebar(admin.token);
+    expect(reloaded.catalogs.find((item) => item.id === created.body.id)?.name).toBe("Umbenannt");
+    expect((await sidebar(other.token)).catalogs.some((item) => item.id === created.body.id)).toBe(false);
+    expect((await request(app).delete(`/api/sidebar/catalogs/${created.body.id}`).set(auth(other.token))).status).toBe(404);
+
+    const exported = await request(app).get(`/api/sidebar/export?format=csv&catalogId=${created.body.id}`).set(auth(viewer))
+      .buffer(true).parse((res, callback) => { const chunks: Buffer[] = []; res.on("data", (chunk: Buffer) => chunks.push(chunk)); res.on("end", () => callback(null, Buffer.concat(chunks))); });
+    expect(exported.status).toBe(200);
+    expect(exported.body.toString("utf-8").split("\n")[0]).toContain("Beschreibung");
+
+    // Deleted starter catalogs must not come back (seeding happens only once per company).
+    expect((await request(app).delete(`/api/sidebar/catalogs/${created.body.id}`).set(auth(admin.token))).status).toBe(204);
+    expect((await request(app).delete(`/api/sidebar/catalogs/${apps.id}`).set(auth(admin.token))).status).toBe(204);
+    const finalState = await sidebar(admin.token);
+    expect(finalState.catalogs).toHaveLength(starterCount - 1);
+    expect(finalState.catalogs.some((item) => item.id === apps.id)).toBe(false);
+  });
 });

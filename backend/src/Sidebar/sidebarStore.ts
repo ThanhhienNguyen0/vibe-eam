@@ -7,6 +7,7 @@ import type {
   ConnectionInstance,
   ConnectionRule,
   ConnectionType,
+  Catalog,
   Diagram,
   MetamodelDefinition,
   MetamodelImportResult,
@@ -726,6 +727,53 @@ const STARTER_DIAGRAMS: Diagram[] = [
   }
 ];
 
+const ELEMENT_DETAIL_COLUMNS = ["externalId", "description", "outgoing", "incoming", "diagrams"];
+
+const STARTER_CATALOGS: Catalog[] = [
+  {
+    id: "catalog-all-elements", name: "Alle Elemente", kind: "elements",
+    description: "Alle Elemente des Modells mit Typ und Ebene.",
+    componentTypeIds: [], connectionTypeIds: [], propertyKeys: [], columns: ["type", "layer", "externalId", "description"]
+  },
+  {
+    id: "catalog-applications", name: "Anwendungslandschaft", kind: "elements",
+    description: "Anwendungen mit Version, Verantwortlichem und Nutzung in Diagrammen.",
+    componentTypeIds: ["ct-app"], connectionTypeIds: [], propertyKeys: ["version", "owner"], columns: ELEMENT_DETAIL_COLUMNS
+  },
+  {
+    id: "catalog-infrastructure", name: "Infrastruktur", kind: "elements",
+    description: "Server, Datenbanken und Technologieknoten.",
+    componentTypeIds: ["ct-server", "ct-db", "ct-technology-node"], connectionTypeIds: [],
+    propertyKeys: ["os", "cpu", "ram", "engine", "version", "platform", "environment"], columns: ["type", "externalId", "description", "incoming"]
+  },
+  {
+    id: "catalog-business", name: "Geschäftsarchitektur", kind: "elements",
+    description: "Fähigkeiten, Organisationseinheiten, Stakeholder und Ziele.",
+    componentTypeIds: ["ct-capability", "ct-org-unit", "ct-stakeholder", "ct-goal"], connectionTypeIds: [],
+    propertyKeys: ["owner", "criticality", "manager", "role", "department", "metric", "targetDate"], columns: ["type", "layer", "description", "outgoing", "incoming"]
+  },
+  {
+    id: "catalog-data", name: "Datenobjekte", kind: "elements",
+    description: "Datenobjekte mit Eigentümer und Klassifizierung.",
+    componentTypeIds: ["ct-data-object"], connectionTypeIds: [], propertyKeys: ["dataOwner", "classification"], columns: ["externalId", "description", "incoming", "diagrams"]
+  },
+  {
+    id: "catalog-processes", name: "Prozesse (BPMN)", kind: "elements",
+    description: "Prozesse, Aufgaben und Services.",
+    componentTypeIds: ["ct-proc", "ct-task", "ct-svc"], connectionTypeIds: [], propertyKeys: ["owner", "sla", "verantwortlich"], columns: ["type", "description", "diagrams"]
+  },
+  {
+    id: "catalog-all-relations", name: "Alle Verbindungen", kind: "relations",
+    description: "Alle Verbindungen des Modells.",
+    componentTypeIds: [], connectionTypeIds: [], propertyKeys: [], columns: ["type", "name", "externalId", "description"]
+  },
+  {
+    id: "catalog-dependencies", name: "Abhängigkeiten", kind: "relations",
+    description: "Nutzungs-, Abhängigkeits- und Bereitstellungsbeziehungen.",
+    componentTypeIds: [], connectionTypeIds: ["conn-depends-on", "conn-uses", "conn-serves"], propertyKeys: [], columns: ["type", "description"]
+  }
+];
+
 const defaultState: SidebarState = {
   metamodel: DEFAULT_METAMODEL,
   componentTypes: [
@@ -923,7 +971,8 @@ const defaultState: SidebarState = {
   components: STARTER_COMPONENTS,
   connections: STARTER_CONNECTIONS,
   diagrams: STARTER_DIAGRAMS,
-  viewpoints: EAM_VIEWPOINTS
+  viewpoints: EAM_VIEWPOINTS,
+  catalogs: STARTER_CATALOGS
 };
 
 const cachedByCompany = new Map<string, SidebarState>();
@@ -1012,7 +1061,9 @@ function normalizeSidebarState(raw: Partial<SidebarState>, seeds: SidebarState =
     components,
     connections,
     viewpoints,
-    diagrams
+    diagrams,
+    // Seeds only apply while the company has never stored catalogs; deleted starter catalogs stay deleted.
+    catalogs: raw.catalogs ?? seeds.catalogs
   };
 }
 
@@ -1036,7 +1087,7 @@ export async function readSidebarState(): Promise<SidebarState> {
     if (persisted) {
       const normalized = normalizeSidebarStateForCompany(persisted, companyId);
       const stored = JSON.stringify(normalized) === JSON.stringify(persisted)
-        ? persisted
+        ? persisted as SidebarState
         : await databaseSidebarRepository().write(normalized, companyId);
       cachedByCompany.set(companyId, stored);
       return structuredClone(stored);
@@ -1464,6 +1515,31 @@ export async function updateDiagram(id: string, patch: Partial<Diagram>): Promis
   state.diagrams[idx] = { ...state.diagrams[idx], ...patch, id };
   await writeSidebarState(state);
   return state.diagrams[idx];
+}
+
+export async function addCatalog(catalog: Catalog): Promise<Catalog> {
+  const state = await readSidebarState();
+  state.catalogs.push(catalog);
+  await writeSidebarState(state);
+  return catalog;
+}
+
+export async function updateCatalog(id: string, patch: Partial<Catalog>): Promise<Catalog | null> {
+  const state = await readSidebarState();
+  const idx = state.catalogs.findIndex((item) => item.id === id);
+  if (idx === -1) return null;
+  state.catalogs[idx] = { ...state.catalogs[idx], ...patch, id };
+  await writeSidebarState(state);
+  return state.catalogs[idx];
+}
+
+export async function deleteCatalog(id: string): Promise<boolean> {
+  const state = await readSidebarState();
+  const before = state.catalogs.length;
+  state.catalogs = state.catalogs.filter((item) => item.id !== id);
+  if (state.catalogs.length === before) return false;
+  await writeSidebarState(state);
+  return true;
 }
 
 export async function deleteDiagram(id: string): Promise<boolean> {
