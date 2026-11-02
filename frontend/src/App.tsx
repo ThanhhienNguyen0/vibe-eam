@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { GitBranch, LayoutDashboard, LogOut, Plus, ScrollText } from "lucide-react";
+import { GitBranch, LayoutDashboard, LogOut, Plus, ScrollText, Table2 } from "lucide-react";
 import Sidebar, { type SidebarSelection } from "./Sidebar/Sidebar";
 import SidebarPanels from "./Sidebar/SidebarPanels";
 import DiagramEditor from "./DiagramEditor";
@@ -78,7 +78,7 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
   const [sidebarSelection, setSidebarSelection] = useState<SidebarSelection | null>(null);
   const [activeDiagramId, setActiveDiagramId] = useState<string | null>(null);
   const [activeCatalogId, setActiveCatalogId] = useState<string | null>(null);
-  const [workspaceView, setWorkspaceView] = useState<"diagrams" | "metamodel" | "users" | "audit">("diagrams");
+  const [workspaceView, setWorkspaceView] = useState<"diagrams" | "catalogs" | "metamodel" | "users" | "audit">("diagrams");
   const [error, setError] = useState("");
 
   const activeDiagram = sidebarState.diagrams.find((d) => d.id === activeDiagramId) ?? null;
@@ -92,6 +92,13 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
     setActiveDiagramId(null);
     setActiveCatalogId(id);
     setWorkspaceView("diagrams");
+  }
+
+  async function createCatalog() {
+    const created = await sidebarApi.createCatalog({ name: "Neuer Katalog", kind: "elements", columns: ["type", "description"] });
+    setSidebarState((s) => ({ ...s, catalogs: [...s.catalogs, created] }));
+    setSidebarSelection({ kind: "catalog", id: created.id });
+    openCatalog(created.id);
   }
 
   function openDiagram(id: string) {
@@ -119,6 +126,12 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
             onClick={() => { setActiveDiagramId(null); setActiveCatalogId(null); setWorkspaceView("diagrams"); }}
           >
             <LayoutDashboard size={14} /> Diagramme
+          </button>
+          <button
+            className={`tabs-diagram-tab${!activeDiagram && !activeCatalog && workspaceView === "catalogs" ? " active" : ""}`}
+            onClick={() => { setActiveDiagramId(null); setActiveCatalogId(null); setWorkspaceView("catalogs"); }}
+          >
+            <Table2 size={14} /> Kataloge
           </button>
           {canManageMetamodel && <button
             className={`tabs-diagram-tab${!activeDiagram && workspaceView === "metamodel" ? " active" : ""}`}
@@ -150,7 +163,7 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
                 className="tabs-diagram-close"
                 role="button"
                 title="Katalog schließen"
-                onClick={(e) => { e.stopPropagation(); setActiveCatalogId(null); }}
+                onClick={(e) => { e.stopPropagation(); setActiveCatalogId(null); setWorkspaceView("catalogs"); }}
               >×</span>
             </button>
           </nav>
@@ -222,7 +235,14 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
               onStateChange={setSidebarState}
               selection={sidebarSelection}
               onSelect={setSidebarSelection}
-              onClose={() => setActiveCatalogId(null)}
+              onClose={() => { setActiveCatalogId(null); setWorkspaceView("catalogs"); }}
+            />
+          ) : workspaceView === "catalogs" ? (
+            <CatalogOverview
+              sidebarState={sidebarState}
+              onOpenCatalog={openCatalog}
+              onCreateCatalog={createCatalog}
+              canWrite={canWrite}
             />
           ) : workspaceView === "audit" && canReadAudit ? (
             <AuditLogView />
@@ -308,6 +328,51 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (result: { token: st
 }
 
 /* ── Startansicht: Diagrammübersicht ───────────────────────────────────────── */
+
+export function CatalogOverview({
+  sidebarState,
+  onOpenCatalog,
+  onCreateCatalog,
+  canWrite
+}: {
+  sidebarState: SidebarState;
+  onOpenCatalog: (id: string) => void;
+  onCreateCatalog: () => void;
+  canWrite: boolean;
+}) {
+  const { catalogs } = sidebarState;
+  return (
+    <div className="home-view">
+      <div className="home-header">
+        <div>
+          <h2>Kataloge</h2>
+          <p className="muted">Gespeicherte Auswahlen aus Typen, Eigenschaften und Spalten. Jeder Katalog lässt sich als Excel oder CSV exportieren.</p>
+        </div>
+        {canWrite && <button className="home-create-btn" onClick={onCreateCatalog}>
+          <Plus size={16} /> Neuer Katalog
+        </button>}
+      </div>
+      {catalogs.length === 0 ? (
+        <div className="home-empty">
+          <Table2 size={36} />
+          <strong>Noch keine Kataloge</strong>
+          {canWrite && <button className="home-create-btn" onClick={onCreateCatalog}><Plus size={16} /> Ersten Katalog erstellen</button>}
+        </div>
+      ) : (
+        <div className="home-grid">
+          {catalogs.map((catalog) => (
+            <button key={catalog.id} className="home-card" onClick={() => onOpenCatalog(catalog.id)}>
+              <Table2 size={20} />
+              <strong>{catalog.name}</strong>
+              {catalog.description && <p>{catalog.description}</p>}
+              <span className="muted">{catalog.kind === "elements" ? "Elemente" : "Verbindungen"}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function HomeView({
   sidebarState,

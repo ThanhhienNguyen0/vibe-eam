@@ -210,16 +210,16 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
   const { componentTypes, connectionTypes, connectionRules, viewpoints, components, connections, diagrams, catalogs } = sidebarState;
 
   const [open, setOpen] = useState({
-    rules: true,
-    componentTypes: true,
+    rules: false,
+    componentTypes: false,
     connectionTypes: false,
     connectionRules: false,
-    viewpoints: true,
-    mgmt: true,
-    components: true,
+    viewpoints: false,
+    mgmt: false,
+    components: false,
     connections: false,
-    diagrams: true,
-    catalogs: true
+    diagrams: false,
+    catalogs: false
   });
 
   const [query, setQuery] = useState("");
@@ -261,13 +261,13 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
   }, [contextMenu]);
 
   const [openTypeGroups, setOpenTypeGroups] = useState<Record<string, boolean>>({});
-  const isTypeGroupOpen = (typeId: string) => openTypeGroups[typeId] ?? true;
+  const isTypeGroupOpen = (typeId: string) => openTypeGroups[typeId] ?? false;
   function toggleTypeGroup(typeId: string) {
     setOpenTypeGroups((p) => ({ ...p, [typeId]: !isTypeGroupOpen(typeId) }));
   }
 
   const [openTypeCategories, setOpenTypeCategories] = useState<Record<string, boolean>>({});
-  const isTypeCategoryOpen = (cat: string) => openTypeCategories[cat] ?? true;
+  const isTypeCategoryOpen = (cat: string) => openTypeCategories[cat] ?? false;
   function toggleTypeCategory(cat: string) {
     setOpenTypeCategories((p) => ({ ...p, [cat]: !isTypeCategoryOpen(cat) }));
   }
