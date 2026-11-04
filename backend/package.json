@@ -5,16 +5,16 @@
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "tsx watch --exclude ../node_modules --exclude node_modules src/server.ts",
+    "dev": "tsx watch --env-file-if-exists=../.env --exclude ../node_modules --exclude node_modules src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --cache=false",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate deploy",
-    "db:migrate:dev": "prisma migrate dev",
-    "db:seed": "prisma db seed",
-    "db:migrate-json": "tsx prisma/migrate-json.ts"
+    "db:migrate": "node --env-file-if-exists=../.env ../node_modules/prisma/build/index.js migrate deploy",
+    "db:migrate:dev": "node --env-file-if-exists=../.env ../node_modules/prisma/build/index.js migrate dev",
+    "db:seed": "node --env-file-if-exists=../.env ../node_modules/prisma/build/index.js db seed",
+    "db:migrate-json": "tsx --env-file-if-exists=../.env prisma/migrate-json.ts"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",

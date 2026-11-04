@@ -62,7 +62,6 @@ POSTGRES_USER=<local-user>
 POSTGRES_PASSWORD=<local-password>
 DATABASE_URL=postgresql://<user>:<password>@postgres:5432/<database>?schema=public
 JWT_SECRET=<long-random-local-secret>
-STORAGE_BACKEND=database
 BACKEND_PORT=4000
 FRONTEND_PORT=5173
 CORS_ORIGIN=http://localhost:5173
@@ -97,18 +96,30 @@ Use `docker.exe compose` for the same commands on affected Windows systems. The 
 
 Register a company and user through the app. Unauthenticated users see only the login/register screen; the EAM workspace is loaded after successful authentication.
 
-## 5. Run without Docker
+## 5. Run with hot reload (app outside Docker)
 
-A reachable PostgreSQL instance and a host-compatible `DATABASE_URL` are required.
+PostgreSQL is the only persistence layer ([ADR 0001](adr/0001-postgresql-only-persistence.md)); there is no JSON file fallback. Run only the database in Docker and the app on the host:
 
 ```bash
+npm run db:up                               # docker compose up -d postgres
 npm run db:generate --workspace backend
-npm run db:migrate --workspace backend
-npm run db:seed --workspace backend
-npm run dev
+npm run db:setup                            # prisma migrate deploy + idempotent seed
+npm run dev                                 # backend + frontend with hot reload
 ```
 
-The backend refuses to start when `JWT_SECRET` is missing or shorter than 32 characters.
+All backend scripts (`dev`, `db:migrate`, `db:seed`, `db:migrate-json`) load the repository root `.env` automatically if it exists. Values already set in the shell or by Docker Compose take precedence. `DATABASE_URL` in `.env.example` already points at `localhost`.
+
+The backend refuses to start when `DATABASE_URL` is missing, when the removed `STORAGE_BACKEND=json` is set, or when `JWT_SECRET` is missing or shorter than 32 characters.
+
+### Migrating old JSON data
+
+Older versions could store data in JSON files (`backend/data/model.<companyId>.json`, `backend/src/data/sidebar.<companyId>.json`). These files are no longer read. Copy them into PostgreSQL once:
+
+```bash
+npm run db:migrate-json --workspace backend
+```
+
+Companies that already have data are skipped; set `FORCE_JSON_MIGRATION=true` only after a backup. `JSON_DATA_DIRS` (path-separated list) overrides the searched directories. Source files are never changed.
 
 ## 6. Required validation
 
