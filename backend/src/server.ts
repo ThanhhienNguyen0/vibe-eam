@@ -12,6 +12,7 @@ import { apiSecurity } from "./auth/routePolicies.js";
 import { createUserRouter } from "./auth/userRoutes.js";
 import { PrismaAuthRepository } from "./auth/prismaAuthRepository.js";
 import type { AuthRepository, UserRepository } from "./auth/authTypes.js";
+import { requireDatabaseConfiguration } from "./persistence/databaseSidebarRepository.js";
 import {
   addElement,
   addRelation,
@@ -198,6 +199,7 @@ export function createApp(options: AppOptions): express.Express {
 
 export function startServer(environment: NodeJS.ProcessEnv = process.env): void {
   const port = Number(environment.PORT ?? 4000);
+  requireDatabaseConfiguration(environment);
   const jwtSecret = requireJwtSecret(environment);
   createApp({ jwtSecret }).listen(port, () => {
     console.log(`EAM backend listening on http://localhost:${port}`);

@@ -61,7 +61,7 @@ Auf Linux dieselben Befehle mit `docker compose`. Staging und Produktion nutzen 
 
 ## Datenbankbefehle außerhalb von Docker
 
-Mit einer gesetzten `DATABASE_URL`:
+PostgreSQL ist die einzige Persistenzschicht ([ADR 0001](adr/0001-postgresql-only-persistence.md)). Die Backend-Skripte laden die `.env` im Projektwurzelverzeichnis automatisch; bereits gesetzte Variablen haben Vorrang.
 
 ```bash
 npm run db:generate --workspace backend
@@ -69,20 +69,19 @@ npm run db:migrate --workspace backend
 npm run db:seed --workspace backend
 ```
 
-Sichere Kopie des bestehenden Sidebar-JSON in eine leere DB:
+Einmalige Übernahme alter JSON-Daten (`sidebar.json`, `model.<companyId>.json`, `sidebar.<companyId>.json`) nach PostgreSQL:
 
 ```bash
 npm run db:migrate-json --workspace backend
 ```
 
-Der Seed ist idempotent und überspringt eine DB, die bereits ein Metamodel enthält. `SEED_EXAMPLES` steuert die Beispieldaten des initialen Datenbank-Seeds. Neu registrierte Companies erhalten unabhängig davon beim ersten Zugriff vier eigene, editierbare EAM-/BPMN-Starterdiagramme. Die JSON-Migration verweigert eine nicht leere DB, solange `FORCE_JSON_MIGRATION=true` nicht bewusst gesetzt wurde. Die JSON-Datei wird nie gelöscht.
+Der Seed ist idempotent und überspringt eine DB, die bereits ein Metamodel enthält. `SEED_EXAMPLES` steuert die Beispieldaten des initialen Datenbank-Seeds. Neu registrierte Companies erhalten unabhängig davon beim ersten Zugriff vier eigene, editierbare EAM-/BPMN-Starterdiagramme. Die JSON-Migration überspringt jede Company, die bereits Daten hat, solange `FORCE_JSON_MIGRATION=true` nicht bewusst gesetzt wurde. `JSON_DATA_DIRS` überschreibt die durchsuchten Verzeichnisse. Die JSON-Dateien werden nie verändert oder gelöscht.
 
 ## Umgebungsvariablen
 
 | Variable | Zweck |
 | --- | --- |
-| `DATABASE_URL` | Prisma-Verbindung zu PostgreSQL |
-| `STORAGE_BACKEND` | `database` im Container; `json` nur als expliziter Fallback |
+| `DATABASE_URL` | Prisma-Verbindung zu PostgreSQL; Pflicht, ohne sie startet das Backend nicht |
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | lokale PostgreSQL-Konfiguration |
 | `VITE_API_BASE_URL` | beim Frontend-Build verwendeter API-Basispfad |
 | `VITE_BACKEND_PROXY_TARGET` | Backend-Ziel des lokalen Vite-Dev-Proxys |

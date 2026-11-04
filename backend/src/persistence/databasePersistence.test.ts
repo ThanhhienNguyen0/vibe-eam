@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { applyMetamodelDefinition, extractMetamodelDefinition } from "../Sidebar/metamodelConfig.js";
 import { validateDiagram } from "../Sidebar/metamodelRules.js";
 import type { SidebarState } from "../Sidebar/sidebarTypes.js";
-import { assertDiagramMemberships, configuredStorageBackend, type SidebarStateRepository } from "./databaseSidebarRepository.js";
+import { assertDiagramMemberships, requireDatabaseConfiguration, type SidebarStateRepository } from "./databaseSidebarRepository.js";
 import {
   addConnectionToDiagramState,
   assertValidConnectionEndpoints,
@@ -47,12 +47,12 @@ const state: SidebarState = {
 };
 
 describe("database persistence repository contract", () => {
-  it("selects database storage only with DATABASE_URL and rejects an incomplete explicit DB configuration", () => {
-    expect(configuredStorageBackend({ DATABASE_URL: "postgresql://db", STORAGE_BACKEND: "database" })).toBe("database");
-    expect(configuredStorageBackend({ STORAGE_BACKEND: "json" })).toBe("json");
-    expect(configuredStorageBackend({})).toBe("json");
-    expect(() => configuredStorageBackend({ STORAGE_BACKEND: "database" })).toThrow(/DATABASE_URL is required/);
-    expect(() => configuredStorageBackend({ STORAGE_BACKEND: "typo", DATABASE_URL: "postgresql://db" })).toThrow(/STORAGE_BACKEND/);
+  it("requires DATABASE_URL and rejects the removed JSON storage backend", () => {
+    expect(requireDatabaseConfiguration({ DATABASE_URL: "postgresql://db" })).toBe("postgresql://db");
+    expect(requireDatabaseConfiguration({ DATABASE_URL: "postgresql://db", STORAGE_BACKEND: "database" })).toBe("postgresql://db");
+    expect(() => requireDatabaseConfiguration({})).toThrow(/DATABASE_URL is required/);
+    expect(() => requireDatabaseConfiguration({ STORAGE_BACKEND: "database" })).toThrow(/DATABASE_URL is required/);
+    expect(() => requireDatabaseConfiguration({ STORAGE_BACKEND: "json", DATABASE_URL: "postgresql://db" })).toThrow(/no longer supported/);
   });
   it("stores and reads ComponentTypes and flexible JSON attributes", async () => {
     const repository = new MemoryRepository();
