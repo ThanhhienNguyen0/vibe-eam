@@ -12,6 +12,7 @@ import {
   Search,
   Server,
   Settings2,
+  Table2,
   Trash2,
   X
 } from "lucide-react";
@@ -34,9 +35,11 @@ export type SidebarSelection =
   | { kind: "connections" }
   | { kind: "connection"; id: string }
   | { kind: "diagrams" }
-  | { kind: "diagram"; id: string };
+  | { kind: "diagram"; id: string }
+  | { kind: "catalogs" }
+  | { kind: "catalog"; id: string };
 
-type ItemKind = "componentType" | "connectionType" | "connectionRule" | "viewpoint" | "component" | "connection" | "diagram";
+type ItemKind = "componentType" | "connectionType" | "connectionRule" | "viewpoint" | "component" | "connection" | "diagram" | "catalog";
 
 interface Props {
   onSelect: (sel: SidebarSelection) => void;
@@ -45,6 +48,10 @@ interface Props {
   onStateChange: (next: SidebarState) => void;
   onOpenDiagram: (id: string) => void;
   activeDiagramId: string | null;
+  onOpenCatalog?: (id: string) => void;
+  activeCatalogId?: string | null;
+  /** All folders start collapsed; tests and callers can opt into expanded folders. */
+  defaultOpen?: boolean;
 }
 
 interface TreeContextMenu {
@@ -200,20 +207,21 @@ function EmptyHint({ text, actionLabel, onAction }: { text: string; actionLabel?
   );
 }
 
-export default function Sidebar({ onSelect, selection, sidebarState, onStateChange, onOpenDiagram, activeDiagramId }: Props) {
+export default function Sidebar({ onSelect, selection, sidebarState, onStateChange, onOpenDiagram, activeDiagramId, onOpenCatalog, activeCatalogId, defaultOpen = false }: Props) {
   const { canWrite, canManageMetamodel } = useAccess();
-  const { componentTypes, connectionTypes, connectionRules, viewpoints, components, connections, diagrams } = sidebarState;
+  const { componentTypes, connectionTypes, connectionRules, viewpoints, components, connections, diagrams, catalogs } = sidebarState;
 
   const [open, setOpen] = useState({
-    rules: true,
-    componentTypes: true,
-    connectionTypes: false,
-    connectionRules: false,
-    viewpoints: true,
-    mgmt: true,
-    components: true,
-    connections: false,
-    diagrams: true
+    rules: defaultOpen,
+    componentTypes: defaultOpen,
+    connectionTypes: defaultOpen,
+    connectionRules: defaultOpen,
+    viewpoints: defaultOpen,
+    mgmt: defaultOpen,
+    components: defaultOpen,
+    connections: defaultOpen,
+    diagrams: defaultOpen,
+    catalogs: defaultOpen
   });
 
   const [query, setQuery] = useState("");
@@ -255,13 +263,13 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
   }, [contextMenu]);
 
   const [openTypeGroups, setOpenTypeGroups] = useState<Record<string, boolean>>({});
-  const isTypeGroupOpen = (typeId: string) => openTypeGroups[typeId] ?? true;
+  const isTypeGroupOpen = (typeId: string) => openTypeGroups[typeId] ?? defaultOpen;
   function toggleTypeGroup(typeId: string) {
     setOpenTypeGroups((p) => ({ ...p, [typeId]: !isTypeGroupOpen(typeId) }));
   }
 
   const [openTypeCategories, setOpenTypeCategories] = useState<Record<string, boolean>>({});
-  const isTypeCategoryOpen = (cat: string) => openTypeCategories[cat] ?? true;
+  const isTypeCategoryOpen = (cat: string) => openTypeCategories[cat] ?? defaultOpen;
   function toggleTypeCategory(cat: string) {
     setOpenTypeCategories((p) => ({ ...p, [cat]: !isTypeCategoryOpen(cat) }));
   }
@@ -302,6 +310,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
   const visibleComponents = components.filter((c) => matches(c.name));
   const visibleConnections = connections.filter((c) => matches(connectionLabel(c.id)));
   const visibleDiagrams = diagrams.filter((d) => matches(d.name));
+  const visibleCatalogs = catalogs.filter((c) => matches(c.name));
 
   // ── Quick-add helpers ─────────────────────────────────────────────────────
 
@@ -466,6 +475,13 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     setRenaming({ kind: "diagram", id: d.id });
   }
 
+  async function addCatalog() {
+    const created = await sidebarApi.createCatalog({ name: "Neuer Katalog", kind: "elements", columns: ["type", "description"] });
+    onStateChange({ ...sidebarState, catalogs: [...catalogs, created] });
+    onSelect({ kind: "catalog", id: created.id });
+    setRenaming({ kind: "catalog", id: created.id });
+  }
+
   // ── Delete helpers (mit Bestätigung – Fehlervermeidung) ──────────────────
 
   async function deleteComponentType(id: string) {
@@ -525,6 +541,13 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     onStateChange({ ...sidebarState, diagrams: diagrams.filter((d) => d.id !== id) });
   }
 
+  async function deleteCatalog(id: string) {
+    const name = catalogs.find((c) => c.id === id)?.name ?? "Katalog";
+    if (!window.confirm(`Katalog „${name}“ wirklich löschen?`)) return;
+    await sidebarApi.deleteCatalog(id);
+    onStateChange({ ...sidebarState, catalogs: catalogs.filter((c) => c.id !== id) });
+  }
+
   // ── Rename (inline) ───────────────────────────────────────────────────────
 
   async function renameItem(kind: ItemKind, id: string, rawName: string) {
@@ -549,6 +572,9 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     } else if (kind === "connection") {
       const u = await sidebarApi.updateConnection(id, { name });
       onStateChange({ ...sidebarState, connections: connections.map((c) => (c.id === id ? u : c)) });
+    } else if (kind === "catalog") {
+      const u = await sidebarApi.updateCatalog(id, { name });
+      onStateChange({ ...sidebarState, catalogs: catalogs.map((c) => (c.id === id ? u : c)) });
     } else {
       const u = await sidebarApi.updateDiagram(id, { name });
       onStateChange({ ...sidebarState, diagrams: diagrams.map((d) => (d.id === id ? u : d)) });
@@ -571,6 +597,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     else if (menu.kind === "viewpoint") deleteViewpoint(menu.id);
     else if (menu.kind === "component") deleteComponent(menu.id);
     else if (menu.kind === "connection") deleteConnection(menu.id);
+    else if (menu.kind === "catalog") deleteCatalog(menu.id);
     else deleteDiagram(menu.id);
   }
 
@@ -981,6 +1008,38 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
         {diagrams.length > 0 && visibleDiagrams.length === 0 && <EmptyHint text="Keine Treffer." />}
       </Folder>
 
+      <Folder
+        label="Kataloge"
+        icon={<Table2 size={14} />}
+        open={isOpen("catalogs")}
+        onToggle={() => toggle("catalogs")}
+        onAdd={canWrite ? addCatalog : undefined}
+        addTitle="Neuer Katalog"
+        active={isActive({ kind: "catalogs" })}
+        count={catalogs.length}
+      >
+        {visibleCatalogs.map((c) => (
+          <Row
+            key={c.id}
+            label={c.name}
+            active={isActive({ kind: "catalog", id: c.id }) || activeCatalogId === c.id}
+            onClick={() => onSelect({ kind: "catalog", id: c.id })}
+            onDoubleClick={() => onOpenCatalog?.(c.id)}
+            onDelete={() => deleteCatalog(c.id)}
+            onOpen={() => onOpenCatalog?.(c.id)}
+            openTitle="Katalog öffnen (oder Doppelklick)"
+            onContextMenu={(e) => openContextMenu(e, "catalog", c.id, c.name)}
+            renaming={isRenaming("catalog", c.id)}
+            onRenameSubmit={(name) => renameItem("catalog", c.id, name)}
+            onRenameCancel={() => setRenaming(null)}
+          />
+        ))}
+        {catalogs.length === 0 && (
+          <EmptyHint text="Noch keine Kataloge." actionLabel="Katalog anlegen" onAction={canWrite ? addCatalog : undefined} />
+        )}
+        {catalogs.length > 0 && visibleCatalogs.length === 0 && <EmptyHint text="Keine Treffer." />}
+      </Folder>
+
       {connectionDraft && (
         <div
           className="diagram-suggestion-overlay"
@@ -1063,6 +1122,14 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
             <button
               className="diagram-context-item"
               onClick={() => { onOpenDiagram(contextMenu.id); setContextMenu(null); }}
+            >
+              <ExternalLink size={14} /> Öffnen
+            </button>
+          )}
+          {contextMenu.kind === "catalog" && (
+            <button
+              className="diagram-context-item"
+              onClick={() => { onOpenCatalog?.(contextMenu.id); setContextMenu(null); }}
             >
               <ExternalLink size={14} /> Öffnen
             </button>

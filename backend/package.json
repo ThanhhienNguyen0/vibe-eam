@@ -22,7 +22,9 @@
     "cors": "^2.8.5",
     "express": "^4.18.3",
     "express-rate-limit": "8.7.1",
-    "jsonwebtoken": "^9.0.3"
+    "jsonwebtoken": "^9.0.3",
+    "read-excel-file": "^9.3.14",
+    "write-excel-file": "^4.1.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

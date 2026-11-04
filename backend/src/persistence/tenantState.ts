@@ -15,6 +15,7 @@ export function cloneSidebarStateForCompany(source: SidebarState, companyId: str
   const components = makeMap(source.components);
   const connections = makeMap(source.connections);
   const diagrams = makeMap(source.diagrams);
+  const catalogs = makeMap(source.catalogs);
   const metamodelId = `${prefix}${source.metamodel.id}`;
 
   return {
@@ -81,6 +82,12 @@ export function cloneSidebarStateForCompany(source: SidebarState, companyId: str
       connectionTypeId: connectionTypes.get(item.connectionTypeId) ?? item.connectionTypeId,
       sourceComponentId: components.get(item.sourceComponentId) ?? item.sourceComponentId,
       targetComponentId: components.get(item.targetComponentId) ?? item.targetComponentId
+    })),
+    catalogs: source.catalogs.map((item) => ({
+      ...item,
+      id: catalogs.get(item.id)!,
+      componentTypeIds: ids(item.componentTypeIds, componentTypes) ?? [],
+      connectionTypeIds: ids(item.connectionTypeIds, connectionTypes) ?? []
     })),
     diagrams: source.diagrams.map((item) => ({
       ...item,

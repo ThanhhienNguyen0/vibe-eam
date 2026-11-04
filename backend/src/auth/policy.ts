@@ -1,12 +1,12 @@
 /** Internal authorization vocabulary. Identity-provider claims never grant permissions. */
 export const ROLES = ["Admin", "Architect", "Viewer"] as const;
 export type Role = typeof ROLES[number];
-export const PERMISSIONS = ["read", "architecture:write", "metamodel:write", "users:manage"] as const;
+export const PERMISSIONS = ["read", "architecture:write", "metamodel:write", "users:manage", "audit:read"] as const;
 export type Permission = typeof PERMISSIONS[number];
 
 const grants: Record<Role, readonly Permission[]> = {
   Admin: PERMISSIONS,
-  Architect: ["read", "architecture:write"],
+  Architect: ["read", "architecture:write", "audit:read"],
   Viewer: ["read"]
 };
 

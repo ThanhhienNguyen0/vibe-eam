@@ -13,7 +13,7 @@ const state: SidebarState = {
   metamodel: { id: "mm", name: "Test", description: "", version: "1", isActive: true, createdAt: "", updatedAt: "" },
   componentTypes: [{ id: "type", name: "Application", description: "", color: "#fff", icon: "app", customPropertyKeys: [] }],
   connectionTypes: [], connectionRules: [], viewpoints: [], viewpointRules: [], validationRules: [],
-  components: [{ id: "component", name: "Inventory", componentTypeId: "type", description: "Details", properties: { owner: "Team" } }], connections: [], diagrams: []
+  components: [{ id: "component", name: "Inventory", componentTypeId: "type", description: "Details", properties: { owner: "Team" } }], connections: [], diagrams: [], catalogs: []
 };
 
 afterEach(() => vi.unstubAllGlobals());
@@ -21,7 +21,7 @@ describe("role-aware rendering", () => {
   it.each([...ROLES, null])("renders usable controls for %s only", (role: Role | null) => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {}); // React SSR useLayoutEffect notice in existing tree.
     const html = renderToStaticMarkup(<AccessContext.Provider value={role}>
-      <Sidebar selection={null} onSelect={noop} sidebarState={state} onStateChange={noop} onOpenDiagram={noop} activeDiagramId={null} />
+      <Sidebar selection={null} onSelect={noop} sidebarState={state} onStateChange={noop} onOpenDiagram={noop} activeDiagramId={null} defaultOpen />
       <HomeView sidebarState={state} onOpenDiagram={noop} onCreateDiagram={noop} canWrite={role === "Admin" || role === "Architect"} />
       <UserManagement onRoleChanged={noop} />
     </AccessContext.Provider>);
@@ -39,7 +39,7 @@ describe("role-aware rendering", () => {
 
   it.each(ROLES)("shows instance editing and metamodel editing according to %s", (role) => {
     const render = (kind: "component" | "componentType", id: string) => renderToStaticMarkup(<AccessContext.Provider value={role}>
-      <SidebarPanels selection={{ kind, id }} sidebarState={state} onStateChange={noop} onSelect={noop} onOpenDiagram={noop} onClose={noop} />
+      <SidebarPanels selection={{ kind, id }} sidebarState={state} onStateChange={noop} onSelect={noop} onOpenDiagram={noop} onOpenCatalog={noop} onClose={noop} />
     </AccessContext.Provider>);
     expect(render("component", "component").includes("Speichern")).toBe(role !== "Viewer");
     expect(render("componentType", "type").includes("Speichern")).toBe(role === "Admin");
@@ -48,7 +48,7 @@ describe("role-aware rendering", () => {
 
   it("renders viewer component details as a semantic read-only view", () => {
     const html = renderToStaticMarkup(<AccessContext.Provider value="Viewer">
-      <SidebarPanels selection={{ kind: "component", id: "component" }} sidebarState={state} onStateChange={noop} onSelect={noop} onOpenDiagram={noop} onClose={noop} />
+      <SidebarPanels selection={{ kind: "component", id: "component" }} sidebarState={state} onStateChange={noop} onSelect={noop} onOpenDiagram={noop} onOpenCatalog={noop} onClose={noop} />
     </AccessContext.Provider>);
 
     expect(html).toContain("Leseansicht");
@@ -81,7 +81,7 @@ describe("role-aware rendering", () => {
       diagrams: [{ id: "diagram", name: "Overview", description: "", componentIds: ["component"], connectionIds: [], positions: {}, viewpointId: "vp" }]
     };
     const html = renderToStaticMarkup(<AccessContext.Provider value="Viewer">
-      <SidebarPanels selection={{ kind, id }} sidebarState={richState} onStateChange={noop} onSelect={noop} onOpenDiagram={noop} onClose={noop} />
+      <SidebarPanels selection={{ kind, id }} sidebarState={richState} onStateChange={noop} onSelect={noop} onOpenDiagram={noop} onOpenCatalog={noop} onClose={noop} />
     </AccessContext.Provider>);
 
     expect(html).toContain("Leseansicht");

@@ -40,6 +40,7 @@ const state: SidebarState = {
     { id: "pc", name: "", connectionTypeId: "realizes", sourceComponentId: "p", targetComponentId: "c", description: "" },
     { id: "ad", name: "", connectionTypeId: "uses", sourceComponentId: "a", targetComponentId: "d", description: "" }
   ],
+  catalogs: [],
   diagrams: [{ id: "diagram", name: "Full", description: "", componentIds: ["p", "c", "a", "d"], connectionIds: ["pc", "ad"], positions: {}, viewpointId: "full" }]
 };
 

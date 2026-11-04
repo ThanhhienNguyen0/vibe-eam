@@ -1,5 +1,6 @@
 import { Router } from "express";
-import type { ComponentShape } from "./sidebarTypes.js";
+import type { Catalog, ComponentShape, SidebarState } from "./sidebarTypes.js";
+import { catalogColumnKeys } from "../catalog/catalogModel.js";
 import { validateConnectionInstance, validateDiagram } from "./metamodelRules.js";
 import {
   addComponent,
@@ -35,10 +36,101 @@ import {
   updateConnectionRule,
   updateConnectionType,
   updateDiagram,
-  updateViewpoint
+  updateViewpoint,
+  addCatalog,
+  updateCatalog,
+  deleteCatalog
 } from "./sidebarStore.js";
 
 const router = Router();
+
+const MAX_EXTERNAL_ID_LENGTH = 200;
+
+/** Empty/null clears the external id; anything else must be a short string. */
+function parseExternalId(value: unknown): { value?: string; error?: string } {
+  if (value === undefined || value === null || value === "") return {};
+  if (typeof value !== "string") return { error: "Die Externe ID muss ein Text sein." };
+  const trimmed = value.trim();
+  if (trimmed.length > MAX_EXTERNAL_ID_LENGTH) return { error: `Die Externe ID darf höchstens ${MAX_EXTERNAL_ID_LENGTH} Zeichen lang sein.` };
+  return { value: trimmed || undefined };
+}
+
+const MAX_CATALOG_NAME = 120;
+
+const stringList = (value: unknown): string[] | null =>
+  Array.isArray(value) && value.every((item) => typeof item === "string") ? [...new Set(value as string[])] : null;
+
+/** Validates a catalog payload against the model; unknown ids and keys are rejected, never silently dropped. */
+function parseCatalog(body: Record<string, unknown>, state: SidebarState, existing?: Catalog): { value?: Omit<Catalog, "id">; error?: string } {
+  const merged = { ...(existing ?? {}), ...body } as Record<string, unknown>;
+  const name = typeof merged.name === "string" ? merged.name.trim() : "";
+  if (!name) return { error: "Der Name des Katalogs ist erforderlich." };
+  if (name.length > MAX_CATALOG_NAME) return { error: `Der Name darf höchstens ${MAX_CATALOG_NAME} Zeichen lang sein.` };
+  const kind = merged.kind === "relations" ? "relations" : merged.kind === "elements" || merged.kind === undefined ? "elements" : null;
+  if (!kind) return { error: "Die Art des Katalogs muss „elements“ oder „relations“ sein." };
+  if (merged.description !== undefined && typeof merged.description !== "string") return { error: "Die Beschreibung muss ein Text sein." };
+  const lists = {
+    componentTypeIds: stringList(merged.componentTypeIds ?? []),
+    connectionTypeIds: stringList(merged.connectionTypeIds ?? []),
+    propertyKeys: stringList(merged.propertyKeys ?? []),
+    columns: stringList(merged.columns ?? [])
+  };
+  if (Object.values(lists).some((list) => list === null)) return { error: "Auswahllisten müssen aus Texten bestehen." };
+  const componentTypeIds = kind === "elements" ? lists.componentTypeIds! : [];
+  const connectionTypeIds = kind === "relations" ? lists.connectionTypeIds! : [];
+  const propertyKeys = kind === "elements" ? lists.propertyKeys! : [];
+  const columns = lists.columns!;
+  const knownComponentTypes = new Set(state.componentTypes.map((type) => type.id));
+  const knownConnectionTypes = new Set(state.connectionTypes.map((type) => type.id));
+  if (componentTypeIds.some((id) => !knownComponentTypes.has(id))) return { error: "Mindestens ein ausgewählter Elementtyp existiert nicht." };
+  if (connectionTypeIds.some((id) => !knownConnectionTypes.has(id))) return { error: "Mindestens ein ausgewählter Verbindungstyp existiert nicht." };
+  const allowedColumns = new Set(catalogColumnKeys(kind));
+  if (columns.some((key) => !allowedColumns.has(key))) return { error: "Mindestens eine ausgewählte Spalte ist ungültig." };
+  if (propertyKeys.length > 200 || propertyKeys.some((key) => key.length > 200)) return { error: "Zu viele oder zu lange Eigenschaftsnamen." };
+  return { value: { name, description: (merged.description as string | undefined) ?? "", kind, componentTypeIds, connectionTypeIds, propertyKeys, columns } };
+}
+
+// ── Catalogs (REQ-31) ────────────────────────────────────────────────────────
+
+router.get("/catalogs", async (_req, res, next) => {
+  try {
+    res.json((await readSidebarState()).catalogs);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/catalogs", async (req, res, next) => {
+  try {
+    const parsed = parseCatalog((req.body ?? {}) as Record<string, unknown>, await readSidebarState());
+    if (!parsed.value) return res.status(400).json({ error: parsed.error });
+    res.status(201).json(await addCatalog({ id: crypto.randomUUID(), ...parsed.value }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch("/catalogs/:id", async (req, res, next) => {
+  try {
+    const state = await readSidebarState();
+    const existing = state.catalogs.find((item) => item.id === req.params.id);
+    if (!existing) return res.status(404).json({ error: "Katalog nicht gefunden." });
+    const parsed = parseCatalog((req.body ?? {}) as Record<string, unknown>, state, existing);
+    if (!parsed.value) return res.status(400).json({ error: parsed.error });
+    res.json(await updateCatalog(req.params.id, parsed.value));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/catalogs/:id", async (req, res, next) => {
+  try {
+    if (!(await deleteCatalog(req.params.id))) return res.status(404).json({ error: "Katalog nicht gefunden." });
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
 
 // ── Full sidebar state ───────────────────────────────────────────────────────
 
@@ -363,20 +455,27 @@ router.get("/components", async (_req, res, next) => {
 
 router.post("/components", async (req, res, next) => {
   try {
-    const { name, componentTypeId, properties, description } = req.body as {
+    const { name, componentTypeId, properties, description, externalId } = req.body as {
       name?: string;
       componentTypeId?: string;
       properties?: Record<string, string>;
       description?: string;
+      externalId?: unknown;
     };
     if (!name?.trim()) return res.status(400).json({ error: "name is required." });
     if (!componentTypeId) return res.status(400).json({ error: "componentTypeId is required." });
+    const external = parseExternalId(externalId);
+    if (external.error) return res.status(400).json({ error: external.error });
+    if (external.value && (await getComponents()).some((item) => item.externalId === external.value)) {
+      return res.status(409).json({ error: "Diese Externe ID wird bereits von einer anderen Komponente verwendet." });
+    }
     const comp = await addComponent({
       id: crypto.randomUUID(),
       name: name.trim(),
       componentTypeId,
       properties: properties ?? {},
-      description: description ?? ""
+      description: description ?? "",
+      ...(external.value ? { externalId: external.value } : {})
     });
     res.status(201).json(comp);
   } catch (err) {
@@ -386,7 +485,16 @@ router.post("/components", async (req, res, next) => {
 
 router.patch("/components/:id", async (req, res, next) => {
   try {
-    const updated = await updateComponent(req.params.id, req.body);
+    const patch = { ...req.body } as Record<string, unknown>;
+    if ("externalId" in patch) {
+      const external = parseExternalId(patch.externalId);
+      if (external.error) return res.status(400).json({ error: external.error });
+      if (external.value && (await getComponents()).some((item) => item.externalId === external.value && item.id !== req.params.id)) {
+        return res.status(409).json({ error: "Diese Externe ID wird bereits von einer anderen Komponente verwendet." });
+      }
+      patch.externalId = external.value;
+    }
+    const updated = await updateComponent(req.params.id, patch);
     if (!updated) return res.status(404).json({ error: "Component not found." });
     res.json(updated);
   } catch (err) {
@@ -416,17 +524,20 @@ router.get("/connections", async (_req, res, next) => {
 
 router.post("/connections", async (req, res, next) => {
   try {
-    const { name, connectionTypeId, sourceComponentId, targetComponentId, description, properties } = req.body as {
+    const { name, connectionTypeId, sourceComponentId, targetComponentId, description, properties, externalId } = req.body as {
       name?: string;
       connectionTypeId?: string;
       sourceComponentId?: string;
       targetComponentId?: string;
       description?: string;
       properties?: Record<string, string>;
+      externalId?: unknown;
     };
     if (!connectionTypeId) return res.status(400).json({ error: "connectionTypeId is required." });
     if (!sourceComponentId) return res.status(400).json({ error: "sourceComponentId is required." });
     if (!targetComponentId) return res.status(400).json({ error: "targetComponentId is required." });
+    const external = parseExternalId(externalId);
+    if (external.error) return res.status(400).json({ error: external.error });
     const candidate = {
       id: crypto.randomUUID(),
       name: name ?? "",
@@ -434,9 +545,13 @@ router.post("/connections", async (req, res, next) => {
       sourceComponentId,
       targetComponentId,
       description: description ?? "",
-      properties: properties ?? {}
+      properties: properties ?? {},
+      ...(external.value ? { externalId: external.value } : {})
     };
     const state = await readSidebarState();
+    if (external.value && state.connections.some((item) => item.externalId === external.value)) {
+      return res.status(409).json({ error: "Diese Externe ID wird bereits von einer anderen Verbindung verwendet." });
+    }
     const validation = validateConnectionInstance(candidate, state);
     if (!validation.valid) return res.status(400).json({ error: validation.errors[0]?.message ?? "Connection is not valid.", ...validation });
     const conn = await addConnection(candidate);
@@ -451,10 +566,19 @@ router.patch("/connections/:id", async (req, res, next) => {
     const state = await readSidebarState();
     const existing = state.connections.find((connection) => connection.id === req.params.id);
     if (!existing) return res.status(404).json({ error: "Connection not found." });
-    const candidate = { ...existing, ...req.body, id: req.params.id };
+    const patch = { ...req.body } as Record<string, unknown>;
+    if ("externalId" in patch) {
+      const external = parseExternalId(patch.externalId);
+      if (external.error) return res.status(400).json({ error: external.error });
+      if (external.value && state.connections.some((item) => item.externalId === external.value && item.id !== req.params.id)) {
+        return res.status(409).json({ error: "Diese Externe ID wird bereits von einer anderen Verbindung verwendet." });
+      }
+      patch.externalId = external.value;
+    }
+    const candidate = { ...existing, ...patch, id: req.params.id };
     const validation = validateConnectionInstance(candidate, state);
     if (!validation.valid) return res.status(400).json({ error: validation.errors[0]?.message ?? "Connection is not valid.", ...validation });
-    const updated = await updateConnection(req.params.id, req.body);
+    const updated = await updateConnection(req.params.id, patch);
     if (!updated) return res.status(404).json({ error: "Connection not found." });
     res.json(updated);
   } catch (err) {

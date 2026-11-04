@@ -17,6 +17,7 @@ class MemoryRepository implements SidebarStateRepository {
   constructor(state: SidebarState | null = null) { if (state) this.states.set("company-a", structuredClone(state)); }
   async read(companyId: string): Promise<SidebarState | null> { const state = this.states.get(companyId); return state ? structuredClone(state) : null; }
   async write(state: SidebarState, companyId: string): Promise<SidebarState> { this.states.set(companyId, structuredClone(state)); return structuredClone(state); }
+  async listAudit(): Promise<[]> { return []; }
   async disconnect(): Promise<void> {}
 }
 
@@ -41,6 +42,7 @@ const state: SidebarState = {
   connections: [
     { id: "connection", name: "", connectionTypeId: "conn-dep", sourceComponentId: "source", targetComponentId: "target", description: "", properties: { protocol: "HTTPS" } }
   ],
+  catalogs: [],
   diagrams: [
     { id: "diagram", name: "Diagram", description: "", metamodelId: "mm", componentIds: ["source", "target"], connectionIds: ["connection"], positions: { source: { x: 10, y: 20 }, target: { x: 30, y: 40 } } }
   ]

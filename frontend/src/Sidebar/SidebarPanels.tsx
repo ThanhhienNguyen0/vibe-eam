@@ -4,6 +4,7 @@ import { sidebarApi } from "./sidebarApi";
 import type { SidebarSelection } from "./Sidebar";
 import { COMPONENT_SHAPES } from "./sidebarTypes";
 import { useAccess } from "../access";
+import CatalogEditor from "./CatalogEditor";
 import type {
   ComponentInstance,
   ComponentShape,
@@ -22,6 +23,7 @@ interface Props {
   onStateChange: (next: SidebarState) => void;
   onSelect: (sel: SidebarSelection) => void;
   onOpenDiagram: (id: string) => void;
+  onOpenCatalog: (id: string) => void;
   onClose: () => void;
 }
 
@@ -37,11 +39,48 @@ function DetailWrapper({ title, onClose, children }: { title: string; onClose: (
   );
 }
 
-export default function SidebarPanels({ selection, sidebarState, onStateChange, onSelect, onOpenDiagram, onClose }: Props) {
+export default function SidebarPanels({ selection, sidebarState, onStateChange, onSelect, onOpenDiagram, onOpenCatalog, onClose }: Props) {
   const { canWrite, canManageMetamodel } = useAccess();
   if (!selection) return null;
 
   const { componentTypes, connectionTypes, connectionRules, viewpoints, components, connections, diagrams } = sidebarState;
+
+  if (selection.kind === "catalogs") {
+    return (
+      <DetailWrapper title="Kataloge" onClose={onClose}>
+        <p className="muted">Kataloge sind gespeicherte Auswahlen aus Typen, Eigenschaften und Spalten. Klicke auf einen Katalog, um ihn zu öffnen.</p>
+        <div className="sb-instance-list">
+          {sidebarState.catalogs.map((catalog) => (
+            <div key={catalog.id} className="sb-instance-row sb-diagram-row" onClick={() => onOpenCatalog(catalog.id)}>
+              <strong>{catalog.name}</strong>
+              <span className="muted">{catalog.kind === "elements" ? "Elemente" : "Verbindungen"}</span>
+            </div>
+          ))}
+          {sidebarState.catalogs.length === 0 && <p className="muted">Keine Kataloge vorhanden.</p>}
+        </div>
+      </DetailWrapper>
+    );
+  }
+
+  if (selection.kind === "catalog") {
+    const catalog = sidebarState.catalogs.find((item) => item.id === selection.id);
+    if (!catalog) return null;
+    return (
+      <DetailWrapper title={catalog.name} onClose={onClose}>
+        <CatalogEditor
+          key={catalog.id}
+          catalog={catalog}
+          sidebarState={sidebarState}
+          canWrite={canWrite}
+          onSave={async (patch) => {
+            const updated = await sidebarApi.updateCatalog(catalog.id, patch);
+            onStateChange({ ...sidebarState, catalogs: sidebarState.catalogs.map((item) => (item.id === catalog.id ? updated : item)) });
+          }}
+          onOpen={() => onOpenCatalog(catalog.id)}
+        />
+      </DetailWrapper>
+    );
+  }
 
   const collections = { componentType: componentTypes, connectionType: connectionTypes, connectionRule: connectionRules, viewpoint: viewpoints, component: components, connection: connections, diagram: diagrams };
   if ("id" in selection) {
@@ -1079,10 +1118,20 @@ function ComponentEditor({
   onSave: (p: Partial<ComponentInstance>) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(comp);
+  const [saveError, setSaveError] = useState("");
   const dirty = JSON.stringify(draft) !== JSON.stringify(comp);
 
   function set<K extends keyof ComponentInstance>(key: K, val: ComponentInstance[K]) {
     setDraft((prev) => ({ ...prev, [key]: val }));
+  }
+
+  async function save() {
+    setSaveError("");
+    try {
+      await onSave(draft);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
+    }
   }
 
   const selectedType = componentTypes.find((t) => t.id === draft.componentTypeId);
@@ -1096,6 +1145,7 @@ function ComponentEditor({
           {componentTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </label>
+      <label>Externe ID (optional)<input value={draft.externalId ?? ""} maxLength={200} onChange={(e) => set("externalId", e.target.value)} /></label>
       <label>Beschreibung<textarea value={draft.description} onChange={(e) => set("description", e.target.value)} /></label>
 
       {typeKeys.length > 0 && (
@@ -1115,7 +1165,8 @@ function ComponentEditor({
         onChange={(next) => set("properties", next)}
       />
 
-      <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft)}>Speichern</button>
+      <button className="sb-save-btn" disabled={!dirty} onClick={save}>Speichern</button>
+      {saveError && <p className="sb-error" role="alert">{saveError}</p>}
 
       <LinkedConnections
         compId={comp.id}
@@ -1154,10 +1205,20 @@ function ConnectionEditor({
   onSave: (p: Partial<ConnectionInstance>) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<ConnectionInstance>({ ...conn, properties: conn.properties ?? {} });
+  const [saveError, setSaveError] = useState("");
   const dirty = JSON.stringify(draft) !== JSON.stringify({ ...conn, properties: conn.properties ?? {} });
 
   function set<K extends keyof ConnectionInstance>(key: K, val: ConnectionInstance[K]) {
     setDraft((prev) => ({ ...prev, [key]: val }));
+  }
+
+  async function save() {
+    setSaveError("");
+    try {
+      await onSave(draft);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
+    }
   }
 
   return (
@@ -1196,6 +1257,7 @@ function ConnectionEditor({
           </button>
         </div>
       </label>
+      <label>Externe ID (optional)<input value={draft.externalId ?? ""} maxLength={200} onChange={(e) => set("externalId", e.target.value)} /></label>
       <label>Beschreibung<textarea value={draft.description} onChange={(e) => set("description", e.target.value)} /></label>
 
       <CustomPropertiesSection
@@ -1204,7 +1266,8 @@ function ConnectionEditor({
         onChange={(next) => set("properties", next)}
       />
 
-      <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft)}>Speichern</button>
+      <button className="sb-save-btn" disabled={!dirty} onClick={save}>Speichern</button>
+      {saveError && <p className="sb-error" role="alert">{saveError}</p>}
 
       <LinkedDiagrams
         diagrams={diagrams}

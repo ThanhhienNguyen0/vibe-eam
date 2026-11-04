@@ -18,6 +18,10 @@ model Company {
   componentInstances  ComponentInstance[]
   connectionInstances ConnectionInstance[]
   architectureModel   ArchitectureModel?
+  auditLogEntries     AuditLogEntry[]
+  catalogs            Catalog[]
+  /// False until the starter catalogs were stored once (so deleted starters never reappear).
+  catalogsInitialized Boolean              @default(false)
 }
 
 enum Role {
@@ -234,6 +238,7 @@ model ComponentInstance {
   id                  String                       @id
   companyId           String
   componentTypeId     String
+  externalId          String?
   name                String
   description         String                       @default("")
   properties          Json                         @default("{}") @db.JsonB
@@ -243,6 +248,7 @@ model ComponentInstance {
   diagramMemberships  DiagramComponentMembership[]
   company             Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
+  @@unique([companyId, externalId])
   @@index([companyId])
   @@index([componentTypeId])
 }
@@ -253,6 +259,7 @@ model ConnectionInstance {
   connectionTypeId   String
   sourceComponentId  String
   targetComponentId  String
+  externalId         String?
   name               String                        @default("")
   description        String                        @default("")
   properties         Json                          @default("{}") @db.JsonB
@@ -262,6 +269,7 @@ model ConnectionInstance {
   diagramMemberships DiagramConnectionMembership[]
   company            Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
+  @@unique([companyId, externalId])
   @@index([companyId])
   @@index([connectionTypeId])
   @@index([sourceComponentId])
@@ -287,4 +295,37 @@ model DiagramConnectionMembership {
 
   @@id([diagramId, connectionId])
   @@index([connectionId])
+}
+
+/// Append-only, company-scoped record of business events (e.g. imports).
+/// userId/userEmail are copied values so entries survive user deletion.
+model AuditLogEntry {
+  id         String   @id @default(uuid())
+  companyId  String
+  userId     String?
+  userEmail  String?
+  action     String
+  entityType String
+  summary    String
+  details    Json     @default("{}") @db.JsonB
+  createdAt  DateTime @default(now())
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+}
+
+model Catalog {
+  id          String   @id
+  companyId   String
+  name        String
+  description String   @default("")
+  kind        String
+  /// componentTypeIds, connectionTypeIds, propertyKeys, columns
+  config      Json
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, sortOrder])
 }

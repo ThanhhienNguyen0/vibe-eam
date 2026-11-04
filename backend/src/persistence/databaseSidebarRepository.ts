@@ -4,11 +4,17 @@ import type {
   ConnectionInstance,
   SidebarState
 } from "../Sidebar/sidebarTypes.js";
+import type { AuditEntry, AuditWrite } from "../audit/auditTypes.js";
 import { removeDanglingInstanceReferences } from "./stateOperations.js";
 
+/** `catalogs` is undefined until the company stored catalogs once, so starter catalogs can be seeded. */
+export type PersistedSidebarState = Omit<SidebarState, "catalogs"> & { catalogs?: SidebarState["catalogs"] };
+
 export interface SidebarStateRepository {
-  read(companyId: string): Promise<SidebarState | null>;
-  write(state: SidebarState, companyId: string): Promise<SidebarState>;
+  read(companyId: string): Promise<PersistedSidebarState | null>;
+  /** Writes the whole state; an optional audit entry is stored in the same transaction. */
+  write(state: SidebarState, companyId: string, audit?: AuditWrite): Promise<SidebarState>;
+  listAudit(companyId: string, limit: number): Promise<AuditEntry[]>;
   disconnect(): Promise<void>;
 }
 
@@ -61,12 +67,12 @@ function withoutUndefined<T extends object>(value: T): T {
 export class PrismaSidebarStateRepository implements SidebarStateRepository {
   constructor(private readonly prisma = new PrismaClient()) {}
 
-  async read(companyId: string): Promise<SidebarState | null> {
+  async read(companyId: string): Promise<PersistedSidebarState | null> {
     return this.prisma.$transaction(async (tx) => {
       const metamodel = await tx.metamodel.findFirst({ where: { companyId }, orderBy: [{ isActive: "desc" }, { updatedAt: "desc" }] });
       if (!metamodel) return null;
 
-      const [componentTypes, connectionTypes, connectionRules, viewpoints, viewpointRules, validationRules, diagrams, components, connections] = await Promise.all([
+      const [componentTypes, connectionTypes, connectionRules, viewpoints, viewpointRules, validationRules, diagrams, components, connections, catalogRows, company] = await Promise.all([
         tx.componentType.findMany({ where: { metamodelId: metamodel.id }, orderBy: { id: "asc" } }),
         tx.connectionType.findMany({ where: { metamodelId: metamodel.id }, orderBy: { id: "asc" } }),
         tx.connectionRule.findMany({ where: { metamodelId: metamodel.id }, orderBy: { id: "asc" } }),
@@ -79,7 +85,9 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           orderBy: { createdAt: "asc" }
         }),
         tx.componentInstance.findMany({ where: { companyId, componentType: { metamodelId: metamodel.id } }, orderBy: { id: "asc" } }),
-        tx.connectionInstance.findMany({ where: { companyId, connectionType: { metamodelId: metamodel.id } }, orderBy: { id: "asc" } })
+        tx.connectionInstance.findMany({ where: { companyId, connectionType: { metamodelId: metamodel.id } }, orderBy: { id: "asc" } }),
+        tx.catalog.findMany({ where: { companyId }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }),
+        tx.company.findUnique({ where: { id: companyId }, select: { catalogsInitialized: true } })
       ]);
 
       return {
@@ -178,15 +186,17 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           message: item.message,
           active: item.active
         })),
-        components: components.map((item): ComponentInstance => ({
+        components: components.map((item): ComponentInstance => withoutUndefined({
           id: item.id,
+          externalId: item.externalId ?? undefined,
           name: item.name,
           componentTypeId: item.componentTypeId,
           description: item.description,
           properties: objectValue(item.properties, {}) as Record<string, string>
         })),
-        connections: connections.map((item): ConnectionInstance => ({
+        connections: connections.map((item): ConnectionInstance => withoutUndefined({
           id: item.id,
+          externalId: item.externalId ?? undefined,
           name: item.name,
           connectionTypeId: item.connectionTypeId,
           sourceComponentId: item.sourceComponentId,
@@ -194,6 +204,19 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           description: item.description,
           properties: objectValue(item.properties, {}) as Record<string, string>
         })),
+        catalogs: company?.catalogsInitialized ? catalogRows.map((item) => {
+          const config = objectValue(item.config, {}) as Record<string, unknown>;
+          return {
+            id: item.id,
+            name: item.name,
+            description: item.description,
+            kind: item.kind === "relations" ? "relations" as const : "elements" as const,
+            componentTypeIds: stringArray(config.componentTypeIds as Prisma.JsonValue),
+            connectionTypeIds: stringArray(config.connectionTypeIds as Prisma.JsonValue),
+            propertyKeys: stringArray(config.propertyKeys as Prisma.JsonValue),
+            columns: stringArray(config.columns as Prisma.JsonValue)
+          };
+        }) : undefined,
         diagrams: diagrams.map((item) => ({
           id: item.id,
           name: item.name,
@@ -221,6 +244,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
       this.prisma.viewpointRule.count({ where: { id: { in: state.viewpointRules.map((item) => item.id) }, metamodel: { companyId: { not: companyId } } } }),
       this.prisma.validationRule.count({ where: { id: { in: state.validationRules.map((item) => item.id) }, metamodel: { companyId: { not: companyId } } } }),
       this.prisma.diagram.count({ where: { id: { in: state.diagrams.map((item) => item.id) }, companyId: { not: companyId } } }),
+      this.prisma.catalog.count({ where: { id: { in: state.catalogs.map((item) => item.id) }, companyId: { not: companyId } } }),
       this.prisma.componentInstance.count({ where: { id: { in: state.components.map((item) => item.id) }, companyId: { not: companyId } } }),
       this.prisma.connectionInstance.count({ where: { id: { in: state.connections.map((item) => item.id) }, companyId: { not: companyId } } })
     ]);
@@ -229,7 +253,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
     }
   }
 
-  async write(state: SidebarState, companyId: string): Promise<SidebarState> {
+  async write(state: SidebarState, companyId: string, audit?: AuditWrite): Promise<SidebarState> {
     state = removeDanglingInstanceReferences(state);
     assertDiagramMemberships(state);
     const metamodelId = state.metamodel.id;
@@ -368,10 +392,28 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         };
         await tx.diagram.upsert({ where: { id: item.id }, create: { id: item.id, ...data }, update: data });
       }
+      for (const [index, item] of state.catalogs.entries()) {
+        const data = {
+          companyId,
+          name: item.name,
+          description: item.description,
+          kind: item.kind,
+          config: json({
+            componentTypeIds: item.componentTypeIds,
+            connectionTypeIds: item.connectionTypeIds,
+            propertyKeys: item.propertyKeys,
+            columns: item.columns
+          }),
+          sortOrder: index
+        };
+        await tx.catalog.upsert({ where: { id: item.id }, create: { id: item.id, ...data }, update: data });
+      }
+      await tx.company.update({ where: { id: companyId }, data: { catalogsInitialized: true } });
       for (const item of state.components) {
         const data = {
           companyId,
           componentTypeId: item.componentTypeId,
+          externalId: item.externalId ?? null,
           name: item.name,
           description: item.description,
           properties: json(item.properties)
@@ -384,6 +426,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           connectionTypeId: item.connectionTypeId,
           sourceComponentId: item.sourceComponentId,
           targetComponentId: item.targetComponentId,
+          externalId: item.externalId ?? null,
           name: item.name,
           description: item.description,
           properties: json(item.properties ?? {})
@@ -414,15 +457,52 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
       await tx.connectionInstance.deleteMany({ where: { companyId, connectionType: { metamodelId }, ...missing(state.connections.map((item) => item.id)) } });
       await tx.componentInstance.deleteMany({ where: { companyId, componentType: { metamodelId }, ...missing(state.components.map((item) => item.id)) } });
       await tx.diagram.deleteMany({ where: { companyId, metamodelId, ...missing(state.diagrams.map((item) => item.id)) } });
+      await tx.catalog.deleteMany({ where: { companyId, ...missing(state.catalogs.map((item) => item.id)) } });
       await tx.validationRule.deleteMany({ where: { metamodelId, ...missing(state.validationRules.map((item) => item.id)) } });
       await tx.viewpointRule.deleteMany({ where: { metamodelId, ...missing(state.viewpointRules.map((item) => item.id)) } });
       await tx.connectionRule.deleteMany({ where: { metamodelId, ...missing(state.connectionRules.map((item) => item.id)) } });
       await tx.viewpoint.deleteMany({ where: { metamodelId, ...missing(state.viewpoints.map((item) => item.id)) } });
       await tx.connectionType.deleteMany({ where: { metamodelId, ...missing(state.connectionTypes.map((item) => item.id)) } });
       await tx.componentType.deleteMany({ where: { metamodelId, ...missing(state.componentTypes.map((item) => item.id)) } });
+
+      if (audit) {
+        const actor = audit.userId
+          ? await tx.user.findFirst({ where: { id: audit.userId, companyId }, select: { id: true, email: true } })
+          : null;
+        await tx.auditLogEntry.create({
+          data: {
+            companyId,
+            userId: actor?.id ?? null,
+            userEmail: actor?.email ?? null,
+            action: audit.action,
+            entityType: audit.entityType,
+            summary: audit.summary,
+            details: json(audit.details ?? {})
+          }
+        });
+      }
     }, { timeout: 30_000 });
 
-    return (await this.read(companyId)) ?? structuredClone(state);
+    // The company flag is set above, so catalogs are always present here.
+    return ((await this.read(companyId)) as SidebarState | null) ?? structuredClone(state);
+  }
+
+  async listAudit(companyId: string, limit: number): Promise<AuditEntry[]> {
+    const entries = await this.prisma.auditLogEntry.findMany({
+      where: { companyId },
+      orderBy: { createdAt: "desc" },
+      take: limit
+    });
+    return entries.map((entry) => ({
+      id: entry.id,
+      createdAt: entry.createdAt.toISOString(),
+      userId: entry.userId,
+      userEmail: entry.userEmail,
+      action: entry.action,
+      entityType: entry.entityType,
+      summary: entry.summary,
+      details: objectValue(entry.details, {}) as Record<string, unknown>
+    }));
   }
 
   async disconnect(): Promise<void> {

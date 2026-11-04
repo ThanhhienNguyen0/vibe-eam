@@ -104,6 +104,8 @@ export interface ValidationRule {
 
 export interface ComponentInstance {
   id: string;
+  /** Optional identifier from a source system (REQ-35); unique per company. */
+  externalId?: string;
   name: string;
   componentTypeId: string;
   properties: Record<string, string>;
@@ -112,6 +114,8 @@ export interface ComponentInstance {
 
 export interface ConnectionInstance {
   id: string;
+  /** Optional identifier from a source system (REQ-35); unique per company. */
+  externalId?: string;
   name: string;
   connectionTypeId: string;
   sourceComponentId: string;
@@ -136,6 +140,24 @@ export interface Diagram {
   positions: Record<string, DiagramPosition>;
   metamodelId?: string;
   viewpointId?: string;
+}
+
+export type CatalogKind = "elements" | "relations";
+
+/** User defined catalog (REQ-31): a saved selection of types, properties and columns. */
+export interface Catalog {
+  id: string;
+  name: string;
+  description: string;
+  kind: CatalogKind;
+  /** elements: included component types. Empty = all concrete types. */
+  componentTypeIds: string[];
+  /** relations: included connection types. Empty = all. */
+  connectionTypeIds: string[];
+  /** elements: property columns to show (explicit, empty = none). */
+  propertyKeys: string[];
+  /** Optional standard columns, see catalogModel (ELEMENT_COLUMNS / RELATION_COLUMNS). */
+  columns: string[];
 }
 
 export interface Viewpoint {
@@ -205,4 +227,5 @@ export interface SidebarState {
   connections: ConnectionInstance[];
   diagrams: Diagram[];
   viewpoints: Viewpoint[];
+  catalogs: Catalog[];
 }
