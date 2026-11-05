@@ -1,5 +1,18 @@
 # Implementation Plan
 
+## REQ-33 – Verlustfreier JSON-Round-Trip und Schema-Versionierung
+
+Status: lokal implementiert und mit isoliertem PostgreSQL geprüft; unabhängige Kontrolle, Push, PR, Remote-CI und Merge stehen aus.
+
+1. Aktuelle Datenpfade abgrenzen: Legacy-Modell, Metamodell-JSON und CSV/XLSX bleiben Teilformate.
+2. Vollständigen Version-1-Vertrag und Draft-07-JSON-Schema für den aktuellen Sidebar-Zustand definieren.
+3. Tenant-neutrale portable IDs exportieren und beim Admin-Replace in Ziel-Company-IDs materialisieren.
+4. Schema- und Referenzvalidierung vollständig vor die vorhandene atomare Whole-State-Transaktion setzen.
+5. Benutzer/Audit/Secrets ausschließen, bestehende Audit-Historie erhalten und Import-Summary anhängen.
+6. Positive/negative Unit-, RBAC- und echte PostgreSQL-Roundtrip-/Rollback-/Tenant-/Regressionsprüfungen ausführen.
+7. Vollständige lokale Gates und Dokumentation abschließen; danach unveränderten Commit getrennt kontrollieren lassen.
+
+
 ## Aktueller Schritt: REQ-24 (20.10.2026), PR-CodeQL-Korrektur
 
 Historische Implementierungsbasis war `origin/main` auf `2f21cfed4e1e56826e2b13590aea9d5649e59050`, einschließlich REQ-30. Für Draft-PR #88 wurde der veröffentlichte Branch am 20.10.2026 ohne History-Rewrite mit aktuellem `main` `c489027fc9e7897da17d4dc08d4bb230d4aaed3e` zusammengeführt. Dadurch ist die separat gemergte Dependabot-Konfiguration nun regulär Teil des PR-Stands. Rollenmodell und Nutzerverwaltung werden weiterhin ohne Neubau der EAM-Fachmodelle ergänzt.

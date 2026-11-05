@@ -84,7 +84,7 @@ Unabhängige Kontrolle muss finalen Diff, Anforderungsabdeckung, scoped Deepmerg
 - Filter nach Layer und Elementtyp sowie Risiko-/Kosten-Heatmap sind implementiert.
 - Capability Map wird dynamisch aus Modelldaten und Relationen abgeleitet.
 - Lifecycle Roadmap wird aus echten Modelldaten erzeugt.
-- JSON Export und Import sind roundtrip-faehig fuer valide Modelle.
+- Historischer Teilnachweis: Der damalige Legacy-JSON-Export und -Import waren für valide Legacy-Modelle roundtrip-fähig; dies belegte weder den aktuellen Sidebar-Zustand noch Schema-Versionierung.
 - Audit Log schreibt Eintraege fuer Create, Update, Delete und Import.
 
 ## Tatsaechlich Gepruefte Punkte
@@ -97,7 +97,19 @@ Unabhängige Kontrolle muss finalen Diff, Anforderungsabdeckung, scoped Deepmerg
 - Alle geforderten REST-Endpunkte wurden angesprochen.
 - Element Create, Patch und Delete funktionieren.
 - Relation Create und Delete funktionieren.
-- Import/Export Roundtrip war modellgleich.
+- Historischer Teilnachweis: Der damalige Legacy-Import/Export-Roundtrip war modellgleich; Diagramme, aktuelles Metamodell, Kataloge, Tenant-Portabilität und echte PostgreSQL-Writes waren nicht Gegenstand dieses Nachweises.
+
+## REQ-33: vollständiger JSON-Modelltransfer am 04.11.2026
+
+- Die zunächst naheliegende Wiederverwendung von `/api/model` wurde verworfen, weil dieser Pfad das historische Teilmodell statt des aktuellen Editors abbildet.
+- Der erste DB-Test zeigte, dass Starter-IDs intern Company-IDs enthalten. Der Vertrag wurde daraufhin auf tenant-neutrale Datei-IDs und deterministische Ziel-Tenant-Materialisierung geändert; die schwächere Annahme „interne IDs direkt exportieren“ wurde nicht beibehalten.
+- Kaputte Referenzen werden vor dem bestehenden Writer geprüft. Das ist erforderlich, weil dessen allgemeine Normalisierung verwaiste Instanzreferenzen für normale Laufzeitpfade bereinigt und damit als Datei-Validator zu permissiv wäre.
+- Ein PostgreSQL-Trigger erzwang einen Fehler innerhalb der Transaktion. Der unveränderte Export und die unveränderte Auditanzahl danach belegen Rollback statt nur Vorabvalidierung.
+- Fehlversuche wurden nicht als Produktdefekte umgedeutet: Sandbox-`ENOTFOUND`, ein PostgreSQL-16-Verzeichnis ohne `initdb.exe`, eine Fixture mit doppeltem Typ-ID-Eintrag, die Verwendung einer portablen ID an einer internen CRUD-Route und fehlender CSV-`sheet`-Parameter wurden jeweils konkret korrigiert.
+- Der erste Gesamtcheck löste wegen fehlender Root-Installation ein altes, außerhalb des Worktrees liegendes ESLint 8 auf. `npm ci` stellte den gelockten Repository-Stand her; danach war der einzige echte Lintbefund ein ungenutzter Testimport und wurde entfernt.
+- Parallele DB-Testdateien verursachten Last-Timeouts; nach serieller Ausführung überschritt eine bestehende REQ-31-Prüfung einmal das Vitest-Standardlimit von fünf Sekunden. Der gemeinsame DB-Runner verwendet deshalb ein transparentes 30-Sekunden-Einzeltestlimit; fachliche Assertions und die 30-Sekunden-Produkttransaktion blieben unverändert.
+- Der lokale Container-Image-Build blieb ein Umgebungsblocker: Docker Desktop war installiert, aber die Linux-Engine-Pipe fehlte und der Systemdienst konnte nicht geöffnet werden. Der Build wird deshalb nicht als bestanden dargestellt.
+- Keine Aussage über Remote-CI, CodeQL, Deployment, menschliche Freigabe oder Produktionsreife wird aus lokalen Tests abgeleitet.
 - Audit Log schrieb Eintraege fuer Create, Update, Delete und Import.
 - Ungueltige Selbstrelation wird abgelehnt.
 - Ungueltiger Import ohne `elements`/`relations` wird mit HTTP 400 abgelehnt.

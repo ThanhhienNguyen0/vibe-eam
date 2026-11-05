@@ -18,6 +18,8 @@ export interface SidebarStateRepository {
   disconnect(): Promise<void>;
 }
 
+export class TenantResourceIdConflictError extends Error {}
+
 const json = (value: unknown): Prisma.InputJsonValue => value as Prisma.InputJsonValue;
 const stringArray = (value: Prisma.JsonValue | null | undefined): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
@@ -249,7 +251,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
       this.prisma.connectionInstance.count({ where: { id: { in: state.connections.map((item) => item.id) }, companyId: { not: companyId } } })
     ]);
     if (foreignCounts.some((count) => count > 0)) {
-      throw new Error("One or more resource IDs are already owned by another company.");
+      throw new TenantResourceIdConflictError("One or more resource IDs are already owned by another company.");
     }
   }
 

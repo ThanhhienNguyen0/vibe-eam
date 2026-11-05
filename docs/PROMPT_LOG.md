@@ -1,5 +1,12 @@
 # Prompt Log
 
+## 04.11.2026 – REQ-33 / Issue #65
+
+Auftrag: REQ-33 als ersten Schritt der Sequenz REQ-33 → REQ-26 → REQ-23 auf exakt `origin/main` `8868629a8727c99bc5472e65dc261d49ebb34c0c` implementieren. Gefordert waren ein vollständiger aktueller JSON-Vertrag statt eines Legacy-Teilformats, `schemaVersion`, JSON Schema, deterministischer echter PostgreSQL-Roundtrip, klare Legacy-/Future-Fehler, portable IDs, Tenant-/Rollenisolation, atomare Fehler, Ausschluss von Benutzern/Secrets/Auditverlauf, Regression bestehender Teilformate sowie wahrheitsgemäße Forschungs- und Prüfdokumentation. Kein Push, PR, Merge, Issue-Close, Deployment oder Beginn von REQ-26.
+
+Umsetzung: neuer Vertrag unter `/api/sidebar/model/export|import`, Ajv-validiertes Draft-07-Schema, vollständige semantische Referenzprüfung, tenant-neutrale Datei-IDs mit Ziel-Tenant-Materialisierung, Admin-only Replace-Import und transaktionaler Audit-Summary. Die erste direkte-ID-Lösung wurde nach dem DB-Befund company-präfixierter Starter-IDs verworfen. Ausgeführte Fehlversuche und Sandbox-Wiederholungen stehen in `REQ-33_JSON_MODEL_TRANSFER.md` und `AI_REFLECTION_LOG.md`; keine Laufzeit- oder KI-Anteile wurden erfunden.
+
+
 ## REQ-24 – Authentifizierung und Rollenmodell (19.10.2026)
 
 Auftrag aus Umsetzungs-Chat `01a154a2-45c9-78b2-9b0d-3e1fb5d6a623`, delegiert durch Kontrollchat `01a14fce-41f9-7302-8f9b-873a6e0a2c51`: „Setze REQ-24 ‚Authentifizierung und Rollenmodell (Admin, Architekt, Viewer)‘ ... vollständig, wartbar und nachvollziehbar um.“ Issue [#56](https://github.com/ThanhhienNguyen0/vibe-eam/issues/56) wurde am 19.10.2026 gelesen. Der Issuetext nennt fünf Akzeptanzkriterien und OIDC-Erweiterbarkeit als Hinweis; der Auftrag behandelt diesen Hinweis ausdrücklich als sechsten Prüfpunkt.

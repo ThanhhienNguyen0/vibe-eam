@@ -113,6 +113,10 @@ Beitrags-/Reviewablauf: [CONTRIBUTING.md](CONTRIBUTING.md). REQ-30-Prüfnachweis
 - `POST /api/model/import`
 - `GET /api/model/export`
 - `GET /api/audit-log`
+- `GET /api/sidebar/model/export` (vollständiges aktuelles JSON-Modell, `schemaVersion: 1`)
+- `POST /api/sidebar/model/import` (Admin-only Replace-Import)
+
+Der vollständige aktuelle JSON-Vertrag umfasst Metamodell/Regeln/Viewpoints, Instanzen, Relationen, Diagrammmitgliedschaften/Positionen und Kataloge. Benutzer, Secrets und Auditverlauf sind ausgeschlossen. Format, Rollen, portable IDs und Fehlerverhalten: [docs/REQ-33_JSON_MODEL_TRANSFER.md](docs/REQ-33_JSON_MODEL_TRANSFER.md).
 
 ## Persistenz: nur PostgreSQL (REQ-28)
 

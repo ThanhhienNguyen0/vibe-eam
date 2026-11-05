@@ -16,6 +16,8 @@ export const ROUTE_POLICIES: readonly RoutePolicy[] = [
   route("GET", "/api/users", "users:manage"), route("POST", "/api/users", "users:manage"),
   route("PATCH", "/api/users/:id/role", "users:manage"),
   route("GET", "/api/sidebar", "read"),
+  route("GET", "/api/sidebar/model/export", "read"),
+  route("POST", "/api/sidebar/model/import", "metamodel:write"),
   route("GET", "/api/sidebar/metamodel/export", "read"), route("GET", "/api/sidebar/metamodel/default", "read"),
   route("POST", "/api/sidebar/metamodel/import", "metamodel:write"),
   ...["component-types", "connection-types", "connection-rules", "viewpoints"].flatMap((name) => crud(`/api/sidebar/${name}`, "metamodel:write")),
