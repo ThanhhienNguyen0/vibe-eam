@@ -12,6 +12,12 @@ Die unabhängige Kontrolle lehnte Head `6b9201b96d373fd1d420c3b0a0db7a4d79cf8a64
 
 Der Folgeauftrag verlangt reproduzierte Fehler, einen transaktionalen vollständigen Replace bei wechselnder Metamodell-ID, Wiederverwendung externer IDs, bestehende Domänenvalidatoren auf dem importierten Gesamtzustand, eine bijektive deterministische ID-Abbildung, Export-Selbstvalidierung, neue Unit-/API-/PostgreSQL-Gegenbeispiele sowie vollständige lokale Gates und einen neuen Commit. Push, PR, Merge, Issue-Close und Freigabebehauptung bleiben untersagt; der neue Head geht erneut an dieselbe unabhängige Kontrolle.
 
+## 05.11.2026 – Zweite REQ-33-Nacharbeit nach unabhängiger Ablehnung
+
+Die erneute unabhängige Kontrolle bestätigte die vier vorherigen Findings als behoben, lehnte Head `7236452514c00f842a33a95e46783072aceff2ac` jedoch wegen zweier neuer Befunde ab: `metamodel.createdAt` wurde beim Upsert eines vorhandenen Ziel-Metamodells nicht übernommen, und mehrere ViewpointRules für denselben Viewpoint erreichten erst die DB-Composite-Unique-Constraint mit HTTP 500.
+
+Der Folgeauftrag verlangt die eigene Reproduktion, einen systematischen Abgleich aller exportierten Upsert-Felder und importrelevanten Composite-Unique-Constraints, Cross-Tenant-Zeitstempel-/Nullable-Regressionsfälle, verständliche 400-Fehler vor Mutation, vollständige lokale Gates, frisches PostgreSQL und einen erst nach dem neuen Commit dokumentierten Secret-Scan. Push, PR, Merge und Freigabebehauptung bleiben untersagt.
+
 
 ## REQ-24 – Authentifizierung und Rollenmodell (19.10.2026)
 

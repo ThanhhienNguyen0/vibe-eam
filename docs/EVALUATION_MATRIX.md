@@ -2,16 +2,18 @@
 
 ## REQ-33 – lokaler Nacharbeitsstand, 05.11.2026
 
-Der erste Entwickler-Head `6b9201b9…` wurde unabhängig nicht freigegeben. Die folgende Matrix beschreibt den danach geänderten lokalen Kandidaten; jeder neue Head benötigt dieselbe getrennte Kontrolle.
+Die Entwickler-Heads `6b9201b9…` und `72364525…` wurden unabhängig nicht freigegeben. Die folgende Matrix beschreibt den danach geänderten lokalen Kandidaten; jeder neue Head benötigt dieselbe getrennte Kontrolle.
 
 | Kriterium | Lokale Evidenz | Abnahmegrenze |
 |---|---|---|
 | `schemaVersion` und JSON Schema | `vibe-eam-model.schema.json`; positive/negative Ajv-Tests; getrennte Fehlercodes für missing/legacy/future | Version 1 lehnt unversionierte Legacy-Dateien ab; keine erfundene Migration aus Teilformaten |
 | Vollständiger aktueller Umfang | Metamodell/Regeln/Viewpoints, Instanzen/Relationen, Diagramme/Positionen und Kataloge im Vertrag und in der DB-Fixture | Benutzer, Secrets, Auditverlauf und technische DB-Zeitstempel bewusst ausgeschlossen |
 | Export → echter Import → Export | isolierter PostgreSQL-Lauf; byte-identische Antworten; reale Writes/Reads | Lokaler Test, kein Remote-CI-/Stagingnachweis |
+| Zeitstempel und nullable Upserts | gleiche portable Metamodell-ID in zwei Companies; verschiedene Zeitstempel und Altwerte; vollständiger Re-Export byteidentisch | Nur exportierte Vertragsfelder; technische Diagramm-/Katalogzeitstempel bleiben ausgeschlossen |
 | Portable IDs/Tenants | gleiche Datei gleichzeitig in zwei Companies; gemischte präfixierte/unpräfixierte Alt-IDs bleiben bijektiv; Referenzen und gleiche Re-Exporte geprüft | Replace statt Merge; 2-MiB-Parsergrenze |
 | Vollständiger Replace | Wechsel der Metamodell-ID, leerer Ersatz, keine alten Modellzeilen, erfolgreiche Wiederverwendung externer IDs | User, Audit-Historie und Legacy-Modellpfad bleiben absichtlich erhalten |
 | Fachregeln | bestehende Relation-/Diagrammvalidatoren auf importiertem Gesamtzustand; missing/denied Rule, Self-Connection und Viewpoint-Gegenfälle | Warnungen bleiben entsprechend bestehendem Validatorvertrag nicht blockierend |
+| DB-Eindeutigkeit | ConnectionRule-Tripel, ViewpointRule je Viewpoint, externe IDs und Mitgliedschaften vor Mutation geprüft; API-/DB-Rollback-Gegenfall | Schema- und semantische Fehler besitzen getrennte verständliche 400-Codes |
 | Fehler/Atomizität | Referenz-/Domänenfehler vor Mutation; Triggerfehler nach begonnenem Metamodell-Replace rollt alten Whole-State und Audit zurück | Keine allgemeine Konkurrenzkontrolle; Gegenstand von REQ-26 |
 | Rollen/Kompatibilität | Export für Viewer, Import nur Admin; 401/403; Legacy-/Metamodell-/CSV-/XLSX-Regression | Kein UI-Importdialog; bestehende Teilformate bleiben separat |
 

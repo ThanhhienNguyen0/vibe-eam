@@ -246,6 +246,12 @@ describe.skipIf(!url)("REQ-33 complete JSON round-trip against real PostgreSQL",
     const unrelatedTypeId = viewpointDenied.model.componentTypes.find((item) => item.id !== sourceTypeId && item.id !== targetTypeId)!.id;
     diagramViewpointRule.allowedComponentTypeIds = [unrelatedTypeId];
     await unchangedAfter(viewpointDenied, "MODEL_DOMAIN_INVALID");
+    const duplicateViewpointRule = structuredClone(firstExport.body) as ModelTransferDocument;
+    duplicateViewpointRule.model.viewpointRules.push({
+      ...structuredClone(duplicateViewpointRule.model.viewpointRules[0]),
+      id: randomUUID()
+    });
+    await unchangedAfter(duplicateViewpointRule, "MODEL_UNIQUENESS_INVALID");
 
     // A valid document can still fail inside the transaction. The trigger forces a late DB error;
     // earlier metamodel/component writes and the audit insert must roll back together.
@@ -333,5 +339,87 @@ describe.skipIf(!url)("REQ-33 complete JSON round-trip against real PostgreSQL",
     expect(reusedImport.status, JSON.stringify(reusedImport.body)).toBe(200);
     expect(await prisma.componentInstance.count({ where: { companyId: company.companyId, externalId: "EXT-Ü-001" } })).toBe(1);
     expect(await prisma.metamodel.count({ where: { companyId: company.companyId } })).toBe(1);
+  }, 30_000);
+
+  it("overwrites exported timestamps and clears every nullable upsert field across companies", async () => {
+    const source = await registerCompany();
+    const target = await registerCompany();
+    const starter = await exportModel(source.token);
+    expect(starter.status).toBe(200);
+
+    const sourceDocument = renameMetamodel(starter.body as ModelTransferDocument, "upsert-field-audit");
+    sourceDocument.model.metamodel.createdAt = "2001-02-03T04:05:06.000Z";
+    sourceDocument.model.metamodel.updatedAt = "2002-03-04T05:06:07.000Z";
+    sourceDocument.model.components = [];
+    sourceDocument.model.connections = [];
+    sourceDocument.model.catalogs = [];
+    const componentType = sourceDocument.model.componentTypes[0];
+    delete componentType.layer;
+    delete componentType.category;
+    delete componentType.shape;
+    delete componentType.isRequiredInViewpoint;
+    const connectionType = sourceDocument.model.connectionTypes[0];
+    delete connectionType.directionDescription;
+    delete connectionType.category;
+    delete connectionType.semanticCategory;
+    const viewpoint = sourceDocument.model.viewpoints[0];
+    delete viewpoint.maxVisibleLayers;
+    const connectionRule = sourceDocument.model.connectionRules[0];
+    delete connectionRule.minOccurrences;
+    delete connectionRule.maxOccurrences;
+    const viewpointRule = sourceDocument.model.viewpointRules[0];
+    delete viewpointRule.description;
+    delete viewpointRule.severity;
+    const auditValidationRule = {
+      id: randomUUID(),
+      name: "Nullable upsert audit",
+      description: "",
+      scope: "metamodel" as const,
+      direction: "outgoing" as const,
+      minOccurrences: 0,
+      severity: "warning" as const,
+      message: "Not applicable to empty diagram",
+      active: true
+    };
+    sourceDocument.model.validationRules.push(auditValidationRule);
+    const emptyViewpoint = {
+      id: randomUUID(), name: "Empty audit view", description: "", stakeholderRole: "Architect", purpose: "Audit",
+      allowedComponentTypeIds: [], allowedConnectionTypeIds: [], requiredComponentTypeIds: [], requiredConnectionTypeIds: []
+    };
+    sourceDocument.model.viewpoints.push(emptyViewpoint);
+    sourceDocument.model.diagrams = [{
+      id: randomUUID(), name: "Empty audit diagram", description: "", metamodelId: sourceDocument.model.metamodel.id,
+      componentIds: [], connectionIds: [], positions: {}
+    }];
+
+    const targetDocument = structuredClone(sourceDocument);
+    targetDocument.model.metamodel.createdAt = "2010-11-12T13:14:15.000Z";
+    targetDocument.model.metamodel.updatedAt = "2011-12-13T14:15:16.000Z";
+    Object.assign(targetDocument.model.componentTypes[0], {
+      layer: "Legacy", category: "Legacy", shape: "box", isRequiredInViewpoint: true
+    });
+    Object.assign(targetDocument.model.connectionTypes[0], {
+      directionDescription: "Legacy", category: "Legacy", semanticCategory: "Legacy"
+    });
+    targetDocument.model.viewpoints[0].maxVisibleLayers = 99;
+    Object.assign(targetDocument.model.connectionRules[0], { minOccurrences: 0, maxOccurrences: 99 });
+    Object.assign(targetDocument.model.viewpointRules[0], { description: "Legacy", severity: "warning" });
+    Object.assign(targetDocument.model.validationRules.at(-1)!, {
+      viewpointId: emptyViewpoint.id,
+      sourceComponentTypeId: componentType.id,
+      requiredConnectionTypeId: connectionType.id,
+      targetComponentTypeId: componentType.id
+    });
+    targetDocument.model.diagrams[0].viewpointId = emptyViewpoint.id;
+
+    expect((await importModel(source.token, sourceDocument)).status).toBe(200);
+    expect((await importModel(target.token, targetDocument)).status).toBe(200);
+    const portableSource = await exportModel(source.token);
+    expect(portableSource.body.model.metamodel.createdAt).toBe("2001-02-03T04:05:06.000Z");
+    expect(portableSource.body.model.metamodel.updatedAt).toBe("2002-03-04T05:06:07.000Z");
+    const targetImport = await importModel(target.token, portableSource.body);
+    expect(targetImport.status, JSON.stringify(targetImport.body)).toBe(200);
+    const targetExport = await exportModel(target.token);
+    expect(targetExport.text).toBe(portableSource.text);
   }, 30_000);
 });

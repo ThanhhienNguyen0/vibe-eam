@@ -55,10 +55,18 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 function requireUniqueIds(items: Array<{ id: string }>, label: string): Set<string> {
   const ids = new Set<string>();
   for (const item of items) {
-    if (ids.has(item.id)) throw semanticError(`${label} contains duplicate id '${item.id}'.`);
+    if (ids.has(item.id)) throw uniquenessError(`${label} contains duplicate id '${item.id}'.`);
     ids.add(item.id);
   }
   return ids;
+}
+
+function requireUniqueValues(values: readonly string[], label: string): void {
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (seen.has(value)) throw uniquenessError(`${label} contains duplicate value '${value}'.`);
+    seen.add(value);
+  }
 }
 
 function requireReferences(ids: readonly string[], available: Set<string>, path: string): void {
@@ -69,6 +77,10 @@ function requireReferences(ids: readonly string[], available: Set<string>, path:
 
 function semanticError(message: string): ModelTransferError {
   return new ModelTransferError(400, "MODEL_REFERENCE_INVALID", message);
+}
+
+function uniquenessError(message: string): ModelTransferError {
+  return new ModelTransferError(400, "MODEL_UNIQUENESS_INVALID", message);
 }
 
 function validateSemanticReferences(state: SidebarState): void {
@@ -102,7 +114,7 @@ function validateSemanticReferences(state: SidebarState): void {
     requireReferences([rule.connectionTypeId], connectionTypeIds, `connectionRules/${rule.id}`);
     requireReferences(rule.viewpointIds ?? [], viewpointIds, `connectionRules/${rule.id}/viewpointIds`);
     const triple = `${rule.sourceComponentTypeId}\u0000${rule.connectionTypeId}\u0000${rule.targetComponentTypeId}`;
-    if (ruleTriples.has(triple)) throw semanticError(`connectionRules contains duplicate source/type/target triple at '${rule.id}'.`);
+    if (ruleTriples.has(triple)) throw uniquenessError(`connectionRules contains duplicate source/type/target triple at '${rule.id}'.`);
     ruleTriples.add(triple);
     if (rule.minOccurrences !== undefined && rule.maxOccurrences !== undefined && rule.minOccurrences > rule.maxOccurrences) {
       throw semanticError(`connectionRules/${rule.id} has minOccurrences greater than maxOccurrences.`);
@@ -115,7 +127,12 @@ function validateSemanticReferences(state: SidebarState): void {
     requireReferences(viewpoint.requiredConnectionTypeIds, connectionTypeIds, `viewpoints/${viewpoint.id}/requiredConnectionTypeIds`);
     requireReferences(viewpoint.requiredConnectionRuleIds ?? [], connectionRuleIds, `viewpoints/${viewpoint.id}/requiredConnectionRuleIds`);
   }
+  const viewpointRuleAssignments = new Set<string>();
   for (const rule of state.viewpointRules) {
+    if (viewpointRuleAssignments.has(rule.viewpointId)) {
+      throw uniquenessError(`viewpointRules contains more than one rule for viewpoint '${rule.viewpointId}'.`);
+    }
+    viewpointRuleAssignments.add(rule.viewpointId);
     requireReferences([rule.viewpointId], viewpointIds, `viewpointRules/${rule.id}/viewpointId`);
     requireReferences([
       ...rule.allowedComponentTypeIds,
@@ -138,8 +155,8 @@ function validateSemanticReferences(state: SidebarState): void {
   const componentExternalIds = new Set<string>();
   for (const component of state.components) {
     requireReferences([component.componentTypeId], componentTypeIds, `components/${component.id}/componentTypeId`);
-    if (component.externalId) {
-      if (componentExternalIds.has(component.externalId)) throw semanticError(`components contains duplicate externalId '${component.externalId}'.`);
+    if (component.externalId !== undefined) {
+      if (componentExternalIds.has(component.externalId)) throw uniquenessError(`components contains duplicate externalId '${component.externalId}'.`);
       componentExternalIds.add(component.externalId);
     }
   }
@@ -148,8 +165,8 @@ function validateSemanticReferences(state: SidebarState): void {
   for (const connection of state.connections) {
     requireReferences([connection.connectionTypeId], connectionTypeIds, `connections/${connection.id}/connectionTypeId`);
     requireReferences([connection.sourceComponentId, connection.targetComponentId], componentIds, `connections/${connection.id}/endpoints`);
-    if (connection.externalId) {
-      if (connectionExternalIds.has(connection.externalId)) throw semanticError(`connections contains duplicate externalId '${connection.externalId}'.`);
+    if (connection.externalId !== undefined) {
+      if (connectionExternalIds.has(connection.externalId)) throw uniquenessError(`connections contains duplicate externalId '${connection.externalId}'.`);
       connectionExternalIds.add(connection.externalId);
     }
   }
@@ -158,6 +175,8 @@ function validateSemanticReferences(state: SidebarState): void {
       throw semanticError(`diagrams/${diagram.id}/metamodelId must equal model.metamodel.id.`);
     }
     requireReferences(diagram.viewpointId ? [diagram.viewpointId] : [], viewpointIds, `diagrams/${diagram.id}/viewpointId`);
+    requireUniqueValues(diagram.componentIds, `diagrams/${diagram.id}/componentIds`);
+    requireUniqueValues(diagram.connectionIds, `diagrams/${diagram.id}/connectionIds`);
     requireReferences(diagram.componentIds, componentIds, `diagrams/${diagram.id}/componentIds`);
     requireReferences(diagram.connectionIds, connectionIds, `diagrams/${diagram.id}/connectionIds`);
     const members = new Set(diagram.componentIds);

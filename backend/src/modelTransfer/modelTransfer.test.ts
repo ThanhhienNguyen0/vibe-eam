@@ -4,7 +4,8 @@ import {
   exportModelTransferDocument,
   materializeModelTransferState,
   ModelTransferError,
-  parseModelTransferDocument
+  parseModelTransferDocument,
+  type ModelTransferDocument
 } from "./modelTransfer.js";
 
 const state: SidebarState = {
@@ -167,6 +168,35 @@ describe("REQ-33 model transfer format", () => {
       code: "MODEL_EXPORT_INVALID",
       details: expect.arrayContaining([expect.stringContaining("CONNECTION_RULE_MISSING")])
     }) as ModelTransferError);
+  });
+
+  it("rejects every database-backed composite uniqueness violation before persistence", () => {
+    const valid = exportModelTransferDocument(validDomainState());
+    const cases: Array<[string, string, (document: ModelTransferDocument) => void]> = [
+      ["viewpoint rule assignment", "MODEL_UNIQUENESS_INVALID", (document) => document.model.viewpointRules.push({
+        ...structuredClone(document.model.viewpointRules[0]), id: "second-viewpoint-rule"
+      })],
+      ["connection rule triple", "MODEL_UNIQUENESS_INVALID", (document) => document.model.connectionRules.push({
+        ...structuredClone(document.model.connectionRules[0]), id: "second-connection-rule"
+      })],
+      ["diagram component membership", "MODEL_SCHEMA_INVALID", (document) => document.model.diagrams[0].componentIds.push("source")],
+      ["diagram connection membership", "MODEL_SCHEMA_INVALID", (document) => document.model.diagrams[0].connectionIds.push("relation")],
+      ["component external id", "MODEL_UNIQUENESS_INVALID", (document) => {
+        document.model.components[0].externalId = "DUPLICATE";
+        document.model.components[1].externalId = "DUPLICATE";
+      }],
+      ["connection external id", "MODEL_UNIQUENESS_INVALID", (document) => {
+        document.model.connections[0].externalId = "DUPLICATE";
+        document.model.connections.push({ ...structuredClone(document.model.connections[0]), id: "second-relation" });
+      }]
+    ];
+    for (const [label, code, mutate] of cases) {
+      const invalid = structuredClone(valid);
+      mutate(invalid);
+      expect(() => parseModelTransferDocument(invalid), label).toThrowError(expect.objectContaining({
+        code
+      }) as ModelTransferError);
+    }
   });
 
   it.each([
