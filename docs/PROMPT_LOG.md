@@ -6,6 +6,12 @@ Auftrag: REQ-33 als ersten Schritt der Sequenz REQ-33 → REQ-26 → REQ-23 auf 
 
 Umsetzung: neuer Vertrag unter `/api/sidebar/model/export|import`, Ajv-validiertes Draft-07-Schema, vollständige semantische Referenzprüfung, tenant-neutrale Datei-IDs mit Ziel-Tenant-Materialisierung, Admin-only Replace-Import und transaktionaler Audit-Summary. Die erste direkte-ID-Lösung wurde nach dem DB-Befund company-präfixierter Starter-IDs verworfen. Ausgeführte Fehlversuche und Sandbox-Wiederholungen stehen in `REQ-33_JSON_MODEL_TRANSFER.md` und `AI_REFLECTION_LOG.md`; keine Laufzeit- oder KI-Anteile wurden erfunden.
 
+## 05.11.2026 – REQ-33-Nacharbeit nach unabhängiger Ablehnung
+
+Die unabhängige Kontrolle lehnte Head `6b9201b96d373fd1d420c3b0a0db7a4d79cf8a64` ab: Ein Metamodellwechsel ließ den alten Company-Modellgraphen zurück, der Import umging vorhandene Relation-/Diagrammregeln, die Präfixentfernung konnte zwei zulässige IDs kollabieren, und die dokumentierte Secret-Scan-Zahl gehörte nicht zum geprüften Head.
+
+Der Folgeauftrag verlangt reproduzierte Fehler, einen transaktionalen vollständigen Replace bei wechselnder Metamodell-ID, Wiederverwendung externer IDs, bestehende Domänenvalidatoren auf dem importierten Gesamtzustand, eine bijektive deterministische ID-Abbildung, Export-Selbstvalidierung, neue Unit-/API-/PostgreSQL-Gegenbeispiele sowie vollständige lokale Gates und einen neuen Commit. Push, PR, Merge, Issue-Close und Freigabebehauptung bleiben untersagt; der neue Head geht erneut an dieselbe unabhängige Kontrolle.
+
 
 ## REQ-24 – Authentifizierung und Rollenmodell (19.10.2026)
 

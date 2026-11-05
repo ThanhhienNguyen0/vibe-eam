@@ -34,7 +34,7 @@ Nicht enthalten sind Company-ID, Benutzer, Rollen, Passwort-Hashes, Tokens, Secr
 
 ## Portable IDs und Tenant-Isolation
 
-Datei-IDs sind portable fachliche Identifikatoren. Interne PostgreSQL-IDs werden beim Export vom Präfix der authentifizierten Company befreit. Beim Import werden alle Ressourcen-IDs, Fremdschlüssel, Diagrammmitgliedschaften und Positionsschlüssel deterministisch mit dem Ziel-Company-Präfix materialisiert. Externe IDs bleiben unverändert.
+Datei-IDs sind portable fachliche Identifikatoren. Interne PostgreSQL-IDs werden beim Export grundsätzlich vom Präfix der authentifizierten Company befreit. Wenn dadurch ein präfixierter und ein zulässiger unpräfixierter Alt-Identifier auf denselben Datei-Identifier fallen würden, erhält nur der kollidierende weitere Identifier eine deterministische, außerhalb aller Kandidaten gewählte Ersatz-ID. Die Abbildung wird einheitlich auf sämtliche Ressourcen-IDs, Fremdschlüssel, Diagrammmitgliedschaften und Positionsschlüssel angewendet und ist bijektiv. Beim Import werden die eindeutigen Datei-IDs mit dem Ziel-Company-Präfix materialisiert. Externe IDs bleiben unverändert.
 
 Damit kann dasselbe Exportdokument gleichzeitig in mehreren Companies importiert werden, ohne globale Prisma-Primärschlüssel zu teilen. Ein erneuter Export aus beiden Companies liefert wieder dieselben portablen IDs. Der Import ermöglicht keinen Zugriff auf fremde Daten und übernimmt keine Company-ID aus der Datei.
 
@@ -44,9 +44,9 @@ Objektschlüssel werden kanonisch sortiert. Persistierte Collection-Reihenfolgen
 
 ## Validierung, Replace und Atomizität
 
-Ajv validiert die Datei gegen das versionierte JSON Schema. Danach werden eindeutige IDs, sämtliche Typ-/Regel-/Viewpoint-/Instanz-/Diagramm-/Katalogreferenzen, externe-ID-Eindeutigkeit und Diagrammendpunkte geprüft. Dieser Schritt findet vor dem Whole-State-Write statt und verhindert insbesondere, dass `removeDanglingInstanceReferences` eine kaputte Datei still bereinigt.
+Ajv validiert die Datei gegen das versionierte JSON Schema. Danach werden eindeutige IDs, sämtliche Typ-/Regel-/Viewpoint-/Instanz-/Diagramm-/Katalogreferenzen, externe-ID-Eindeutigkeit und Diagrammendpunkte geprüft. Anschließend laufen alle Relationen und Diagramme gegen dieselben `validateConnectionInstance`-/`validateDiagram`-Regeln wie die normalen Fachpfade; fehlende oder verbietende ConnectionRules, Selbstrelationen sowie Viewpoint-, Diagramm- und Pflichtregelverletzungen führen vor jeder Mutation zu `MODEL_DOMAIN_INVALID`. Die Prüfung verwendet ausschließlich den importierten Gesamtzustand. Auch jedes erzeugte Exportdokument wird vor Ausgabe erneut gegen Schema, Referenzen und Domänenregeln geprüft. Diese Schritte verhindern insbesondere, dass `removeDanglingInstanceReferences` eine kaputte Datei still bereinigt.
 
-Der Import ist ein ausdrücklicher Replace des vollständigen Modellzustands der authentifizierten Company. Es gibt keinen Merge- oder Preview-Modus. Der bestehende Prisma-Whole-State-Write führt Upserts, Löschungen und den Import-Summary-Eintrag in einer PostgreSQL-Transaktion aus. Ein Schema-, Referenz-, Tenant- oder DB-Fehler hinterlässt keine Teiländerung und aktualisiert den Prozesscache erst nach erfolgreichem Commit.
+Der Import ist ein ausdrücklicher Replace des vollständigen Modellzustands der authentifizierten Company. Es gibt keinen Merge- oder Preview-Modus. Wechselt die Metamodell-ID, werden frühere Metamodelle derselben Company innerhalb der vorhandenen PostgreSQL-Transaktion gelöscht; deren Typen, Regeln, Diagramme und Instanzen werden FK-gerecht kaskadiert. Danach werden neuer Zustand und Import-Summary geschrieben. Benutzer, Audit-Historie und der ausgeschlossene Legacy-Modellpfad sind keine Nachfahren des Metamodells und bleiben erhalten. Ein Schema-, Referenz-, Tenant- oder DB-Fehler hinterlässt keine Teiländerung und aktualisiert den Prozesscache erst nach erfolgreichem Commit.
 
 ## Kompatibilität und Grenzen
 
@@ -57,6 +57,8 @@ Der Import ist ein ausdrücklicher Replace des vollständigen Modellzustands der
 - Optimistic Locking und vollständige Before/After-Audits bleiben REQ-26 beziehungsweise REQ-23.
 
 ## Lokale Evidenz vom 04.11.2026
+
+Diese Evidenz gehört zum später unabhängig verworfenen Entwickler-Head `6b9201b96d373fd1d420c3b0a0db7a4d79cf8a64`. Die unabhängige Kontrolle fand zurückbleibende Daten bei wechselnder Metamodell-ID, fehlende Domänenvalidierung, eine kollidierende Präfixentfernung und eine veraltete Secret-Scan-Zahl. Der Head wurde nicht freigegeben.
 
 - Format-/Schema-/RBAC-Tests: `npm run test --workspace backend -- --run src/modelTransfer/modelTransfer.test.ts src/auth/rbac.test.ts` – 2 Dateien, 22 Tests bestanden.
 - Isolierter PostgreSQL-Cluster: `$env:PG_BIN='C:\Program Files\PostgreSQL\14\bin'; npm run test:rbac:db` – sechs Migrationen angewendet; 3 Dateien, 11 Tests bestanden.
@@ -69,6 +71,20 @@ Finale lokale Gates am 05.11.2026 auf Ajv 8.18.0:
 
 - `npm run check` bestand: Lint und beide Typechecks; 165 bestandene/11 übersprungene Backendtests (DB-Tests laufen im separaten Pflichtgate), 36 Frontendtests; beide Produktionsbuilds; 113 Compose-, 169 Workflow- und 17 Securityprüfungen; Prisma-Konfigurationsprüfung.
 - `npm run scan:dependencies` bestand mit 0 hohen/kritischen und 10 weiterhin sichtbaren moderaten Tooling-Befunden. Das direkte Ajv-Finding der zunächst installierten Version 8.17.1 wurde kompatibel mit 8.18.0 behoben; kein `--force`.
-- `npm run scan:secrets` bestand: Canary erkannt, 72 Commits und 203 aktuelle Repository-Dateien ohne echten Fund.
+- Der unabhängige Secret-Scan auf `6b9201b9…` bestand mit Canary-Erkennung, 73 Commits und 203 aktuellen Dateien ohne echten Fund. Diese Zahl ist historische Evidenz für den verworfenen Head, nicht für den Nacharbeits-Head.
 - Alle drei realen `docker compose ... config --quiet`-Aufrufe mit `.env.example`, `.env.staging.example` und `.env.prod.example` bestanden.
 - Der exakte CI-Image-Build `docker compose ... build backend frontend` wurde versucht, aber nicht ausgeführt: Die lokale Docker-Desktop-Linux-Engine-Pipe fehlte. Hintergrundstart von Docker Desktop und Start des Systemdiensts stellten die Engine nicht bereit; der Dienstzugriff war in dieser Umgebung nicht erlaubt. Anwendungsbuilds bestanden, aber Container-Image-Build, Remote-CI, CodeQL, Deployment und unabhängige Freigabe bleiben ausdrücklich unbelegt.
+
+## Nacharbeit nach unabhängiger Kontrolle am 05.11.2026
+
+- Die neuen Regressionstests reproduzierten auf dem verworfenen Code zwei Unitfehler: zwei gemischte präfixierte/unpräfixierte IDs wurden zu einer Datei-ID, und eine Relation ohne ConnectionRule wurde akzeptiert. Im frischen PostgreSQL-Cluster wurde eine Domänenverletzung mit HTTP 200 übernommen; nach dem ersten Metamodellwechsel existierten zwei statt eines Company-Metamodells.
+- Der Replace löscht jetzt frühere Metamodellgraphen derselben Company innerhalb derselben Transaktion. Der DB-Test wechselt Metamodell-IDs, leert den Zustand, prüft null alte Modellzeilen, verwendet dieselbe externe ID anschließend erfolgreich wieder und erzwingt danach einen späten DB-Fehler. Export, alter Metamodellgraph und Audit bleiben beim Fehler unverändert.
+- Fehlende/verbietende ConnectionRules, Selbstrelationen und Viewpoint-Regelverletzungen werden als HTTP 400 abgelehnt; Export und Auditanzahl bleiben unverändert. Ein gültiger Gesamtzustand bleibt importierbar.
+- Die Kollisionsregression enthält gleichzeitig `company-a:component`/`component` und `company-a:type`/`type`, prüft unterschiedliche Datei-IDs, alle Referenzremaps, Selbstvalidierung des Exports und byteidentischen Re-Export aus einer zweiten Company.
+- Der erste korrigierte DB-Lauf wies die alte Positiv-Fixture zu Recht zurück: die ausgewählte Starterregel war im neuen Viewpoint nicht freigegeben und das zweite Diagramm verletzte globale Pflichtregeln. Nach fachlich korrekter Fixture-Zuordnung deckte ein zweiter Lauf einen wirkungslosen Viewpoint-Negativfall auf, weil beide Komponenten denselben Typ hatten. Der Test verwendet jetzt einen tatsächlich anderen vorhandenen Typ.
+- Zieltests nach der Korrektur: `npm run test --workspace backend -- --run src/modelTransfer/modelTransfer.test.ts src/auth/rbac.test.ts` – 2 Dateien, 25/25 Tests bestanden. Der erste Lauf innerhalb der eingeschränkten Prozessumgebung traf bei den RBAC-Testports `EACCES`; der identische freigegebene lokale Lauf bestand.
+- Frischer isolierter PostgreSQL-Abschlusslauf: sechs Migrationen, 3 Dateien, 12/12 Tests bestanden. Der Runner blieb seriell; keine Assertions oder Produktzeitlimits wurden entfernt oder gelockert.
+- `npm run check` bestand: Lint und beide Typechecks; 168 bestandene/12 übersprungene Backendtests (alle 12 DB-Tests separat real ausgeführt), 36/36 Frontendtests; beide Produktionsbuilds; 113 Compose-, 169 Workflow- und 17 Securityprüfungen; Prisma-Konfigurationsprüfung.
+- `npm run scan:dependencies` bestand mit 10 moderaten, 0 hohen und 0 kritischen Befunden. Alle drei realen Compose-Konfigurationen wurden erneut erfolgreich geparst.
+- Der exakte Containerbuild wurde erneut versucht und blieb vor dem Build an der fehlenden Docker-Desktop-Linux-Engine-Pipe blockiert. Das ist eine lokale Evidenzgrenze, kein bestandener Image-Build und kein nachgewiesener Produktfehler.
+- Der commitgebundene Secret-Abschluss-Scan des finalen Nacharbeitsstands bestand: Canary korrekt abgelehnt, 74 Commits und 203 aktuelle Repository-Dateien ohne echten Fund. Die neue Zahl wurde erst nach Erstellung des Nacharbeitscommits beobachtet und anschließend durch erneuten Scan des amendierten finalen Heads bestätigt. Eine neue unabhängige Freigabe folgt daraus nicht.

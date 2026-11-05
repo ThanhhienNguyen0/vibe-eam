@@ -46,6 +46,9 @@ function fixtureFrom(document: ModelTransferDocument): ModelTransferDocument {
     && state.componentTypes.some((type) => type.id === item.sourceComponentTypeId && !type.isAbstract)
     && state.componentTypes.some((type) => type.id === item.targetComponentTypeId && !type.isAbstract));
   if (!rule) throw new Error("Starter metamodel has no usable connection rule.");
+  // The fixture creates its own viewpoint. Make the selected rule generally applicable so the
+  // positive import is valid against that viewpoint instead of inheriting unrelated starter ids.
+  rule.viewpointIds = [];
   const fixtureComponentTypeIds = [...new Set([rule.sourceComponentTypeId, rule.targetComponentTypeId])];
   const ids = {
     source: randomUUID(),
@@ -146,6 +149,7 @@ function fixtureFrom(document: ModelTransferDocument): ModelTransferDocument {
       name: "Geteilte Elemente",
       description: "Zweites Diagramm",
       metamodelId: state.metamodel.id,
+      viewpointId: ids.viewpoint,
       componentIds: [ids.source, ids.target],
       connectionIds: [ids.connection],
       positions: { [ids.source]: { x: 1, y: 2 }, [ids.target]: { x: 3, y: 4, width: 220, height: 80 } }
@@ -161,6 +165,13 @@ function fixtureFrom(document: ModelTransferDocument): ModelTransferDocument {
     propertyKeys: ["owner", "empty", "unicode"],
     columns: ["name", "description", "externalId"]
   }];
+  return result;
+}
+
+function renameMetamodel(document: ModelTransferDocument, id: string): ModelTransferDocument {
+  const result = structuredClone(document);
+  result.model.metamodel.id = id;
+  for (const diagram of result.model.diagrams) diagram.metamodelId = id;
   return result;
 }
 
@@ -203,10 +214,12 @@ describe.skipIf(!url)("REQ-33 complete JSON round-trip against real PostgreSQL",
 
     const unchangedAfter = async (input: object, expectedCode: string) => {
       const before = (await exportModel(source.token)).text;
+      const auditBefore = await prisma.auditLogEntry.count({ where: { companyId: source.companyId } });
       const response = await importModel(source.token, input);
       expect(response.status).toBe(400);
       expect(response.body.code).toBe(expectedCode);
       expect((await exportModel(source.token)).text).toBe(before);
+      expect(await prisma.auditLogEntry.count({ where: { companyId: source.companyId } })).toBe(auditBefore);
     };
     const missingVersion = structuredClone(firstExport.body) as Record<string, unknown>;
     delete missingVersion.schemaVersion;
@@ -216,12 +229,29 @@ describe.skipIf(!url)("REQ-33 complete JSON round-trip against real PostgreSQL",
     const broken = structuredClone(firstExport.body) as ModelTransferDocument;
     broken.model.diagrams[0].componentIds.push("missing-component");
     await unchangedAfter(broken, "MODEL_REFERENCE_INVALID");
+    const denied = structuredClone(firstExport.body) as ModelTransferDocument;
+    const importedConnection = denied.model.connections[0];
+    const sourceTypeId = denied.model.components.find((item) => item.id === importedConnection.sourceComponentId)!.componentTypeId;
+    const targetTypeId = denied.model.components.find((item) => item.id === importedConnection.targetComponentId)!.componentTypeId;
+    const matchingRule = denied.model.connectionRules.find((item) => item.sourceComponentTypeId === sourceTypeId
+      && item.connectionTypeId === importedConnection.connectionTypeId && item.targetComponentTypeId === targetTypeId)!;
+    matchingRule.allowed = false;
+    matchingRule.severity = "error";
+    await unchangedAfter(denied, "MODEL_DOMAIN_INVALID");
+    const selfConnection = structuredClone(firstExport.body) as ModelTransferDocument;
+    selfConnection.model.connections[0].targetComponentId = selfConnection.model.connections[0].sourceComponentId;
+    await unchangedAfter(selfConnection, "MODEL_DOMAIN_INVALID");
+    const viewpointDenied = structuredClone(firstExport.body) as ModelTransferDocument;
+    const diagramViewpointRule = viewpointDenied.model.viewpointRules.find((item) => item.viewpointId === viewpointDenied.model.diagrams[0].viewpointId)!;
+    const unrelatedTypeId = viewpointDenied.model.componentTypes.find((item) => item.id !== sourceTypeId && item.id !== targetTypeId)!.id;
+    diagramViewpointRule.allowedComponentTypeIds = [unrelatedTypeId];
+    await unchangedAfter(viewpointDenied, "MODEL_DOMAIN_INVALID");
 
     // A valid document can still fail inside the transaction. The trigger forces a late DB error;
     // earlier metamodel/component writes and the audit insert must roll back together.
     await prisma.$executeRawUnsafe(`CREATE FUNCTION req33_reject_name() RETURNS trigger AS $$ BEGIN IF NEW.name = 'ATOMIC-FAIL' THEN RAISE EXCEPTION 'REQ33 forced rollback'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql`);
     await prisma.$executeRawUnsafe(`CREATE TRIGGER req33_reject_name BEFORE INSERT OR UPDATE ON "ComponentInstance" FOR EACH ROW EXECUTE FUNCTION req33_reject_name()`);
-    const atomic = structuredClone(firstExport.body) as ModelTransferDocument;
+    const atomic = renameMetamodel(firstExport.body as ModelTransferDocument, "atomic-replacement-metamodel");
     atomic.model.components[0].name = "ATOMIC-FAIL";
     const beforeAtomic = (await exportModel(source.token)).text;
     const auditBeforeAtomic = await prisma.auditLogEntry.count({ where: { companyId: source.companyId } });
@@ -267,5 +297,41 @@ describe.skipIf(!url)("REQ-33 complete JSON round-trip against real PostgreSQL",
     expect(sourceStoredId.id).not.toBe(targetStoredId.id);
     expect(sourceStoredId.id.startsWith(`${source.companyId}:`)).toBe(true);
     expect(targetStoredId.id.startsWith(`${target.companyId}:`)).toBe(true);
+  }, 30_000);
+
+  it("deletes the previous company model graph when a replacement changes metamodel ids", async () => {
+    const company = await registerCompany();
+    const starter = await exportModel(company.token);
+    expect(starter.status).toBe(200);
+
+    const first = renameMetamodel(fixtureFrom(starter.body as ModelTransferDocument), "first-replacement-metamodel");
+    expect((await importModel(company.token, first)).status).toBe(200);
+    expect(await prisma.componentInstance.count({ where: { companyId: company.companyId } })).toBe(2);
+    expect(await prisma.metamodel.count({ where: { companyId: company.companyId } })).toBe(1);
+
+    const empty = renameMetamodel(starter.body as ModelTransferDocument, "empty-replacement-metamodel");
+    empty.model.componentTypes = [];
+    empty.model.connectionTypes = [];
+    empty.model.connectionRules = [];
+    empty.model.viewpoints = [];
+    empty.model.viewpointRules = [];
+    empty.model.validationRules = [];
+    empty.model.components = [];
+    empty.model.connections = [];
+    empty.model.diagrams = [];
+    empty.model.catalogs = [];
+    const emptyImport = await importModel(company.token, empty);
+    expect(emptyImport.status, JSON.stringify(emptyImport.body)).toBe(200);
+    expect(await prisma.componentInstance.count({ where: { companyId: company.companyId } })).toBe(0);
+    expect(await prisma.connectionInstance.count({ where: { companyId: company.companyId } })).toBe(0);
+    expect(await prisma.diagram.count({ where: { companyId: company.companyId } })).toBe(0);
+    expect(await prisma.componentType.count({ where: { metamodel: { companyId: company.companyId } } })).toBe(0);
+    expect(await prisma.metamodel.count({ where: { companyId: company.companyId } })).toBe(1);
+
+    const reused = renameMetamodel(fixtureFrom(starter.body as ModelTransferDocument), "reused-external-id-metamodel");
+    const reusedImport = await importModel(company.token, reused);
+    expect(reusedImport.status, JSON.stringify(reusedImport.body)).toBe(200);
+    expect(await prisma.componentInstance.count({ where: { companyId: company.companyId, externalId: "EXT-Ü-001" } })).toBe(1);
+    expect(await prisma.metamodel.count({ where: { companyId: company.companyId } })).toBe(1);
   }, 30_000);
 });

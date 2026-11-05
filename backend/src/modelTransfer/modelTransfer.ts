@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { Ajv, type ErrorObject } from "ajv";
-import type { SidebarState } from "../Sidebar/sidebarTypes.js";
+import { validateConnectionInstance, validateDiagram } from "../Sidebar/metamodelRules.js";
+import type { SidebarState, ValidationMessage } from "../Sidebar/sidebarTypes.js";
 
 export const MODEL_TRANSFER_SCHEMA_VERSION = 1 as const;
 export const MODEL_TRANSFER_FORMAT = "vibe-eam-model" as const;
@@ -187,6 +188,31 @@ function validateSemanticReferences(state: SidebarState): void {
   }
 }
 
+function domainMessage(item: ValidationMessage): string {
+  const entity = item.affectedEntityId ? ` (${item.affectedEntityId})` : "";
+  return `${item.code}${entity}: ${item.message}`;
+}
+
+function validateDomainRules(state: SidebarState): void {
+  const details = new Map<string, string>();
+  const collect = (items: ValidationMessage[]) => {
+    for (const item of items) {
+      const detail = domainMessage(item);
+      details.set(`${item.code}\u0000${item.affectedEntityId ?? ""}\u0000${item.ruleId ?? ""}\u0000${item.message}`, detail);
+    }
+  };
+  for (const connection of state.connections) collect(validateConnectionInstance(connection, state).errors);
+  for (const diagram of state.diagrams) collect(validateDiagram(diagram, state).errors);
+  if (details.size > 0) {
+    throw new ModelTransferError(
+      400,
+      "MODEL_DOMAIN_INVALID",
+      "Model file violates the active metamodel or diagram rules.",
+      [...details.values()]
+    );
+  }
+}
+
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);
   if (value && typeof value === "object") {
@@ -298,20 +324,88 @@ function mapStateIds(state: SidebarState, map: (id: string) => string): SidebarS
   return copy;
 }
 
+function entityIds(state: SidebarState): string[] {
+  return [...new Set([
+    state.metamodel.id,
+    ...state.componentTypes.map((item) => item.id),
+    ...state.connectionTypes.map((item) => item.id),
+    ...state.connectionRules.map((item) => item.id),
+    ...state.viewpoints.map((item) => item.id),
+    ...state.viewpointRules.map((item) => item.id),
+    ...state.validationRules.map((item) => item.id),
+    ...state.components.map((item) => item.id),
+    ...state.connections.map((item) => item.id),
+    ...state.diagrams.map((item) => item.id),
+    ...state.catalogs.map((item) => item.id)
+  ])].sort(compareStrings);
+}
+
+/**
+ * Preserve readable IDs when possible, but resolve collisions caused by removing a tenant prefix.
+ * Generated IDs are selected outside the complete candidate set. After import every stored ID has
+ * the target prefix, so the unique portable outputs are a fixed point on the next export.
+ */
+function portableIdMap(state: SidebarState, companyId?: string): Map<string, string> {
+  const prefix = companyId ? `${companyId}:` : undefined;
+  const candidates = new Map<string, string[]>();
+  for (const id of entityIds(state)) {
+    const candidate = prefix && id.startsWith(prefix) ? id.slice(prefix.length) : id;
+    const group = candidates.get(candidate) ?? [];
+    group.push(id);
+    candidates.set(candidate, group);
+  }
+
+  const result = new Map<string, string>();
+  const used = new Set(candidates.keys());
+  let generatedIndex = 0;
+  const generated = (): string => {
+    let candidate: string;
+    do candidate = `~req33-${(generatedIndex++).toString(36)}`;
+    while (used.has(candidate));
+    used.add(candidate);
+    return candidate;
+  };
+
+  for (const [candidate, ids] of [...candidates.entries()].sort(([left], [right]) => compareStrings(left, right))) {
+    ids.sort(compareStrings);
+    const preserveCandidate = candidate.length > 0;
+    ids.forEach((id, index) => result.set(id, preserveCandidate && index === 0 ? candidate : generated()));
+  }
+  return result;
+}
+
 export function materializeModelTransferState(document: ModelTransferDocument, companyId: string): SidebarState {
   const prefix = `${companyId}:`;
   return mapStateIds(document.model, (id) => `${prefix}${id}`);
 }
 
 export function exportModelTransferDocument(state: SidebarState, companyId?: string): ModelTransferDocument {
-  const portableState = companyId
-    ? mapStateIds(state, (id) => id.startsWith(`${companyId}:`) ? id.slice(companyId.length + 1) : id)
-    : state;
-  return canonicalize({
-    schemaVersion: MODEL_TRANSFER_SCHEMA_VERSION,
-    format: MODEL_TRANSFER_FORMAT,
-    model: canonicalState(portableState)
-  }) as ModelTransferDocument;
+  try {
+    validateSemanticReferences(state);
+    validateDomainRules(state);
+    const ids = portableIdMap(state, companyId);
+    const portableState = mapStateIds(state, (id) => {
+      const portable = ids.get(id);
+      if (!portable) throw semanticError(`Reference '${id}' has no portable entity id.`);
+      return portable;
+    });
+    const document = canonicalize({
+      schemaVersion: MODEL_TRANSFER_SCHEMA_VERSION,
+      format: MODEL_TRANSFER_FORMAT,
+      model: canonicalState(portableState)
+    }) as ModelTransferDocument;
+    return parseModelTransferDocument(document);
+  } catch (error) {
+    if (error instanceof ModelTransferError) {
+      throw new ModelTransferError(
+        500,
+        "MODEL_EXPORT_INVALID",
+        "Stored model cannot be represented as a valid REQ-33 export.",
+        [`${error.code}: ${error.message}`, ...error.details]
+      );
+    }
+    throw error;
+  }
 }
 
 export function parseModelTransferDocument(input: unknown): ModelTransferDocument {
@@ -336,5 +430,6 @@ export function parseModelTransferDocument(input: unknown): ModelTransferDocumen
   }
   const document = structuredClone(input) as ModelTransferDocument;
   validateSemanticReferences(document.model);
+  validateDomainRules(document.model);
   return document;
 }

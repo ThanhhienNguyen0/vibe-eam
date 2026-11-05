@@ -2,14 +2,14 @@
 
 ## REQ-33 – Verlustfreier JSON-Round-Trip und Schema-Versionierung
 
-Status: lokal implementiert und mit isoliertem PostgreSQL geprüft; unabhängige Kontrolle, Push, PR, Remote-CI und Merge stehen aus.
+Status: Head `6b9201b9…` wurde unabhängig wegen P1/P1/P2/P3 abgelehnt. Nacharbeit ist lokal implementiert und mit neuen isolierten PostgreSQL-Regressionsfällen geprüft; neuer finaler Head, erneute unabhängige Kontrolle, Push, PR, Remote-CI und Merge stehen aus.
 
 1. Aktuelle Datenpfade abgrenzen: Legacy-Modell, Metamodell-JSON und CSV/XLSX bleiben Teilformate.
 2. Vollständigen Version-1-Vertrag und Draft-07-JSON-Schema für den aktuellen Sidebar-Zustand definieren.
-3. Tenant-neutrale portable IDs exportieren und beim Admin-Replace in Ziel-Company-IDs materialisieren.
-4. Schema- und Referenzvalidierung vollständig vor die vorhandene atomare Whole-State-Transaktion setzen.
+3. Tenant-neutrale portable IDs kollisionsfrei und bijektiv exportieren und beim Admin-Replace in Ziel-Company-IDs materialisieren.
+4. Schema-, Referenz- und bestehende Relation-/Diagramm-Domänenvalidierung vollständig vor die atomare Whole-State-Transaktion setzen; erzeugte Exporte selbst validieren.
 5. Benutzer/Audit/Secrets ausschließen, bestehende Audit-Historie erhalten und Import-Summary anhängen.
-6. Positive/negative Unit-, RBAC- und echte PostgreSQL-Roundtrip-/Rollback-/Tenant-/Regressionsprüfungen ausführen.
+6. Positive/negative Unit-, RBAC- und echte PostgreSQL-Roundtrip-/Metamodellwechsel-/Altgraph-/Rollback-/Tenant-/Regressionsprüfungen ausführen.
 7. Vollständige lokale Gates und Dokumentation abschließen; danach unveränderten Commit getrennt kontrollieren lassen.
 
 

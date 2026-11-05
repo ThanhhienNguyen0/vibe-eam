@@ -262,7 +262,10 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
     await this.assertTenantIdsAvailable(state, companyId);
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.metamodel.updateMany({ where: { companyId }, data: { isActive: false } });
+      // A whole-state write with a new metamodel id is a replacement, not an append. Deleting
+      // prior company metamodels here cascades their types, rules, diagrams and instances inside
+      // this same transaction; users, audit entries and legacy ModelRecords are not descendants.
+      await tx.metamodel.deleteMany({ where: { companyId, id: { not: metamodelId } } });
       await tx.metamodel.upsert({
         where: { id: metamodelId },
         create: {

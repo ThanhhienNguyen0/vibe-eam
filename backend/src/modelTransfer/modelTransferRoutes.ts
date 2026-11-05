@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
 import { readSidebarState, writeSidebarState } from "../Sidebar/sidebarStore.js";
 import { TenantResourceIdConflictError } from "../persistence/databaseSidebarRepository.js";
 import {
@@ -10,12 +10,20 @@ import {
 
 const router = Router();
 
+function sendTransferError(res: Response, error: ModelTransferError): void {
+  res.status(error.status).json({ error: error.message, code: error.code, details: error.details });
+}
+
 router.get("/model/export", async (_req, res, next) => {
   try {
     const document = exportModelTransferDocument(await readSidebarState(), _req.user!.companyId);
     res.setHeader("Content-Disposition", "attachment; filename=\"vibe-eam-model-v1.json\"");
     res.json(document);
   } catch (error) {
+    if (error instanceof ModelTransferError) {
+      sendTransferError(res, error);
+      return;
+    }
     next(error);
   }
 });
@@ -32,7 +40,7 @@ router.post("/model/import", async (req, res, next) => {
     res.json(exportModelTransferDocument(stored, req.user!.companyId));
   } catch (error) {
     if (error instanceof ModelTransferError) {
-      res.status(error.status).json({ error: error.message, code: error.code, details: error.details });
+      sendTransferError(res, error);
       return;
     }
     if (error instanceof TenantResourceIdConflictError) {
