@@ -22,7 +22,7 @@ import {
   deleteRelation,
   getAuditLog,
   getModel,
-  getModelRevision,
+  getModelSnapshot,
   importModel,
   updateElement
 } from "./store.js";
@@ -99,9 +99,9 @@ export function createApp(options: AppOptions): express.Express {
 
   app.get("/api/model", async (_req, res, next) => {
   try {
-    const model = await getModel();
-    res.setHeader("ETag", `"${await getModelRevision()}"`);
-    res.json(model);
+    const snapshot = await getModelSnapshot();
+    res.setHeader("ETag", `"${snapshot.revision}"`);
+    res.json(snapshot.model);
   } catch (error) {
     next(error);
   }
@@ -186,9 +186,9 @@ export function createApp(options: AppOptions): express.Express {
 
   app.get("/api/model/export", async (_req, res, next) => {
   try {
-    const model = await getModel();
-    res.setHeader("ETag", `"${await getModelRevision()}"`);
-    res.json(model);
+    const snapshot = await getModelSnapshot();
+    res.setHeader("ETag", `"${snapshot.revision}"`);
+    res.json(snapshot.model);
   } catch (error) {
     next(error);
   }

@@ -4,7 +4,7 @@ import { sidebarApi } from "./sidebarApi";
 import type { SidebarSelection } from "./Sidebar";
 import { COMPONENT_SHAPES } from "./sidebarTypes";
 import { useAccess } from "../access";
-import { runOptimisticMutation } from "../optimisticConflict";
+import { runOptimisticMutation, type ConflictResolution } from "../optimisticConflict";
 import CatalogEditor from "./CatalogEditor";
 import type {
   ComponentInstance,
@@ -26,6 +26,7 @@ interface Props {
   onOpenDiagram: (id: string) => void;
   onOpenCatalog: (id: string) => void;
   onClose: () => void;
+  chooseConflictResolution?: (message: string) => Promise<ConflictResolution>;
 }
 
 function DetailWrapper({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
@@ -40,7 +41,7 @@ function DetailWrapper({ title, onClose, children }: { title: string; onClose: (
   );
 }
 
-export default function SidebarPanels({ selection, sidebarState, onStateChange, onSelect, onOpenDiagram, onOpenCatalog, onClose }: Props) {
+export default function SidebarPanels({ selection, sidebarState, onStateChange, onSelect, onOpenDiagram, onOpenCatalog, onClose, chooseConflictResolution }: Props) {
   const { canWrite, canManageMetamodel } = useAccess();
   if (!selection) return null;
 
@@ -296,7 +297,7 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
     return (
       <DetailWrapper title={comp.name} onClose={onClose}>
         <ComponentEditor
-          key={comp.id}
+          key={`${comp.id}:${comp.version ?? 1}`}
           comp={comp}
           componentTypes={componentTypes}
           connections={connections}
@@ -309,7 +310,8 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
             const result = await runOptimisticMutation(
               comp.version ?? 1,
               (version) => sidebarApi.updateComponent(comp.id, patch, version),
-              async () => onStateChange(await sidebarApi.getAll())
+              async () => onStateChange(await sidebarApi.getAll()),
+              chooseConflictResolution
             );
             if (result.applied) onStateChange({ ...sidebarState, components: components.map((c) => (c.id === comp.id ? result.value : c)) });
           }}
@@ -353,7 +355,7 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
     return (
       <DetailWrapper title={conn.name || `${src?.name ?? "?"} → ${tgt?.name ?? "?"}`} onClose={onClose}>
         <ConnectionEditor
-          key={conn.id}
+          key={`${conn.id}:${conn.version ?? 1}`}
           conn={conn}
           connectionTypes={connectionTypes}
           components={components}
@@ -364,7 +366,8 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
             const result = await runOptimisticMutation(
               conn.version ?? 1,
               (version) => sidebarApi.updateConnection(conn.id, patch, version),
-              async () => onStateChange(await sidebarApi.getAll())
+              async () => onStateChange(await sidebarApi.getAll()),
+              chooseConflictResolution
             );
             if (result.applied) onStateChange({ ...sidebarState, connections: connections.map((c) => (c.id === conn.id ? result.value : c)) });
           }}
@@ -396,14 +399,15 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
     return (
       <DetailWrapper title={d.name} onClose={onClose}>
         <DiagramMetaEditor
-          key={d.id}
+          key={`${d.id}:${d.version ?? 1}`}
           diagram={d}
           viewpoints={viewpoints}
           onSave={async (patch) => {
             const result = await runOptimisticMutation(
               d.version ?? 1,
               (version) => sidebarApi.updateDiagram(d.id, patch, version),
-              async () => onStateChange(await sidebarApi.getAll())
+              async () => onStateChange(await sidebarApi.getAll()),
+              chooseConflictResolution
             );
             if (result.applied) onStateChange({ ...sidebarState, diagrams: diagrams.map((x) => (x.id === d.id ? result.value : x)) });
           }}

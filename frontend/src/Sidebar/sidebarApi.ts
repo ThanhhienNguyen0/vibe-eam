@@ -87,6 +87,15 @@ export const sidebarApi = {
   // Diagrams
   createDiagram: (data: { name: string; description?: string }) =>
     request<Diagram>(`${BASE}/diagrams`, { method: "POST", body: JSON.stringify(data) }),
+  createComponentInDiagram: (
+    diagramId: string,
+    data: Omit<ComponentInstance, "id" | "version"> & { position: { x: number; y: number } },
+    expectedDiagramVersion: number
+  ) => request<{ component: ComponentInstance; diagram: Diagram }>(`${BASE}/diagrams/${diagramId}/components`, {
+    method: "POST",
+    headers: { "If-Match": String(expectedDiagramVersion) },
+    body: JSON.stringify(data)
+  }),
   createDiagramConnection: (diagramId: string, data: Omit<ConnectionInstance, "id" | "version">) =>
     request<{ connection: ConnectionInstance; diagram: Diagram; created: boolean }>(`${BASE}/diagrams/${diagramId}/connections`, { method: "POST", body: JSON.stringify(data) }),
   updateDiagram: (id: string, data: Partial<Diagram>, expectedVersion: number) =>

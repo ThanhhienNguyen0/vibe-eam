@@ -9,6 +9,7 @@ import type {
   ConnectionType,
   Catalog,
   Diagram,
+  DiagramPosition,
   MetamodelDefinition,
   MetamodelImportResult,
   Metamodel,
@@ -1357,6 +1358,21 @@ export async function addComponent(comp: ComponentInstance): Promise<ComponentIn
   state.components.push(comp);
   await writeSidebarState(state);
   return comp;
+}
+
+export async function addComponentToDiagram(
+  comp: ComponentInstance,
+  diagramId: string,
+  position: DiagramPosition,
+  expectedDiagramVersion: number
+): Promise<{ component: ComponentInstance; diagram: Diagram }> {
+  return databaseSidebarRepository().createComponentInDiagram(
+    requireCompanyId(),
+    { ...comp, version: 1 },
+    diagramId,
+    position,
+    expectedDiagramVersion
+  );
 }
 
 export async function updateComponent(id: string, patch: Partial<ComponentInstance>, expectedVersion: number): Promise<ComponentInstance | null> {

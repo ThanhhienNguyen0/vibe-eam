@@ -1021,20 +1021,24 @@ function DiagramEditorInner({
       return;
     }
     try {
-      const comp = await runMutation(() => sidebarApi.createComponent({
-        name,
-        componentTypeId: typeId,
-        properties,
-        description: ""
-      }));
-      if (!comp) return;
-      onComponentCreated(comp);
-      const updated = await updateDiagramWithConflict(diagram, {
-        componentIds: [...diagram.componentIds, comp.id],
-        positions: { ...diagram.positions, [comp.id]: position }
-      });
-      if (!updated) return;
-      onDiagramChange(updated);
+      const result = await runMutation(() => runOptimisticMutation(
+        diagram.version ?? 1,
+        (version) => sidebarApi.createComponentInDiagram(diagram.id, {
+          name,
+          componentTypeId: typeId,
+          properties,
+          description: "",
+          position
+        }, version),
+        async () => {
+          const fresh = await sidebarApi.getAll();
+          const reloaded = fresh.diagrams.find((item) => item.id === diagram.id);
+          if (reloaded) onDiagramChange(reloaded);
+        }
+      ));
+      if (!result?.applied) return;
+      onComponentCreated(result.value.component);
+      onDiagramChange(result.value.diagram);
       setPendingCreate(null);
       setError("");
     } catch (err) {

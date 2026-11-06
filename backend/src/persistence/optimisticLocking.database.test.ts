@@ -5,8 +5,8 @@ import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
 import { createApp } from "../server.js";
 import { PrismaAuthRepository } from "../auth/prismaAuthRepository.js";
-import type { ComponentInstance, SidebarState } from "../Sidebar/sidebarTypes.js";
-import { PrismaSidebarStateRepository } from "./databaseSidebarRepository.js";
+import type { ComponentInstance, Diagram, SidebarState } from "../Sidebar/sidebarTypes.js";
+import { OptimisticLockError, PrismaSidebarStateRepository } from "./databaseSidebarRepository.js";
 import { serializeCsv } from "../importExport/tabular.js";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -19,11 +19,14 @@ const app = createApp({
   userRepository: authRepository
 });
 const password = "req26-local-test-only-password";
+let registrationSequence = 1;
 afterAll(async () => prisma.$disconnect());
 
 async function registerCompany() {
   const email = `${randomUUID()}@example.invalid`;
-  const response = await request(app).post("/api/auth/register").send({ email, password, companyName: `REQ26 ${email}` });
+  const response = await request(app).post("/api/auth/register")
+    .set("X-Forwarded-For", `198.51.100.${registrationSequence++}`)
+    .send({ email, password, companyName: `REQ26 ${email}` });
   expect(response.status).toBe(201);
   return { token: response.body.token as string, companyId: response.body.user.companyId as string };
 }
@@ -31,8 +34,17 @@ async function registerCompany() {
 const authorized = (token: string) => ({ Authorization: `Bearer ${token}` });
 const sidebar = async (token: string) => (await request(app).get("/api/sidebar").set(authorized(token))).body as SidebarState;
 
-async function processRace(companyId: string, component: ComponentInstance): Promise<string[]> {
-  const children = [0, 1].map(() => fork(new URL("./req26ProcessWorker.ts", import.meta.url), [], {
+interface WorkerRequest {
+  action?: "update-component" | "delete-component" | "update-diagram";
+  companyId: string;
+  component?: ComponentInstance;
+  diagram?: Diagram;
+  id?: string;
+  expectedVersion: number;
+}
+
+async function runWorkers(requests: WorkerRequest[]): Promise<string[]> {
+  const children = requests.map(() => fork(new URL("./req26ProcessWorker.ts", import.meta.url), [], {
     execArgv: ["--import", "tsx"],
     stdio: ["ignore", "ignore", "ignore", "ipc"]
   }));
@@ -45,14 +57,18 @@ async function processRace(companyId: string, component: ComponentInstance): Pro
     child.on("message", (message: { type?: string; status?: string; message?: string }) => {
       if (message.type === "result") resolve(message.status === "error" ? `error:${message.message}` : message.status ?? "error");
     });
-    child.send({
-      companyId,
-      component: { ...component, name: `Process ${index}` },
-      expectedVersion: component.version,
-      databaseUrl: url
-    });
+    child.send({ ...requests[index], databaseUrl: url });
   }));
   return Promise.all(results).finally(() => children.forEach((child: ChildProcess) => { if (child.connected) child.disconnect(); }));
+}
+
+async function processRace(companyId: string, component: ComponentInstance): Promise<string[]> {
+  return runWorkers([0, 1].map((index) => ({
+    action: "update-component" as const,
+    companyId,
+    component: { ...component, name: `Process ${index}` },
+    expectedVersion: component.version ?? 1
+  })));
 }
 
 describe.skipIf(!url)("REQ-26 optimistic locking against real PostgreSQL", () => {
@@ -83,6 +99,85 @@ describe.skipIf(!url)("REQ-26 optimistic locking against real PostgreSQL", () =>
     } finally {
       await Promise.all([repoA.disconnect(), repoB.disconnect()]);
     }
+  });
+
+  it("keeps a sidebar snapshot and its dataRevision consistent across a concurrent PATCH", async () => {
+    const company = await registerCompany();
+    const original = await sidebar(company.token);
+    const component = original.components[0];
+    let snapshotReady!: () => void;
+    let releaseRead!: () => void;
+    const snapshotEstablished = new Promise<void>((resolve) => { snapshotReady = resolve; });
+    const continueRead = new Promise<void>((resolve) => { releaseRead = resolve; });
+    const readClient = new PrismaClient({ datasourceUrl: url });
+    const writeClient = new PrismaClient({ datasourceUrl: url });
+    const reader = new PrismaSidebarStateRepository(readClient, async () => {
+      snapshotReady();
+      await continueRead;
+    });
+    const writer = new PrismaSidebarStateRepository(writeClient);
+    try {
+      const pendingRead = reader.read(company.companyId);
+      await snapshotEstablished;
+      const updated = await writer.updateComponent(company.companyId, { ...component, name: "Committed after snapshot" }, component.version ?? 1);
+      releaseRead();
+      const snapshot = await pendingRead;
+      expect(snapshot?.components.find((item) => item.id === component.id)?.name).toBe(component.name);
+      expect(snapshot?.dataRevision).toBe(original.dataRevision);
+      await expect(reader.write({ ...snapshot!, catalogs: snapshot!.catalogs ?? [] }, company.companyId)).rejects.toBeInstanceOf(OptimisticLockError);
+      expect((await prisma.componentInstance.findUniqueOrThrow({ where: { id: component.id } })).name).toBe(updated.name);
+    } finally {
+      releaseRead();
+      await Promise.all([reader.disconnect(), writer.disconnect()]);
+    }
+  });
+
+  it("keeps repeated sidebar reads free of normalization writes", async () => {
+    const company = await registerCompany();
+    const first = await sidebar(company.token);
+    const before = await prisma.company.findUniqueOrThrow({ where: { id: company.companyId }, select: { dataRevision: true } });
+    const second = await sidebar(company.token);
+    const after = await prisma.company.findUniqueOrThrow({ where: { id: company.companyId }, select: { dataRevision: true } });
+    expect(second).toEqual(first);
+    expect(after.dataRevision).toBe(before.dataRevision);
+  });
+
+  it("keeps unchanged object versions stable during whole-state creates", async () => {
+    const company = await registerCompany();
+    const before = await sidebar(company.token);
+    const response = await request(app).post("/api/sidebar/components").set(authorized(company.token)).send({
+      name: "Independent new component",
+      componentTypeId: before.componentTypes.find((item) => !item.isAbstract)!.id,
+      properties: {}
+    });
+    expect(response.status).toBe(201);
+    const after = await sidebar(company.token);
+    for (const item of before.components) expect(after.components.find((candidate) => candidate.id === item.id)?.version).toBe(item.version);
+    for (const item of before.connections) expect(after.connections.find((candidate) => candidate.id === item.id)?.version).toBe(item.version);
+    for (const item of before.diagrams) expect(after.diagrams.find((candidate) => candidate.id === item.id)?.version).toBe(item.version);
+  });
+
+  it("atomically resolves update/delete across independent backend processes", async () => {
+    const company = await registerCompany();
+    const component = (await sidebar(company.token)).components.at(-1)!;
+    const outcomes = await runWorkers([
+      {
+        action: "update-component",
+        companyId: company.companyId,
+        component: { ...component, name: "Concurrent update" },
+        expectedVersion: component.version ?? 1
+      },
+      {
+        action: "delete-component",
+        companyId: company.companyId,
+        id: component.id,
+        expectedVersion: component.version ?? 1
+      }
+    ]);
+    expect([
+      ["conflict", "updated"],
+      ["deleted", "not-found"]
+    ]).toContainEqual(outcomes.sort());
   });
 
   it("returns 428/400/409, supports explicit current-version overwrite, and conflicts again after another write", async () => {
@@ -130,6 +225,50 @@ describe.skipIf(!url)("REQ-26 optimistic locking against real PostgreSQL", () =>
     expect((await request(app).patch(`/api/sidebar/components/${foreign.id}`).set(authorized(firstCompany.token)).set("If-Match", String(foreign.version)).send({ name: "cross tenant" })).status).toBe(404);
   });
 
+  it("creates and places a component atomically and leaves no component on a diagram conflict", async () => {
+    const company = await registerCompany();
+    const state = await sidebar(company.token);
+    const diagram = state.diagrams[0];
+    const type = state.componentTypes.find((item) => !item.isAbstract)!;
+    const changed = await request(app).patch(`/api/sidebar/diagrams/${diagram.id}`).set(authorized(company.token))
+      .set("If-Match", String(diagram.version)).send({ description: "concurrent diagram change" });
+    expect(changed.status).toBe(200);
+    const beforeCount = await prisma.componentInstance.count({ where: { companyId: company.companyId } });
+    const conflict = await request(app).post(`/api/sidebar/diagrams/${diagram.id}/components`).set(authorized(company.token))
+      .set("If-Match", String(diagram.version)).send({ name: "Must roll back", componentTypeId: type.id, properties: {}, position: { x: 20, y: 30 } });
+    expect(conflict.status).toBe(409);
+    expect(await prisma.componentInstance.count({ where: { companyId: company.companyId } })).toBe(beforeCount);
+    expect(await prisma.componentInstance.count({ where: { companyId: company.companyId, name: "Must roll back" } })).toBe(0);
+
+    const created = await request(app).post(`/api/sidebar/diagrams/${diagram.id}/components`).set(authorized(company.token))
+      .set("If-Match", String(changed.body.version)).send({ name: "Placed atomically", componentTypeId: type.id, properties: {}, position: { x: 40, y: 50 } });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    expect(created.body.diagram.componentIds).toContain(created.body.component.id);
+    expect(created.body.diagram.positions[created.body.component.id]).toEqual({ x: 40, y: 50 });
+  });
+
+  it("protects competing diagram membership writes across backend processes", async () => {
+    const company = await registerCompany();
+    const state = await sidebar(company.token);
+    const diagram = state.diagrams[0];
+    const candidates = state.components.filter((item) => !diagram.componentIds.includes(item.id)).slice(0, 2);
+    expect(candidates).toHaveLength(2);
+    const outcomes = await runWorkers(candidates.map((component, index) => ({
+      action: "update-diagram" as const,
+      companyId: company.companyId,
+      expectedVersion: diagram.version ?? 1,
+      diagram: {
+        ...diagram,
+        componentIds: [...diagram.componentIds, component.id],
+        positions: { ...diagram.positions, [component.id]: { x: 100 + index, y: 200 + index } }
+      }
+    })));
+    expect(outcomes.sort()).toEqual(["conflict", "updated"]);
+    const stored = await sidebar(company.token);
+    const saved = stored.diagrams.find((item) => item.id === diagram.id)!;
+    expect(candidates.filter((item) => saved.componentIds.includes(item.id))).toHaveLength(1);
+  });
+
   it("binds CSV preview/commit to dataRevision and leaves data and audit unchanged on 409", async () => {
     const company = await registerCompany();
     const state = await sidebar(company.token);
@@ -170,5 +309,15 @@ describe.skipIf(!url)("REQ-26 optimistic locking against real PostgreSQL", () =>
     expect((await request(app).patch(path).set(authorized(company.token)).set("If-Match", String(element.version)).send({ name: "stale" })).status).toBe(409);
     const staleImport = await request(app).post("/api/model/import").set(authorized(company.token)).set("If-Match", model.headers.etag).send(model.body);
     expect(staleImport.status).toBe(409);
+
+    const current = await request(app).get("/api/model/export").set(authorized(company.token));
+    const revision = Number(String(current.headers.etag).replaceAll('"', ""));
+    expect(revision).toBe((await prisma.architectureModel.findUniqueOrThrow({ where: { companyId: company.companyId } })).revision);
+    const imported = await request(app).post("/api/model/import").set(authorized(company.token)).set("If-Match", current.headers.etag).send(current.body);
+    expect(imported.status).toBe(200);
+    const importedElement = imported.body.elements.find((item: { id: string }) => item.id === element.id);
+    expect(importedElement.version).toBeGreaterThan(updated.body.version);
+    expect((await request(app).patch(path).set(authorized(company.token)).set("If-Match", String(element.version)).send({ name: "ABA stale" })).status).toBe(409);
+    expect((await request(app).patch(path).set(authorized(company.token)).set("If-Match", String(updated.body.version)).send({ name: "ABA stale 2" })).status).toBe(409);
   });
 });

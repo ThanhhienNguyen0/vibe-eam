@@ -21,6 +21,14 @@ Belegt sind lokale statische Prüfungen, Unit-/Frontendtests, echte PostgreSQL-M
 
 Diese Entwicklerinstanz erteilt keine unabhängige Freigabe. Der unveränderte lokale Commit muss anschließend in einem getrennten, read-only Kontrollkontext gegen Issue #58, Abschlussdokumentation, Claim-Evidence-Matrix und tatsächliche Testausgaben geprüft werden. Erst danach dürfen mit gesonderter Autorisierung Push und PR-Fortschreibung erfolgen. REQ-23 bleibt unberührt.
 
+### Unabhängige Ablehnung von `7c1079e6` und Korrektur
+
+Die getrennte Kontrolle fand drei P1-Bereiche: Unter PostgreSQL `READ COMMITTED` konnten Sidebar-Nutzdaten und Company-Revision aus verschiedenen Snapshots stammen; Whole-State-Writes erhöhten pauschal alle Objektversionen und der zweistufige Create-and-Place-Ablauf konnte eine unplatzierte Komponente hinterlassen; die Legacy-API las Body und ETag getrennt und setzte Importversionen auf 1 zurück. Zwei P2-Bereiche betrafen den nach „Neu laden“ weiter sichtbaren lokalen Draft sowie Testclaims ohne passende Konkurrenzfälle. Der Head wurde nicht freigegeben.
+
+Die Korrektur verwendet `RepeatableRead`, vergleicht bestehende Objektinhalte vor Versionssteigerung, führt Create-and-Place in einer DB-Transaktion aus, liest Legacy-Body und Revision aus derselben Zeile und verwendet die nächste Aggregatrevision als Importversion. Editorinstanzen sind an ID und Revision gebunden. Ein React-Test-Renderer wurde ausschließlich als Testabhängigkeit ergänzt, um Draft-Erhalt, echtes Reload, erfolgreichen Folgesave und wiederholte Überschreibkonflikte am zustandsbehafteten Editor zu prüfen.
+
+Der erste korrigierte DB-Lauf fand keine Produktregression, sondern zwei Test-/Policyfehler: Der neue Endpunkt war durch das deny-by-default Routeninventar erwartungsgemäß 403 und wurde explizit als `architecture:write` klassifiziert; zwölf Testregistrierungen trafen das absichtlich strikte Registerlimit, weshalb jede isolierte Testcompany eine eigene dokumentierte Test-IP verwendet. Danach bestand der frische Lauf. Ein fokussierter HTTP-Testaufruf scheiterte im eingeschränkten Kontext ausschließlich an `connect EACCES 127.0.0.1`; das vollständige erlaubte Gate bestand anschließend einschließlich aller 169 Backendtests.
+
 ## REQ-24 – technische Umsetzung, unabhängige Kontrolle und PR-Fortschreibung (20.10.2026)
 
 Geltung: Implementierungsprotokoll; die ursprüngliche lokale Umsetzung ist unabhängig bestätigt. Maßgebliche Belege sind `REQ-24_IMPLEMENTATION_EVIDENCE.md` und `REQ-24_REVIEW.md`; Draft-PR #88 und sein erster Remote-Lauf existieren. Die beiden dort zusätzlich erkannten CodeQL-Befunde sind lokal korrigiert; der erneute Remote-Lauf des Korrekturcommits, Containerausführung, Deployment und menschliche Freigabe werden separat belegt. Frühere Abschnitte bleiben historische Entwicklungsstände.

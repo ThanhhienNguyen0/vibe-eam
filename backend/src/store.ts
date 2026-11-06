@@ -47,27 +47,35 @@ async function mutateState<T>(
   }, { timeout: 30_000 });
 }
 
-export async function readState(): Promise<PersistedState> {
+async function readStateSnapshot(): Promise<{ state: PersistedState; revision: number }> {
   const companyId = requireCompanyId();
-  const persisted = await prisma.architectureModel.findUnique({ where: { companyId } });
-  if (persisted) {
-    return withVersions({
+  let persisted = await prisma.architectureModel.findUnique({ where: { companyId } });
+  if (!persisted) {
+    await mutateState(() => undefined);
+    persisted = await prisma.architectureModel.findUniqueOrThrow({ where: { companyId } });
+  }
+  return {
+    state: withVersions({
       elements: persisted.elements as unknown as EamElement[],
       relations: persisted.relations as unknown as EamRelation[],
       auditLog: persisted.auditLog as unknown as AuditLogEntry[]
-    });
-  }
-  return (await mutateState(() => undefined)).state;
+    }),
+    revision: persisted.revision
+  };
+}
+
+export async function readState(): Promise<PersistedState> {
+  return (await readStateSnapshot()).state;
 }
 
 export async function getModel(): Promise<EamModel> {
-  const state = await readState();
+  const { state } = await readStateSnapshot();
   return { elements: state.elements, relations: state.relations };
 }
 
-export async function getModelRevision(): Promise<number> {
-  const companyId = requireCompanyId();
-  return (await prisma.architectureModel.findUnique({ where: { companyId }, select: { revision: true } }))?.revision ?? 0;
+export async function getModelSnapshot(): Promise<{ model: EamModel; revision: number }> {
+  const { state, revision } = await readStateSnapshot();
+  return { model: { elements: state.elements, relations: state.relations }, revision };
 }
 
 function appendAuditLog(state: PersistedState, action: AuditLogEntry["action"], entityId: string, description: string): void {
@@ -127,8 +135,9 @@ export async function deleteRelation(id: string, expectedVersion: number): Promi
 export async function importModel(model: EamModel, expectedRevision: number): Promise<PersistedState> {
   return (await mutateState((state, revision) => {
     if (revision !== expectedRevision) throw new OptimisticLockError({ revision });
-    state.elements = model.elements.map((item) => ({ ...item, version: 1 }));
-    state.relations = model.relations.map((item) => ({ ...item, version: 1 }));
+    const importedVersion = revision + 1;
+    state.elements = model.elements.map((item) => ({ ...item, version: importedVersion }));
+    state.relations = model.relations.map((item) => ({ ...item, version: importedVersion }));
     appendAuditLog(state, "import", "model", `Imported model with ${state.elements.length} elements and ${state.relations.length} relations.`);
   })).state;
 }

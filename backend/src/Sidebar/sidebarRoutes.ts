@@ -5,6 +5,7 @@ import { validateConnectionInstance, validateDiagram } from "./metamodelRules.js
 import { OptimisticLockError, ResourceNotFoundError } from "../persistence/databaseSidebarRepository.js";
 import {
   addComponent,
+  addComponentToDiagram,
   addComponentType,
   addConnection,
   addConnectionToDiagram,
@@ -642,6 +643,49 @@ router.post("/diagrams", async (req, res, next) => {
       viewpointId
     });
     res.status(201).json(diagram);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/diagrams/:id/components", async (req, res, next) => {
+  try {
+    const version = expectedVersion(req.header("if-match"));
+    const { name, componentTypeId, properties, description, externalId, position } = req.body as {
+      name?: string;
+      componentTypeId?: string;
+      properties?: Record<string, string>;
+      description?: string;
+      externalId?: unknown;
+      position?: { x?: unknown; y?: unknown };
+    };
+    if (!name?.trim()) return res.status(400).json({ error: "name is required." });
+    if (!componentTypeId) return res.status(400).json({ error: "componentTypeId is required." });
+    if (!position || typeof position.x !== "number" || !Number.isFinite(position.x)
+      || typeof position.y !== "number" || !Number.isFinite(position.y)) {
+      return res.status(400).json({ error: "position with finite x and y is required." });
+    }
+    const state = await readSidebarState();
+    const diagram = state.diagrams.find((item) => item.id === req.params.id);
+    if (!diagram) return res.status(404).json({ error: "Diagram not found." });
+    if (!state.componentTypes.some((item) => item.id === componentTypeId)) {
+      return res.status(400).json({ error: "componentTypeId is not part of the active metamodel." });
+    }
+    const external = parseExternalId(externalId);
+    if (external.error) return res.status(400).json({ error: external.error });
+    if (external.value && state.components.some((item) => item.externalId === external.value)) {
+      return res.status(409).json({ error: "Diese Externe ID wird bereits von einer anderen Komponente verwendet." });
+    }
+    const result = await addComponentToDiagram({
+      id: crypto.randomUUID(),
+      version: 1,
+      name: name.trim(),
+      componentTypeId,
+      properties: properties ?? {},
+      description: description ?? "",
+      ...(external.value ? { externalId: external.value } : {})
+    }, diagram.id, { x: position.x, y: position.y }, version);
+    res.status(201).json(result);
   } catch (err) {
     next(err);
   }
