@@ -34,6 +34,24 @@ async function registerCompany() {
 const authorized = (token: string) => ({ Authorization: `Bearer ${token}` });
 const sidebar = async (token: string) => (await request(app).get("/api/sidebar").set(authorized(token))).body as SidebarState;
 
+function clientUrl(name: string): string {
+  const parsed = new URL(url!);
+  parsed.searchParams.set("connection_limit", "1");
+  parsed.searchParams.set("application_name", name);
+  return parsed.toString();
+}
+
+async function waitForDatabaseLock(pid: number): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const rows = await prisma.$queryRaw<Array<{ wait_event_type: string | null }>>`
+      SELECT wait_event_type FROM pg_stat_activity WHERE pid = ${pid}
+    `;
+    if (rows[0]?.wait_event_type === "Lock") return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Process ${pid} did not reach the database lock barrier.`);
+}
+
 interface WorkerRequest {
   action?: "update-component" | "delete-component" | "update-diagram";
   companyId: string;
@@ -142,6 +160,61 @@ describe.skipIf(!url)("REQ-26 optimistic locking against real PostgreSQL", () =>
     expect(after.dataRevision).toBe(before.dataRevision);
   });
 
+  it.each(["PATCH", "DELETE", "CREATE_AND_PLACE"] as const)(
+    "serializes a whole-state write before %s without P2034 or partial dataRevision",
+    async (operation) => {
+      const company = await registerCompany();
+      const original = await sidebar(company.token);
+      const writerClient = new PrismaClient({ datasourceUrl: clientUrl(`req26-writer-${operation}`) });
+      const contenderClient = new PrismaClient({ datasourceUrl: clientUrl(`req26-contender-${operation}`) });
+      let companyLocked!: () => void;
+      let releaseWriter!: () => void;
+      const lockReached = new Promise<void>((resolve) => { companyLocked = resolve; });
+      const continueWriter = new Promise<void>((resolve) => { releaseWriter = resolve; });
+      const writer = new PrismaSidebarStateRepository(writerClient, undefined, async () => {
+        companyLocked();
+        await continueWriter;
+      });
+      const contender = new PrismaSidebarStateRepository(contenderClient);
+      const [{ pid }] = await contenderClient.$queryRaw<Array<{ pid: number }>>`SELECT pg_backend_pid() AS pid`;
+      const next = structuredClone(original);
+      if (operation === "CREATE_AND_PLACE") next.diagrams[0].description = "whole-state diagram update";
+      else next.components[0].name = "whole-state component update";
+      const beforeComponentCount = await prisma.componentInstance.count({ where: { companyId: company.companyId } });
+      try {
+        const write = writer.write(next, company.companyId);
+        await lockReached;
+        const competing = (operation === "PATCH"
+          ? contender.updateComponent(company.companyId, { ...original.components[0], name: "competing patch" }, original.components[0].version ?? 1)
+          : operation === "DELETE"
+            ? contender.deleteComponent(company.companyId, original.components[0].id, original.components[0].version ?? 1)
+            : contender.createComponentInDiagram(
+              company.companyId,
+              {
+                id: randomUUID(), version: 1, name: "competing create", description: "",
+                componentTypeId: original.componentTypes.find((item) => !item.isAbstract)!.id, properties: {}
+              },
+              original.diagrams[0].id,
+              { x: 10, y: 20 },
+              original.diagrams[0].version ?? 1
+            )).then(
+          (value) => ({ value, error: undefined }),
+          (error: unknown) => ({ value: undefined, error })
+        );
+        await waitForDatabaseLock(pid);
+        releaseWriter();
+        await expect(write).resolves.toBeDefined();
+        expect((await competing).error).toBeInstanceOf(OptimisticLockError);
+        const companyRow = await prisma.company.findUniqueOrThrow({ where: { id: company.companyId } });
+        expect(companyRow.dataRevision).toBe((original.dataRevision ?? 0) + 1);
+        expect(await prisma.componentInstance.count({ where: { companyId: company.companyId } })).toBe(beforeComponentCount);
+      } finally {
+        releaseWriter();
+        await Promise.all([writer.disconnect(), contender.disconnect()]);
+      }
+    }
+  );
+
   it("keeps unchanged object versions stable during whole-state creates", async () => {
     const company = await registerCompany();
     const before = await sidebar(company.token);
@@ -223,6 +296,112 @@ describe.skipIf(!url)("REQ-26 optimistic locking against real PostgreSQL", () =>
 
     const foreign = second.components[0];
     expect((await request(app).patch(`/api/sidebar/components/${foreign.id}`).set(authorized(firstCompany.token)).set("If-Match", String(foreign.version)).send({ name: "cross tenant" })).status).toBe(404);
+  });
+
+  it("versions affected diagrams on component and connection cascades and rolls stale deletes back", async () => {
+    const company = await registerCompany();
+    const initial = await sidebar(company.token);
+    const componentDiagram = initial.diagrams.find((item) => item.componentIds.length > 0)!;
+    const component = initial.components.find((item) => item.id === componentDiagram.componentIds[0])!;
+    const auditBefore = await prisma.auditLogEntry.count({ where: { companyId: company.companyId } });
+    const deleted = await request(app).delete(`/api/sidebar/components/${component.id}`).set(authorized(company.token))
+      .set("If-Match", String(component.version));
+    expect(deleted.status).toBe(204);
+    const afterComponentDelete = await sidebar(company.token);
+    const changedDiagram = afterComponentDelete.diagrams.find((item) => item.id === componentDiagram.id)!;
+    expect(changedDiagram.version).toBe((componentDiagram.version ?? 1) + 1);
+    expect(changedDiagram.componentIds).not.toContain(component.id);
+    expect((await request(app).patch(`/api/sidebar/diagrams/${componentDiagram.id}`).set(authorized(company.token))
+      .set("If-Match", String(componentDiagram.version)).send({ name: "stale after cascade" })).status).toBe(409);
+    expect(await prisma.auditLogEntry.count({ where: { companyId: company.companyId } })).toBe(auditBefore);
+
+    const connectionDiagram = afterComponentDelete.diagrams.find((item) => item.connectionIds.length > 0)!;
+    const connection = afterComponentDelete.connections.find((item) => item.id === connectionDiagram.connectionIds[0])!;
+    expect((await request(app).delete(`/api/sidebar/connections/${connection.id}`).set(authorized(company.token))
+      .set("If-Match", String(connection.version))).status).toBe(204);
+    const afterConnectionDelete = await sidebar(company.token);
+    const connectionChangedDiagram = afterConnectionDelete.diagrams.find((item) => item.id === connectionDiagram.id)!;
+    expect(connectionChangedDiagram.version).toBe((connectionDiagram.version ?? 1) + 1);
+    expect(connectionChangedDiagram.connectionIds).not.toContain(connection.id);
+
+    const rollbackComponent = afterConnectionDelete.components[0];
+    const rollbackDiagram = afterConnectionDelete.diagrams.find((item) => item.componentIds.includes(rollbackComponent.id))!;
+    const updated = await request(app).patch(`/api/sidebar/components/${rollbackComponent.id}`).set(authorized(company.token))
+      .set("If-Match", String(rollbackComponent.version)).send({ name: "advance before stale delete" });
+    expect(updated.status).toBe(200);
+    const beforeStaleDelete = await sidebar(company.token);
+    const revisionBefore = beforeStaleDelete.dataRevision;
+    const diagramVersionBefore = beforeStaleDelete.diagrams.find((item) => item.id === rollbackDiagram.id)!.version;
+    const staleDelete = await request(app).delete(`/api/sidebar/components/${rollbackComponent.id}`).set(authorized(company.token))
+      .set("If-Match", String(rollbackComponent.version));
+    expect(staleDelete.status).toBe(409);
+    const afterStaleDelete = await sidebar(company.token);
+    expect(afterStaleDelete.dataRevision).toBe(revisionBefore);
+    expect(afterStaleDelete.diagrams.find((item) => item.id === rollbackDiagram.id)!.version).toBe(diagramVersionBefore);
+    expect(await prisma.auditLogEntry.count({ where: { companyId: company.companyId } })).toBe(auditBefore);
+  });
+
+  it("serializes a component cascade against a diagram update across backend processes", async () => {
+    const company = await registerCompany();
+    const state = await sidebar(company.token);
+    const diagram = state.diagrams.find((item) => item.componentIds.length > 0)!;
+    const component = state.components.find((item) => item.id === diagram.componentIds[0])!;
+    const auditBefore = await prisma.auditLogEntry.count({ where: { companyId: company.companyId } });
+    const outcomes = await runWorkers([
+      {
+        action: "delete-component",
+        companyId: company.companyId,
+        id: component.id,
+        expectedVersion: component.version ?? 1
+      },
+      {
+        action: "update-diagram",
+        companyId: company.companyId,
+        expectedVersion: diagram.version ?? 1,
+        diagram: { ...diagram, description: "parallel diagram update" }
+      }
+    ]);
+    expect([
+      ["conflict", "deleted"],
+      ["deleted", "updated"]
+    ]).toContainEqual(outcomes.sort());
+    expect(outcomes.some((value) => value.startsWith("error:"))).toBe(false);
+    const stored = await sidebar(company.token);
+    const storedDiagram = stored.diagrams.find((item) => item.id === diagram.id)!;
+    expect(storedDiagram.componentIds).not.toContain(component.id);
+    expect(storedDiagram.version).toBeGreaterThan(diagram.version ?? 1);
+    expect(await prisma.auditLogEntry.count({ where: { companyId: company.companyId } })).toBe(auditBefore);
+  });
+
+  it("returns the stored diagram version after adding a connection and accepts it immediately", async () => {
+    const company = await registerCompany();
+    const state = await sidebar(company.token);
+    const connection = state.connections[0];
+    const createdDiagram = await request(app).post("/api/sidebar/diagrams").set(authorized(company.token))
+      .send({ name: "Connection response test" });
+    expect(createdDiagram.status).toBe(201);
+    const componentIds = [connection.sourceComponentId, connection.targetComponentId];
+    const populated = await request(app).patch(`/api/sidebar/diagrams/${createdDiagram.body.id}`).set(authorized(company.token))
+      .set("If-Match", String(createdDiagram.body.version)).send({
+        componentIds,
+        positions: Object.fromEntries(componentIds.map((id, index) => [id, { x: index * 100, y: 0 }]))
+      });
+    expect(populated.status).toBe(200);
+    const response = await request(app).post(`/api/sidebar/diagrams/${createdDiagram.body.id}/connections`).set(authorized(company.token)).send({
+      connectionTypeId: connection.connectionTypeId,
+      sourceComponentId: connection.sourceComponentId,
+      targetComponentId: connection.targetComponentId,
+      name: connection.name,
+      description: connection.description,
+      properties: connection.properties
+    });
+    expect(response.status, JSON.stringify(response.body)).toBe(200);
+    const aggregate = await request(app).get(`/api/sidebar/diagrams/${createdDiagram.body.id}`).set(authorized(company.token));
+    expect(aggregate.status).toBe(200);
+    expect(response.body.diagram.version).toBe(aggregate.body.diagram.version);
+    const immediatePatch = await request(app).patch(`/api/sidebar/diagrams/${createdDiagram.body.id}`).set(authorized(company.token))
+      .set("If-Match", String(response.body.diagram.version)).send({ description: "immediate patch" });
+    expect(immediatePatch.status).toBe(200);
   });
 
   it("creates and places a component atomically and leaves no component on a diagram conflict", async () => {

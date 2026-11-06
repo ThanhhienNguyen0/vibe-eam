@@ -1409,10 +1409,10 @@ export async function addConnectionToDiagram(
 ): Promise<{ connection: ConnectionInstance; diagram: Diagram }> {
   const state = await readSidebarState();
   const next = addConnectionToDiagramState(state, conn, diagramId);
-  await writeSidebarState(next);
+  const stored = await writeSidebarState(next);
   return {
-    connection: conn,
-    diagram: next.diagrams.find((diagram) => diagram.id === diagramId)!
+    connection: stored.connections.find((connection) => connection.id === conn.id)!,
+    diagram: stored.diagrams.find((diagram) => diagram.id === diagramId)!
   };
 }
 

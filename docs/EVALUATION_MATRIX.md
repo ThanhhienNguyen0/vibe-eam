@@ -3,22 +3,23 @@
 ## REQ-26 – lokaler Entwicklerstand, 06.11.2026
 
 „Erfüllt (lokal)“ bezeichnet reproduzierte lokale Evidenz, keine unabhängige oder menschliche Freigabe.
-Der erste Head `7c1079e6…` wurde unabhängig mit drei P1- und zwei P2-Bereichen abgelehnt;
-die Matrix beschreibt den danach korrigierten, noch erneut zu kontrollierenden Entwicklerstand.
+Der erste Head `7c1079e6748adacee1dfed8f87220e03d0c78b92` wurde unabhängig mit drei P1- und zwei P2-Bereichen abgelehnt. Auch der erste Korrekturhead `6cfaec668507865d0b37f835565de7400beab015` wurde wegen zwei P1-, einem P2- und einem P3-Befund abgelehnt. Die Matrix beschreibt die zweite lokale Korrektur, die erneut unabhängig zu kontrollieren ist.
 
 | Kriterium | Lokale Evidenz | Status / Grenze |
 |---|---|---|
 | Objektversionen und Datenrevision | Prisma-Schema, Migration, API-/DB-Assertions | Erfüllt (lokal) |
 | Stale PATCH/DELETE und Fehlertrennung | 428/400/404/409-Vertragstests für aktive Objektpfade | Erfüllt (lokal) |
 | Atomare Mehrprozesskonkurrenz | getrennte Node-Prozesse/Prisma-Clients mit IPC-Barriere für Update/Update, Update/Delete und Diagrammmitgliedschaften; getrennte Clients für verschiedene Objekte | Erfüllt (lokal) |
-| Relationen, Diagramme, Kaskaden und Tenantgrenzen | echte isolierte PostgreSQL-Tests | Erfüllt (lokal) |
+| Lockreihenfolge / Deadlockgrenze | Company→Objekt in allen Sidebar-Writes; drei deterministische echte PostgreSQL-Lockbarrieren für Whole-State gegen PATCH, DELETE und Create-and-Place; `P2034` wird Konflikt | 31/31 isolierte DB-Tests; neue unabhängige Kontrolle offen |
+| Relationen, Diagramme, Kaskaden und Tenantgrenzen | echte isolierte PostgreSQL-Tests; Komponenten-/Relationslöschung erhöht betroffene Diagrammversion in derselben Transaktion; stale Diagramm-PATCH 409; Rollback und Audit geprüft | Erfüllt (lokal); keine allgemeine Deadlockfreiheit behauptet |
+| Create-and-Place-Antwortversion | Antwort aus gespeichertem Zustand entspricht unmittelbarem GET; direktes Folge-PATCH mit der Antwortversion erfolgreich | Erfüllt (lokal) |
 | UI-Entwurf, Neu laden und bewusstes Überschreiben | zustandsbehaftete React-Editorintegration einschließlich Reload, Folgesave und wiederholtem Zwischenwrite | Erfüllt (lokal); kein Browser-E2E |
 | CSV/XLSX- und REQ-33-Import | Vorschau-/Commit-Revision, JSON-ETag, Rollback ohne Audit/Teiländerung | Erfüllt (lokal) |
 | Historische `/api/model`-API | DB-Zeilensperre, gemeinsamer Body-/ETag-Snapshot und monotone Importversion gegen ABA | Erfüllt (lokal) |
 | Migration und Betriebsprobe | sieben Migrationen, pg_dump/pg_restore, Rollback-SQL und Schemaabsence | Erfüllt in Wegwerfdatenbanken |
 | Gesamt-/Security-Gates | `npm run check`; 10 moderate/0 high/0 critical; Secret-Scan mit Canary | Erfüllt nach lokaler Gate-Regel; moderate Befunde bleiben reviewpflichtig |
 | Compose und Container | drei reale `docker compose config --quiet`-Läufe | Konfiguration erfüllt; Image-Build wegen fehlender Docker-Linux-Engine offen |
-| Unabhängige/Remote-Abnahme | noch nicht durchgeführt | Offen: getrennter Review, Remote-CI/CodeQL, Push/PR, menschliche Freigabe |
+| Unabhängige/Remote-Abnahme | zwei Entwicklerstände unabhängig abgelehnt; zweite Korrektur noch ungeprüft | Offen: erneuter getrennter Review, Remote-CI/CodeQL, Push/PR, menschliche Freigabe |
 
 ## REQ-33 – lokaler Nacharbeitsstand, 05.11.2026
 

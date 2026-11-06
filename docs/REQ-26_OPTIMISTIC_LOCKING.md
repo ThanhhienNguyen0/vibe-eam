@@ -55,6 +55,12 @@ REQ-33-Commit `dd14b162ef611ccd7706e540416b1a5edf174f7e` gestapelt. Dessen `main
    demselben DB-Snapshot. Whole-State-Writes erhöhen nur tatsächlich geänderte Objektversionen.
 9. Create-and-Place ist eine Transaktion. Legacy-Body und -ETag stammen aus einer DB-Zeile;
    Legacy-Importe verwenden eine monotone Aggregatrevision statt eines Versionsresets.
+10. Jeder Sidebar-Schreibpfad sperrt zuerst die Company-Zeile und erst danach Objekt- oder
+    Diagrammzeilen. PostgreSQL-`P2034` wird als Optimistic-Locking-Konflikt behandelt.
+11. Komponenten- und Relationslöschungen erhöhen die Version jedes durch Kaskaden veränderten
+    Diagramms in derselben Transaktion genau einmal. Stale Diagramm-PATCHes bleiben 409-fähig.
+12. Create-and-Place-Antworten werden aus dem gespeicherten Zustand gebildet; ihre
+    Diagrammversion ist unmittelbar für das nächste `If-Match` verwendbar.
 
 ## Abnahmematrix
 
@@ -78,13 +84,19 @@ REQ-33-Commit `dd14b162ef611ccd7706e540416b1a5edf174f7e` gestapelt. Dessen `main
 | RBAC und Viewpoint-Read-only bleiben erhalten | bestehende und gezielte Regressionstests | lokal erfüllt |
 | REQ-33-Round-Trip bleibt identisch | bestehende Unit- und DB-Round-Trip-Tests | lokal erfüllt |
 | Migration, Backup/Restore und Rollback real geprüft | isolierte PostgreSQL-Kommandos mit Ergebnissen | lokal erfüllt |
+| Einheitliche Company→Objekt-Sperrreihenfolge | drei echte Lockbarrieren gegen PATCH, DELETE und Create-and-Place | lokal erfüllt |
+| Kaskaden invalidieren Diagrammversionen | Komponenten-/Relationslöschung, stale 409, Rollback und Auditassertionen | lokal erfüllt |
+| Create-and-Place liefert gespeicherte Version | Antwort = unmittelbarer GET; direktes PATCH mit Antwortversion | lokal erfüllt |
 
 Der lokale Status ist keine unabhängige Abnahme. Container-Image-Build, Remote-CI/CodeQL,
 getrennte KI-Kontrolle, menschliches Review, Push/PR, Merge und Deployment sind offen.
 
 Kontrollhistorie: `7c1079e6748adacee1dfed8f87220e03d0c78b92` wurde mit drei P1- und zwei
-P2-Bereichen abgelehnt. Die danach ergänzten Korrekturen und Regressionen benötigen eine neue
-Kontrolle des vollständigen Folgecommits.
+P2-Bereichen abgelehnt. Der unabhängig geprüfte erste Korrekturcommit
+`6cfaec668507865d0b37f835565de7400beab015` wurde wegen zwei P1-, einem P2- und einem
+P3-Befund ebenfalls abgelehnt. Die danach ergänzte einheitliche Sperrreihenfolge,
+Kaskadenversionierung, gespeicherte Antwortversion und zugehörigen Regressionen benötigen eine
+neue Kontrolle des vollständigen Folgecommits. Der isolierte DB-Lauf umfasst nun 31 von 31 Tests.
 
 ## Abgrenzung
 
