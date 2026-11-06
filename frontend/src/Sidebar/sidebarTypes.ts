@@ -130,6 +130,7 @@ export interface ValidationRule {
 
 export interface ComponentInstance {
   id: string;
+  version?: number;
   /** Optional identifier from a source system (REQ-35); unique per company. */
   externalId?: string;
   name: string;
@@ -140,6 +141,7 @@ export interface ComponentInstance {
 
 export interface ConnectionInstance {
   id: string;
+  version?: number;
   /** Optional identifier from a source system (REQ-35); unique per company. */
   externalId?: string;
   name: string;
@@ -161,6 +163,7 @@ export interface DiagramPosition {
 
 export interface Diagram {
   id: string;
+  version?: number;
   name: string;
   description: string;
   componentIds: string[];
@@ -245,6 +248,7 @@ export interface MetamodelImportResult {
 }
 
 export interface SidebarState {
+  dataRevision?: number;
   metamodel: Metamodel;
   componentTypes: ComponentType[];
   connectionTypes: ConnectionType[];

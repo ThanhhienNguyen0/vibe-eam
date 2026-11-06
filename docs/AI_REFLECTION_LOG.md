@@ -1,5 +1,26 @@
 # AI Reflection Log
 
+## REQ-26 – Optimistic Locking und Datenbasisrevision (05.–06.11.2026)
+
+### KI-Beitrag und Architekturentscheidungen
+
+KI-gestützt entstanden Migration, Persistenzvertrag, API-Vorbedingungen, Konfliktoberfläche, Mehrprozess-DB-Tests und Nachweisdokumentation. Objektversionen und globale Datenrevision wurden bewusst getrennt: Einzelobjektänderungen dürfen unabhängige Objekte nicht über veraltete Whole-State-Snapshots zurücksetzen; vollständige Importe benötigen dagegen eine atomare Vorbedingung für den gesamten Unternehmensstand. Ein „Bewusst überschreiben“ umgeht die Sperre nicht, sondern wiederholt die Mutation mit der zuletzt vom Server gemeldeten aktuellen Version.
+
+Prozesslokale Caches oder JavaScript-Mutexe wurden als Konkurrenzschutz verworfen, weil mehrere Backendprozesse damit weiterhin verschiedene Wahrheiten besitzen. Komponenten-, Relationen- und Diagrammoperationen arbeiten direkt mit DB-Prädikaten aus Tenant, ID und Version. Der bestehende Whole-State-Writer beansprucht die Company-Revision in derselben Transaktion. Die historische JSONB-Modell-API verwendet eine PostgreSQL-Zeilensperre. Portable REQ-33-Dateien enthalten keine Laufzeitversionen; `schemaVersion`, Metamodellversion und Locking-Version bleiben unterschiedliche Begriffe.
+
+### Tatsächliche Fehlversuche und Korrekturen
+
+- Die neue Arbeitskopie benötigte zunächst ihre gelockten Abhängigkeiten und einen erzeugten Prisma-Client. Ein eingeschränkter Downloadversuch scheiterte an der Ausführungsumgebung; derselbe reproduzierbare Installations-/Generierungsschritt wurde im erlaubten Kontext wiederholt.
+- Der erste reale PostgreSQL-Lauf deckte zwei Produktfehler auf: Read-Normalisierung schrieb Zustände zurück und konnte dadurch neuere Daten überschreiben; außerdem bildete der Legacy-GET seinen ETag vor einer möglichen Erstinitialisierung. Read-Pfade wurden schreibfrei gemacht und der ETag wird erst nach der Initialisierung gelesen. Der folgende frische Gesamtlauf bestand.
+- Ein zunächst gefundener `docker`-Pfadeintrag war eine unbrauchbare Nullbyte-Datei. Die echte Docker-Desktop-CLI validierte alle drei Compose-Konfigurationen. Die Linux-Engine-Pipe startete nicht; Image-Builds wurden daher nicht ausgeführt und nicht als erfolgreich dokumentiert.
+- Parallelitätstests verwenden getrennte Node-Prozesse, eigene Prisma-Clients und eine IPC-Barriere statt Schlafzeiten. Damit wird keine bloß innerhalb eines Prozesses simulierte Konkurrenz als Mehrprozessbeleg ausgegeben.
+
+### Grenzen und erforderliche Kontrolle
+
+Belegt sind lokale statische Prüfungen, Unit-/Frontendtests, echte PostgreSQL-Migrationen und Konkurrenzfälle, Backup/Restore sowie der manuelle Rollback in isolierten Wegwerfdatenbanken. Das Dependency-Gate meldet 10 moderate und keine hohen oder kritischen Befunde; der Secret-Scan bestand einschließlich negativem Canarytest. Nicht belegt sind Container-Image-Build, Remote-CI/CodeQL, Browser-E2E, Staging, Produktion, menschliche Freigabe oder allgemeine Wartbarkeit.
+
+Diese Entwicklerinstanz erteilt keine unabhängige Freigabe. Der unveränderte lokale Commit muss anschließend in einem getrennten, read-only Kontrollkontext gegen Issue #58, Abschlussdokumentation, Claim-Evidence-Matrix und tatsächliche Testausgaben geprüft werden. Erst danach dürfen mit gesonderter Autorisierung Push und PR-Fortschreibung erfolgen. REQ-23 bleibt unberührt.
+
 ## REQ-24 – technische Umsetzung, unabhängige Kontrolle und PR-Fortschreibung (20.10.2026)
 
 Geltung: Implementierungsprotokoll; die ursprüngliche lokale Umsetzung ist unabhängig bestätigt. Maßgebliche Belege sind `REQ-24_IMPLEMENTATION_EVIDENCE.md` und `REQ-24_REVIEW.md`; Draft-PR #88 und sein erster Remote-Lauf existieren. Die beiden dort zusätzlich erkannten CodeQL-Befunde sind lokal korrigiert; der erneute Remote-Lauf des Korrekturcommits, Containerausführung, Deployment und menschliche Freigabe werden separat belegt. Frühere Abschnitte bleiben historische Entwicklungsstände.

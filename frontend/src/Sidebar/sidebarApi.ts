@@ -61,20 +61,20 @@ export const sidebarApi = {
     request<void>(`${BASE}/viewpoints/${id}`, { method: "DELETE" }),
 
   // Components
-  createComponent: (data: Omit<ComponentInstance, "id">) =>
+  createComponent: (data: Omit<ComponentInstance, "id" | "version">) =>
     request<ComponentInstance>(`${BASE}/components`, { method: "POST", body: JSON.stringify(data) }),
-  updateComponent: (id: string, data: Partial<ComponentInstance>) =>
-    request<ComponentInstance>(`${BASE}/components/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
-  deleteComponent: (id: string) =>
-    request<void>(`${BASE}/components/${id}`, { method: "DELETE" }),
+  updateComponent: (id: string, data: Partial<ComponentInstance>, expectedVersion: number) =>
+    request<ComponentInstance>(`${BASE}/components/${id}`, { method: "PATCH", headers: { "If-Match": String(expectedVersion) }, body: JSON.stringify(data) }),
+  deleteComponent: (id: string, expectedVersion: number) =>
+    request<void>(`${BASE}/components/${id}`, { method: "DELETE", headers: { "If-Match": String(expectedVersion) } }),
 
   // Connections
-  createConnection: (data: Omit<ConnectionInstance, "id">) =>
+  createConnection: (data: Omit<ConnectionInstance, "id" | "version">) =>
     request<ConnectionInstance>(`${BASE}/connections`, { method: "POST", body: JSON.stringify(data) }),
-  updateConnection: (id: string, data: Partial<ConnectionInstance>) =>
-    request<ConnectionInstance>(`${BASE}/connections/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
-  deleteConnection: (id: string) =>
-    request<void>(`${BASE}/connections/${id}`, { method: "DELETE" }),
+  updateConnection: (id: string, data: Partial<ConnectionInstance>, expectedVersion: number) =>
+    request<ConnectionInstance>(`${BASE}/connections/${id}`, { method: "PATCH", headers: { "If-Match": String(expectedVersion) }, body: JSON.stringify(data) }),
+  deleteConnection: (id: string, expectedVersion: number) =>
+    request<void>(`${BASE}/connections/${id}`, { method: "DELETE", headers: { "If-Match": String(expectedVersion) } }),
 
   // Catalogs
   createCatalog: (data: Partial<Omit<Catalog, "id">> & { name: string }) =>
@@ -87,12 +87,12 @@ export const sidebarApi = {
   // Diagrams
   createDiagram: (data: { name: string; description?: string }) =>
     request<Diagram>(`${BASE}/diagrams`, { method: "POST", body: JSON.stringify(data) }),
-  createDiagramConnection: (diagramId: string, data: Omit<ConnectionInstance, "id">) =>
+  createDiagramConnection: (diagramId: string, data: Omit<ConnectionInstance, "id" | "version">) =>
     request<{ connection: ConnectionInstance; diagram: Diagram; created: boolean }>(`${BASE}/diagrams/${diagramId}/connections`, { method: "POST", body: JSON.stringify(data) }),
-  updateDiagram: (id: string, data: Partial<Diagram>) =>
-    request<Diagram>(`${BASE}/diagrams/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  updateDiagram: (id: string, data: Partial<Diagram>, expectedVersion: number) =>
+    request<Diagram>(`${BASE}/diagrams/${id}`, { method: "PATCH", headers: { "If-Match": String(expectedVersion) }, body: JSON.stringify(data) }),
   validateDiagram: (id: string) =>
     request<DiagramValidationResult>(`${BASE}/diagrams/${id}/validate`),
-  deleteDiagram: (id: string) =>
-    request<void>(`${BASE}/diagrams/${id}`, { method: "DELETE" })
+  deleteDiagram: (id: string, expectedVersion: number) =>
+    request<void>(`${BASE}/diagrams/${id}`, { method: "DELETE", headers: { "If-Match": String(expectedVersion) } })
 };

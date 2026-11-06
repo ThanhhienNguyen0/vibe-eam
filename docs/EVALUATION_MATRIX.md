@@ -1,5 +1,23 @@
 # Evaluation Matrix
 
+## REQ-26 – lokaler Entwicklerstand, 06.11.2026
+
+„Erfüllt (lokal)“ bezeichnet reproduzierte lokale Evidenz, keine unabhängige oder menschliche Freigabe.
+
+| Kriterium | Lokale Evidenz | Status / Grenze |
+|---|---|---|
+| Objektversionen und Datenrevision | Prisma-Schema, Migration, API-/DB-Assertions | Erfüllt (lokal) |
+| Stale PATCH/DELETE und Fehlertrennung | 428/400/404/409-Vertragstests für aktive Objektpfade | Erfüllt (lokal) |
+| Atomare Mehrprozesskonkurrenz | getrennte Node-Prozesse/Prisma-Clients mit IPC-Barriere; Update/Update, Update/Delete und verschiedene Objekte | Erfüllt (lokal) |
+| Relationen, Diagramme, Kaskaden und Tenantgrenzen | echte isolierte PostgreSQL-Tests | Erfüllt (lokal) |
+| UI-Entwurf, Neu laden und bewusstes Überschreiben | Frontendtests einschließlich wiederholtem Zwischenwrite | Erfüllt (lokal); kein Browser-E2E |
+| CSV/XLSX- und REQ-33-Import | Vorschau-/Commit-Revision, JSON-ETag, Rollback ohne Audit/Teiländerung | Erfüllt (lokal) |
+| Historische `/api/model`-API | DB-Zeilensperre, ETag-Vertrag und Konkurrenzregression | Erfüllt (lokal) |
+| Migration und Betriebsprobe | sieben Migrationen, pg_dump/pg_restore, Rollback-SQL und Schemaabsence | Erfüllt in Wegwerfdatenbanken |
+| Gesamt-/Security-Gates | `npm run check`; 10 moderate/0 high/0 critical; Secret-Scan mit Canary | Erfüllt nach lokaler Gate-Regel; moderate Befunde bleiben reviewpflichtig |
+| Compose und Container | drei reale `docker compose config --quiet`-Läufe | Konfiguration erfüllt; Image-Build wegen fehlender Docker-Linux-Engine offen |
+| Unabhängige/Remote-Abnahme | noch nicht durchgeführt | Offen: getrennter Review, Remote-CI/CodeQL, Push/PR, menschliche Freigabe |
+
 ## REQ-33 – lokaler Nacharbeitsstand, 05.11.2026
 
 Die Entwickler-Heads `6b9201b9…` und `72364525…` wurden unabhängig nicht freigegeben. Die folgende Matrix beschreibt den danach geänderten lokalen Kandidaten; jeder neue Head benötigt dieselbe getrennte Kontrolle.

@@ -1,5 +1,13 @@
 # Prompt Log
 
+## 05.–06.11.2026 – REQ-26 / Issue #58
+
+Auftrag: REQ-26 „Optimistic Locking“ vollständig und nachvollziehbar auf dem noch nicht nach `main` gemergten REQ-33-Head `dd14b162ef611ccd7706e540416b1a5edf174f7e` umsetzen; dessen `main`-Basis ist `8868629a8727c99bc5472e65dc261d49ebb34c0c`. Branch: `codex/eam/req-26-optimistic-locking`. Gefordert waren serverseitige Objektversionen, atomare Konflikterkennung für PATCH/DELETE, verständliche UI-Optionen „Neu laden“ und „Bewusst überschreiben“, Schutz aller aktiven Schreibpfade einschließlich Diagrammen, CSV/XLSX-, REQ-33- und Legacy-Import sowie echte Mehrprozess-PostgreSQL-Tests. REQ-23, Push, PR, Merge, Issue-Close und Deployment bleiben außerhalb des Auftrags.
+
+Umsetzung: Komponenten, Relationen und Diagramme erhalten serverseitige Versionen; Whole-State-Operationen verwenden eine getrennte `Company.dataRevision`. Objektmutationen prüfen `If-Match` direkt in atomaren `updateMany`-/`deleteMany`-Operationen. Die UI behält lokale Entwürfe, lädt auf Wunsch den Serverstand oder wiederholt nach ausdrücklicher Überschreibwahl mit der zuletzt gemeldeten Serverversion; ein weiterer Zwischenwrite erzeugt erneut einen Konflikt. CSV/XLSX-Commit und REQ-33-Import sind an die zuvor gelesene Datenrevision gebunden. Die historische `/api/model`-API verwendet eine DB-Zeilensperre statt Prozesscache.
+
+Tatsächliche Korrekturschleifen: Ein erster echter DB-Lauf zeigte, dass Read-Normalisierung unzulässige Whole-State-Schreibwirkungen auslöste und ein Legacy-GET einen vor der Initialisierung gelesenen ETag zurückgab; beide Ursachen wurden behoben und im vollständigen DB-Lauf erneut geprüft. Prisma-Artefakte mussten nach der sauberen Installation regulär erzeugt werden. Der im Systempfad gefundene Eintrag `docker` war kein nutzbares Programm; die echte Docker-CLI unter Docker Desktop validierte alle drei Compose-Konfigurationen. Die Linux-Engine-Pipe blieb jedoch nicht verfügbar, deshalb wird kein lokaler Image-Build behauptet. Keine Laufzeit, kein menschlicher Anteil und keine unabhängige Freigabe wurden erfunden.
+
 ## 04.11.2026 – REQ-33 / Issue #65
 
 Auftrag: REQ-33 als ersten Schritt der Sequenz REQ-33 → REQ-26 → REQ-23 auf exakt `origin/main` `8868629a8727c99bc5472e65dc261d49ebb34c0c` implementieren. Gefordert waren ein vollständiger aktueller JSON-Vertrag statt eines Legacy-Teilformats, `schemaVersion`, JSON Schema, deterministischer echter PostgreSQL-Roundtrip, klare Legacy-/Future-Fehler, portable IDs, Tenant-/Rollenisolation, atomare Fehler, Ausschluss von Benutzern/Secrets/Auditverlauf, Regression bestehender Teilformate sowie wahrheitsgemäße Forschungs- und Prüfdokumentation. Kein Push, PR, Merge, Issue-Close, Deployment oder Beginn von REQ-26.

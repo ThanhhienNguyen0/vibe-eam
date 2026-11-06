@@ -17,6 +17,7 @@ import ReactFlow, {
 } from "reactflow";
 import { GitBranch, MousePointerClick, PanelLeftClose, PanelLeftOpen, Search, SlidersHorizontal, X } from "lucide-react";
 import { sidebarApi } from "./Sidebar/sidebarApi";
+import { runOptimisticMutation } from "./optimisticConflict";
 import { useAccess } from "./access";
 import {
   getAllowedConnectionTypes,
@@ -748,6 +749,18 @@ function DiagramEditorInner({
     <T,>(mutation: () => Promise<T>) => runIfDiagramWritable(canWrite, mutation),
     [canWrite]
   );
+  const updateDiagramWithConflict = useCallback(async (current: Diagram, patch: Partial<Diagram>) => {
+    const result = await runMutation(() => runOptimisticMutation(
+      current.version ?? 1,
+      (version) => sidebarApi.updateDiagram(current.id, patch, version),
+      async () => {
+        const fresh = await sidebarApi.getAll();
+        const reloaded = fresh.diagrams.find((item) => item.id === current.id);
+        if (reloaded) onDiagramChange(reloaded);
+      }
+    ));
+    return result?.applied ? result.value : undefined;
+  }, [onDiagramChange, runMutation]);
   // Knotengröße nach Skalieren persistieren (inkl. Position, falls oben/links gezogen wurde)
   const diagramRef = useRef(diagram);
   diagramRef.current = diagram;
@@ -769,11 +782,11 @@ function DiagramEditorInner({
       setActiveNodeId(null);
       const current = diagramRef.current;
       const updatedPositions = { ...current.positions, [nodeId]: pos };
-      const updated = await runMutation(() => sidebarApi.updateDiagram(current.id, { positions: updatedPositions }));
+      const updated = await updateDiagramWithConflict(current, { positions: updatedPositions });
       if (!updated) return;
       onDiagramChange(updated);
     },
-    [canWrite, onDiagramChange, runMutation]
+    [canWrite, onDiagramChange, updateDiagramWithConflict]
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(
@@ -946,11 +959,11 @@ function DiagramEditorInner({
       Object.entries(diagram.positions).filter(([componentId]) => componentId !== nodeId)
     );
     try {
-      const updated = await runMutation(() => sidebarApi.updateDiagram(diagram.id, {
+      const updated = await updateDiagramWithConflict(diagram, {
         componentIds: newCompIds,
         connectionIds: newConnIds,
         positions: newPositions
-      }));
+      });
       if (!updated) return;
       onDiagramChange(updated);
       setValidationResult(null);
@@ -1016,10 +1029,10 @@ function DiagramEditorInner({
       }));
       if (!comp) return;
       onComponentCreated(comp);
-      const updated = await runMutation(() => sidebarApi.updateDiagram(diagram.id, {
+      const updated = await updateDiagramWithConflict(diagram, {
         componentIds: [...diagram.componentIds, comp.id],
         positions: { ...diagram.positions, [comp.id]: position }
-      }));
+      });
       if (!updated) return;
       onDiagramChange(updated);
       setPendingCreate(null);
@@ -1087,11 +1100,11 @@ function DiagramEditorInner({
         if (!newPositions[id]) newPositions[id] = { x: position.x + 260, y: position.y + i * 110 };
       });
     }
-    const updated = await runMutation(() => sidebarApi.updateDiagram(diagram.id, {
+    const updated = await updateDiagramWithConflict(diagram, {
       componentIds: newCompIds,
       connectionIds: newConnIds,
       positions: newPositions
-    }));
+    });
     if (!updated) return;
     onDiagramChange(updated);
   }

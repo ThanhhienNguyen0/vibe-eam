@@ -2,6 +2,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import type {
   ComponentInstance,
   ConnectionInstance,
+  Diagram,
   SidebarState
 } from "../Sidebar/sidebarTypes.js";
 import type { AuditEntry, AuditWrite } from "../audit/auditTypes.js";
@@ -19,6 +20,12 @@ export interface SidebarStateRepository {
 }
 
 export class TenantResourceIdConflictError extends Error {}
+export class ResourceNotFoundError extends Error {}
+export class OptimisticLockError<T = unknown> extends Error {
+  constructor(readonly current: T, message = "The resource was changed by another request.") {
+    super(message);
+  }
+}
 
 const json = (value: unknown): Prisma.InputJsonValue => value as Prisma.InputJsonValue;
 const stringArray = (value: Prisma.JsonValue | null | undefined): string[] =>
@@ -89,10 +96,11 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         tx.componentInstance.findMany({ where: { companyId, componentType: { metamodelId: metamodel.id } }, orderBy: { id: "asc" } }),
         tx.connectionInstance.findMany({ where: { companyId, connectionType: { metamodelId: metamodel.id } }, orderBy: { id: "asc" } }),
         tx.catalog.findMany({ where: { companyId }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }),
-        tx.company.findUnique({ where: { id: companyId }, select: { catalogsInitialized: true } })
+        tx.company.findUnique({ where: { id: companyId }, select: { catalogsInitialized: true, dataRevision: true } })
       ]);
 
       return {
+        dataRevision: company?.dataRevision ?? 0,
         metamodel: {
           id: metamodel.id,
           name: metamodel.name,
@@ -190,6 +198,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         })),
         components: components.map((item): ComponentInstance => withoutUndefined({
           id: item.id,
+          version: item.version,
           externalId: item.externalId ?? undefined,
           name: item.name,
           componentTypeId: item.componentTypeId,
@@ -198,6 +207,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         })),
         connections: connections.map((item): ConnectionInstance => withoutUndefined({
           id: item.id,
+          version: item.version,
           externalId: item.externalId ?? undefined,
           name: item.name,
           connectionTypeId: item.connectionTypeId,
@@ -221,6 +231,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         }) : undefined,
         diagrams: diagrams.map((item) => ({
           id: item.id,
+          version: item.version,
           name: item.name,
           description: item.description,
           metamodelId: item.metamodelId,
@@ -262,6 +273,22 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
     await this.assertTenantIdsAvailable(state, companyId);
 
     await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.company.updateMany({
+        where: { id: companyId, dataRevision: state.dataRevision ?? 0 },
+        data: { dataRevision: { increment: 1 } }
+      });
+      if (claimed.count !== 1) {
+        const current = await tx.company.findUnique({ where: { id: companyId }, select: { dataRevision: true } });
+        throw new OptimisticLockError(current, "The company data changed after it was read.");
+      }
+      const [componentVersions, connectionVersions, diagramVersions] = await Promise.all([
+        tx.componentInstance.findMany({ where: { companyId }, select: { id: true, version: true } }),
+        tx.connectionInstance.findMany({ where: { companyId }, select: { id: true, version: true } }),
+        tx.diagram.findMany({ where: { companyId }, select: { id: true, version: true } })
+      ]);
+      const nextComponentVersion = new Map(componentVersions.map((item) => [item.id, item.version + 1]));
+      const nextConnectionVersion = new Map(connectionVersions.map((item) => [item.id, item.version + 1]));
+      const nextDiagramVersion = new Map(diagramVersions.map((item) => [item.id, item.version + 1]));
       // A whole-state write with a new metamodel id is a replacement, not an append. Deleting
       // prior company metamodels here cascades their types, rules, diagrams and instances inside
       // this same transaction; users, audit entries and legacy ModelRecords are not descendants.
@@ -394,7 +421,8 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           metamodelId,
           viewpointId: item.viewpointId ?? null,
           name: item.name,
-          description: item.description
+          description: item.description,
+          version: nextDiagramVersion.get(item.id) ?? 1
         };
         await tx.diagram.upsert({ where: { id: item.id }, create: { id: item.id, ...data }, update: data });
       }
@@ -422,7 +450,8 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           externalId: item.externalId ?? null,
           name: item.name,
           description: item.description,
-          properties: json(item.properties)
+          properties: json(item.properties),
+          version: nextComponentVersion.get(item.id) ?? 1
         };
         await tx.componentInstance.upsert({ where: { id: item.id }, create: { id: item.id, ...data }, update: data });
       }
@@ -435,7 +464,8 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           externalId: item.externalId ?? null,
           name: item.name,
           description: item.description,
-          properties: json(item.properties ?? {})
+          properties: json(item.properties ?? {}),
+          version: nextConnectionVersion.get(item.id) ?? 1
         };
         await tx.connectionInstance.upsert({ where: { id: item.id }, create: { id: item.id, ...data }, update: data });
       }
@@ -491,6 +521,145 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
 
     // The company flag is set above, so catalogs are always present here.
     return ((await this.read(companyId)) as SidebarState | null) ?? structuredClone(state);
+  }
+
+  async updateComponent(companyId: string, value: ComponentInstance, expectedVersion: number): Promise<ComponentInstance> {
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.componentInstance.updateMany({
+        where: { id: value.id, companyId, version: expectedVersion },
+        data: {
+          componentTypeId: value.componentTypeId,
+          externalId: value.externalId ?? null,
+          name: value.name,
+          description: value.description,
+          properties: json(value.properties),
+          version: { increment: 1 }
+        }
+      });
+      if (updated.count !== 1) {
+        const current = await tx.componentInstance.findFirst({ where: { id: value.id, companyId } });
+        if (!current) throw new ResourceNotFoundError("Component not found.");
+        throw new OptimisticLockError<ComponentInstance>({
+          id: current.id,
+          version: current.version,
+          externalId: current.externalId ?? undefined,
+          name: current.name,
+          componentTypeId: current.componentTypeId,
+          description: current.description,
+          properties: objectValue(current.properties, {}) as Record<string, string>
+        });
+      }
+      await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+      return { ...value, version: expectedVersion + 1 };
+    });
+  }
+
+  async deleteComponent(companyId: string, id: string, expectedVersion: number): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const removed = await tx.componentInstance.deleteMany({ where: { id, companyId, version: expectedVersion } });
+      if (removed.count !== 1) {
+        const current = await tx.componentInstance.findFirst({ where: { id, companyId } });
+        if (!current) throw new ResourceNotFoundError("Component not found.");
+        throw new OptimisticLockError({ id: current.id, version: current.version, name: current.name });
+      }
+      await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+    });
+  }
+
+  async updateConnection(companyId: string, value: ConnectionInstance, expectedVersion: number): Promise<ConnectionInstance> {
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.connectionInstance.updateMany({
+        where: { id: value.id, companyId, version: expectedVersion },
+        data: {
+          connectionTypeId: value.connectionTypeId,
+          sourceComponentId: value.sourceComponentId,
+          targetComponentId: value.targetComponentId,
+          externalId: value.externalId ?? null,
+          name: value.name,
+          description: value.description,
+          properties: json(value.properties ?? {}),
+          version: { increment: 1 }
+        }
+      });
+      if (updated.count !== 1) {
+        const current = await tx.connectionInstance.findFirst({ where: { id: value.id, companyId } });
+        if (!current) throw new ResourceNotFoundError("Connection not found.");
+        throw new OptimisticLockError<ConnectionInstance>({
+          id: current.id,
+          version: current.version,
+          externalId: current.externalId ?? undefined,
+          name: current.name,
+          connectionTypeId: current.connectionTypeId,
+          sourceComponentId: current.sourceComponentId,
+          targetComponentId: current.targetComponentId,
+          description: current.description,
+          properties: objectValue(current.properties, {}) as Record<string, string>
+        });
+      }
+      await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+      return { ...value, version: expectedVersion + 1 };
+    });
+  }
+
+  async deleteConnection(companyId: string, id: string, expectedVersion: number): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const removed = await tx.connectionInstance.deleteMany({ where: { id, companyId, version: expectedVersion } });
+      if (removed.count !== 1) {
+        const current = await tx.connectionInstance.findFirst({ where: { id, companyId } });
+        if (!current) throw new ResourceNotFoundError("Connection not found.");
+        throw new OptimisticLockError({ id: current.id, version: current.version, name: current.name });
+      }
+      await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+    });
+  }
+
+  async updateDiagram(companyId: string, value: Diagram, expectedVersion: number): Promise<Diagram> {
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.diagram.updateMany({
+        where: { id: value.id, companyId, version: expectedVersion },
+        data: {
+          viewpointId: value.viewpointId ?? null,
+          name: value.name,
+          description: value.description,
+          version: { increment: 1 }
+        }
+      });
+      if (updated.count !== 1) {
+        const current = await tx.diagram.findFirst({ where: { id: value.id, companyId } });
+        if (!current) throw new ResourceNotFoundError("Diagram not found.");
+        throw new OptimisticLockError({ id: current.id, version: current.version, name: current.name });
+      }
+      await tx.diagramComponentMembership.deleteMany({ where: { diagramId: value.id } });
+      if (value.componentIds.length > 0) {
+        await tx.diagramComponentMembership.createMany({
+          data: value.componentIds.map((componentId) => ({
+            diagramId: value.id,
+            componentId,
+            position: json(value.positions[componentId] ?? { x: 0, y: 0 })
+          }))
+        });
+      }
+      await tx.diagramConnectionMembership.deleteMany({ where: { diagramId: value.id } });
+      if (value.connectionIds.length > 0) {
+        await tx.diagramConnectionMembership.createMany({
+          data: value.connectionIds.map((connectionId) => ({ diagramId: value.id, connectionId }))
+        });
+      }
+      await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+      return { ...value, version: expectedVersion + 1 };
+    });
+  }
+
+  async deleteDiagram(companyId: string, id: string, expectedVersion: number): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const removed = await tx.diagram.deleteMany({ where: { id, companyId, version: expectedVersion } });
+      if (removed.count !== 1) {
+        const current = await tx.diagram.findFirst({ where: { id, companyId } });
+        if (!current) throw new ResourceNotFoundError("Diagram not found.");
+        throw new OptimisticLockError({ id: current.id, version: current.version, name: current.name });
+      }
+      await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+    });
   }
 
   async listAudit(companyId: string, limit: number): Promise<AuditEntry[]> {

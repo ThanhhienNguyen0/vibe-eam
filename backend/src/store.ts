@@ -1,43 +1,63 @@
-// ArchitectureModel stores elements, relations and the audit log as JSONB per company (ADR 0001).
+// Historical ArchitectureModel API. JSONB writes are serialized by a DB row lock so separate
+// backend processes cannot overwrite one another (REQ-26).
 import { Prisma, PrismaClient } from "@prisma/client";
 import { seedState } from "./seed.js";
 import { requireCompanyId } from "./tenant.js";
 import type { AuditLogEntry, EamElement, EamModel, EamRelation, PersistedState } from "./types.js";
+import { OptimisticLockError, ResourceNotFoundError } from "./persistence/databaseSidebarRepository.js";
 
 const prisma = new PrismaClient();
 
-const cachedStates = new Map<string, PersistedState>();
+const withVersions = (state: PersistedState): PersistedState => ({
+  ...structuredClone(state),
+  elements: state.elements.map((item) => ({ ...item, version: item.version ?? 1 })),
+  relations: state.relations.map((item) => ({ ...item, version: item.version ?? 1 }))
+});
+
+const dataFor = (state: PersistedState) => ({
+  elements: state.elements as unknown as Prisma.InputJsonValue,
+  relations: state.relations as unknown as Prisma.InputJsonValue,
+  auditLog: state.auditLog as unknown as Prisma.InputJsonValue
+});
+
+async function mutateState<T>(
+  mutation: (state: PersistedState, revision: number) => Promise<T> | T
+): Promise<{ state: PersistedState; value: T; revision: number }> {
+  const companyId = requireCompanyId();
+  return prisma.$transaction(async (tx) => {
+    await tx.architectureModel.upsert({
+      where: { companyId },
+      create: { companyId, ...dataFor(withVersions(seedState)) },
+      update: {}
+    });
+    await tx.$queryRaw`SELECT "id" FROM "ArchitectureModel" WHERE "companyId" = ${companyId} FOR UPDATE`;
+    const persisted = await tx.architectureModel.findUniqueOrThrow({ where: { companyId } });
+    const state = withVersions({
+      elements: persisted.elements as unknown as EamElement[],
+      relations: persisted.relations as unknown as EamRelation[],
+      auditLog: persisted.auditLog as unknown as AuditLogEntry[]
+    });
+    const value = await mutation(state, persisted.revision);
+    const saved = await tx.architectureModel.update({
+      where: { companyId },
+      data: { ...dataFor(state), revision: { increment: 1 } },
+      select: { revision: true }
+    });
+    return { state: structuredClone(state), value, revision: saved.revision };
+  }, { timeout: 30_000 });
+}
 
 export async function readState(): Promise<PersistedState> {
   const companyId = requireCompanyId();
-  const cached = cachedStates.get(companyId);
-  if (cached) return structuredClone(cached);
   const persisted = await prisma.architectureModel.findUnique({ where: { companyId } });
-  const state: PersistedState = persisted ? {
-    elements: persisted.elements as unknown as EamElement[],
-    relations: persisted.relations as unknown as EamRelation[],
-    auditLog: persisted.auditLog as unknown as AuditLogEntry[]
-  } : structuredClone(seedState);
-  if (!persisted) await writeState(state);
-  cachedStates.set(companyId, state);
-  return structuredClone(state);
-}
-
-export async function writeState(state: PersistedState): Promise<PersistedState> {
-  const companyId = requireCompanyId();
-  const cachedState = structuredClone(state);
-  const data = {
-    elements: cachedState.elements as unknown as Prisma.InputJsonValue,
-    relations: cachedState.relations as unknown as Prisma.InputJsonValue,
-    auditLog: cachedState.auditLog as unknown as Prisma.InputJsonValue
-  };
-  await prisma.architectureModel.upsert({
-    where: { companyId },
-    create: { companyId, ...data },
-    update: data
-  });
-  cachedStates.set(companyId, cachedState);
-  return structuredClone(cachedState);
+  if (persisted) {
+    return withVersions({
+      elements: persisted.elements as unknown as EamElement[],
+      relations: persisted.relations as unknown as EamRelation[],
+      auditLog: persisted.auditLog as unknown as AuditLogEntry[]
+    });
+  }
+  return (await mutateState(() => undefined)).state;
 }
 
 export async function getModel(): Promise<EamModel> {
@@ -45,80 +65,74 @@ export async function getModel(): Promise<EamModel> {
   return { elements: state.elements, relations: state.relations };
 }
 
-export async function appendAuditLog(
-  action: AuditLogEntry["action"],
-  entityId: string,
-  description: string,
-  stateOverride?: PersistedState
-): Promise<PersistedState> {
-  const state = stateOverride ?? (await readState());
-  state.auditLog.unshift({
-    id: crypto.randomUUID(),
-    timestamp: new Date().toISOString(),
-    action,
-    entityId,
-    description
-  });
-  return state;
+export async function getModelRevision(): Promise<number> {
+  const companyId = requireCompanyId();
+  return (await prisma.architectureModel.findUnique({ where: { companyId }, select: { revision: true } }))?.revision ?? 0;
+}
+
+function appendAuditLog(state: PersistedState, action: AuditLogEntry["action"], entityId: string, description: string): void {
+  state.auditLog.unshift({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), action, entityId, description });
 }
 
 export async function addElement(element: EamElement): Promise<PersistedState> {
-  const state = await readState();
-  state.elements.push(element);
-  await appendAuditLog("create", element.id, `Created element '${element.name}'.`, state);
-  return writeState(state);
+  return (await mutateState((state) => {
+    const stored = { ...element, version: 1 };
+    state.elements.push(stored);
+    appendAuditLog(state, "create", stored.id, `Created element '${stored.name}'.`);
+  })).state;
 }
 
-export async function updateElement(id: string, patch: Partial<EamElement>): Promise<EamElement | null> {
-  const state = await readState();
-  const index = state.elements.findIndex((element) => element.id === id);
-  if (index === -1) return null;
-  state.elements[index] = { ...state.elements[index], ...patch, id };
-  await appendAuditLog("update", id, `Updated element '${state.elements[index].name}'.`, state);
-  await writeState(state);
-  return state.elements[index];
+export async function updateElement(id: string, patch: Partial<EamElement>, expectedVersion: number): Promise<EamElement> {
+  return (await mutateState((state) => {
+    const index = state.elements.findIndex((element) => element.id === id);
+    if (index === -1) throw new ResourceNotFoundError("Element not found.");
+    const current = state.elements[index];
+    if (current.version !== expectedVersion) throw new OptimisticLockError(current);
+    state.elements[index] = { ...current, ...patch, id, version: expectedVersion + 1 };
+    appendAuditLog(state, "update", id, `Updated element '${state.elements[index].name}'.`);
+    return state.elements[index];
+  })).value;
 }
 
-export async function deleteElement(id: string): Promise<boolean> {
-  const state = await readState();
-  const before = state.elements.length;
-  const removedRelations = state.relations.filter((relation) => relation.source === id || relation.target === id).length;
-  state.elements = state.elements.filter((element) => element.id !== id);
-  state.relations = state.relations.filter((relation) => relation.source !== id && relation.target !== id);
-  if (state.elements.length === before) return false;
-  await appendAuditLog("delete", id, `Deleted element and ${removedRelations} attached relation(s).`, state);
-  await writeState(state);
-  return true;
+export async function deleteElement(id: string, expectedVersion: number): Promise<void> {
+  await mutateState((state) => {
+    const current = state.elements.find((element) => element.id === id);
+    if (!current) throw new ResourceNotFoundError("Element not found.");
+    if (current.version !== expectedVersion) throw new OptimisticLockError(current);
+    const removedRelations = state.relations.filter((relation) => relation.source === id || relation.target === id).length;
+    state.elements = state.elements.filter((element) => element.id !== id);
+    state.relations = state.relations.filter((relation) => relation.source !== id && relation.target !== id);
+    appendAuditLog(state, "delete", id, `Deleted element and ${removedRelations} attached relation(s).`);
+  });
 }
 
 export async function addRelation(relation: EamRelation): Promise<PersistedState> {
-  const state = await readState();
-  state.relations.push(relation);
-  await appendAuditLog("create", relation.id, `Created relation '${relation.type}' from ${relation.source} to ${relation.target}.`, state);
-  return writeState(state);
+  return (await mutateState((state) => {
+    const stored = { ...relation, version: 1 };
+    state.relations.push(stored);
+    appendAuditLog(state, "create", stored.id, `Created relation '${stored.type}' from ${stored.source} to ${stored.target}.`);
+  })).state;
 }
 
-export async function deleteRelation(id: string): Promise<boolean> {
-  const state = await readState();
-  const before = state.relations.length;
-  state.relations = state.relations.filter((relation) => relation.id !== id);
-  if (state.relations.length === before) return false;
-  await appendAuditLog("delete", id, "Deleted relation.", state);
-  await writeState(state);
-  return true;
+export async function deleteRelation(id: string, expectedVersion: number): Promise<void> {
+  await mutateState((state) => {
+    const current = state.relations.find((relation) => relation.id === id);
+    if (!current) throw new ResourceNotFoundError("Relation not found.");
+    if (current.version !== expectedVersion) throw new OptimisticLockError(current);
+    state.relations = state.relations.filter((relation) => relation.id !== id);
+    appendAuditLog(state, "delete", id, "Deleted relation.");
+  });
 }
 
-export async function importModel(model: EamModel): Promise<PersistedState> {
-  const state: PersistedState = {
-    elements: model.elements,
-    relations: model.relations,
-    auditLog: (await readState()).auditLog
-  };
-  await appendAuditLog("import", "model", `Imported model with ${model.elements.length} elements and ${model.relations.length} relations.`, state);
-  return writeState(state);
+export async function importModel(model: EamModel, expectedRevision: number): Promise<PersistedState> {
+  return (await mutateState((state, revision) => {
+    if (revision !== expectedRevision) throw new OptimisticLockError({ revision });
+    state.elements = model.elements.map((item) => ({ ...item, version: 1 }));
+    state.relations = model.relations.map((item) => ({ ...item, version: 1 }));
+    appendAuditLog(state, "import", "model", `Imported model with ${state.elements.length} elements and ${state.relations.length} relations.`);
+  })).state;
 }
 
 export async function getAuditLog(): Promise<AuditLogEntry[]> {
-  const state = await readState();
-  return state.auditLog;
+  return (await readState()).auditLog;
 }

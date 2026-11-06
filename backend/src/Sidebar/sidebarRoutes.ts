@@ -1,7 +1,8 @@
-import { Router } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import type { Catalog, ComponentShape, SidebarState } from "./sidebarTypes.js";
 import { catalogColumnKeys } from "../catalog/catalogModel.js";
 import { validateConnectionInstance, validateDiagram } from "./metamodelRules.js";
+import { OptimisticLockError, ResourceNotFoundError } from "../persistence/databaseSidebarRepository.js";
 import {
   addComponent,
   addComponentType,
@@ -45,6 +46,20 @@ import {
 const router = Router();
 
 const MAX_EXTERNAL_ID_LENGTH = 200;
+
+class PreconditionError extends Error {
+  constructor(readonly status: number, message: string) { super(message); }
+}
+
+function expectedVersion(header: string | undefined): number {
+  if (header === undefined) throw new PreconditionError(428, "If-Match mit der aktuellen Objektversion ist erforderlich.");
+  const normalized = header.trim().replace(/^W\//, "").replace(/^"|"$/g, "");
+  const value = Number(normalized);
+  if (!/^\d+$/.test(normalized) || !Number.isSafeInteger(value) || value < 1) {
+    throw new PreconditionError(400, "If-Match muss eine positive ganzzahlige Objektversion enthalten.");
+  }
+  return value;
+}
 
 /** Empty/null clears the external id; anything else must be a short string. */
 function parseExternalId(value: unknown): { value?: string; error?: string } {
@@ -471,6 +486,7 @@ router.post("/components", async (req, res, next) => {
     }
     const comp = await addComponent({
       id: crypto.randomUUID(),
+      version: 1,
       name: name.trim(),
       componentTypeId,
       properties: properties ?? {},
@@ -485,6 +501,7 @@ router.post("/components", async (req, res, next) => {
 
 router.patch("/components/:id", async (req, res, next) => {
   try {
+    const version = expectedVersion(req.header("if-match"));
     const patch = { ...req.body } as Record<string, unknown>;
     if ("externalId" in patch) {
       const external = parseExternalId(patch.externalId);
@@ -494,7 +511,7 @@ router.patch("/components/:id", async (req, res, next) => {
       }
       patch.externalId = external.value;
     }
-    const updated = await updateComponent(req.params.id, patch);
+    const updated = await updateComponent(req.params.id, patch, version);
     if (!updated) return res.status(404).json({ error: "Component not found." });
     res.json(updated);
   } catch (err) {
@@ -504,7 +521,7 @@ router.patch("/components/:id", async (req, res, next) => {
 
 router.delete("/components/:id", async (req, res, next) => {
   try {
-    const deleted = await deleteComponent(req.params.id);
+    const deleted = await deleteComponent(req.params.id, expectedVersion(req.header("if-match")));
     if (!deleted) return res.status(404).json({ error: "Component not found." });
     res.status(204).send();
   } catch (err) {
@@ -540,6 +557,7 @@ router.post("/connections", async (req, res, next) => {
     if (external.error) return res.status(400).json({ error: external.error });
     const candidate = {
       id: crypto.randomUUID(),
+      version: 1,
       name: name ?? "",
       connectionTypeId,
       sourceComponentId,
@@ -563,6 +581,7 @@ router.post("/connections", async (req, res, next) => {
 
 router.patch("/connections/:id", async (req, res, next) => {
   try {
+    const version = expectedVersion(req.header("if-match"));
     const state = await readSidebarState();
     const existing = state.connections.find((connection) => connection.id === req.params.id);
     if (!existing) return res.status(404).json({ error: "Connection not found." });
@@ -578,7 +597,7 @@ router.patch("/connections/:id", async (req, res, next) => {
     const candidate = { ...existing, ...patch, id: req.params.id };
     const validation = validateConnectionInstance(candidate, state);
     if (!validation.valid) return res.status(400).json({ error: validation.errors[0]?.message ?? "Connection is not valid.", ...validation });
-    const updated = await updateConnection(req.params.id, patch);
+    const updated = await updateConnection(req.params.id, patch, version);
     if (!updated) return res.status(404).json({ error: "Connection not found." });
     res.json(updated);
   } catch (err) {
@@ -588,7 +607,7 @@ router.patch("/connections/:id", async (req, res, next) => {
 
 router.delete("/connections/:id", async (req, res, next) => {
   try {
-    const deleted = await deleteConnection(req.params.id);
+    const deleted = await deleteConnection(req.params.id, expectedVersion(req.header("if-match")));
     if (!deleted) return res.status(404).json({ error: "Connection not found." });
     res.status(204).send();
   } catch (err) {
@@ -613,6 +632,7 @@ router.post("/diagrams", async (req, res, next) => {
     const state = await readSidebarState();
     const diagram = await addDiagram({
       id: crypto.randomUUID(),
+      version: 1,
       name: name.trim(),
       description: description ?? "",
       componentIds: [],
@@ -655,6 +675,7 @@ router.post("/diagrams/:id/connections", async (req, res, next) => {
     );
     const candidate = existing ?? {
       id: crypto.randomUUID(),
+      version: 1,
       name: name ?? "",
       connectionTypeId,
       sourceComponentId,
@@ -695,13 +716,14 @@ router.get("/diagrams/:id/validate", async (req, res, next) => {
 
 router.patch("/diagrams/:id", async (req, res, next) => {
   try {
+    const version = expectedVersion(req.header("if-match"));
     const state = await readSidebarState();
     const existing = state.diagrams.find((diagram) => diagram.id === req.params.id);
     if (!existing) return res.status(404).json({ error: "Diagram not found." });
     const candidate = { ...existing, ...req.body, id: req.params.id };
     const validation = validateDiagram(candidate, state, { includeRequiredRules: false });
     if (!validation.valid) return res.status(400).json({ error: validation.errors[0]?.message ?? "Diagram is not valid.", ...validation });
-    const updated = await updateDiagram(req.params.id, req.body);
+    const updated = await updateDiagram(req.params.id, req.body, version);
     if (!updated) return res.status(404).json({ error: "Diagram not found." });
     res.json(updated);
   } catch (err) {
@@ -711,12 +733,32 @@ router.patch("/diagrams/:id", async (req, res, next) => {
 
 router.delete("/diagrams/:id", async (req, res, next) => {
   try {
-    const deleted = await deleteDiagram(req.params.id);
+    const deleted = await deleteDiagram(req.params.id, expectedVersion(req.header("if-match")));
     if (!deleted) return res.status(404).json({ error: "Diagram not found." });
     res.status(204).send();
   } catch (err) {
     next(err);
   }
+});
+
+router.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
+  if (error instanceof PreconditionError) {
+    res.status(error.status).json({ error: error.message, code: error.status === 428 ? "PRECONDITION_REQUIRED" : "PRECONDITION_INVALID" });
+    return;
+  }
+  if (error instanceof ResourceNotFoundError) {
+    res.status(404).json({ error: error.message, code: "RESOURCE_NOT_FOUND" });
+    return;
+  }
+  if (error instanceof OptimisticLockError) {
+    res.status(409).json({
+      error: "Das Objekt wurde zwischenzeitlich geändert. Neu laden oder bewusst gegen den aktuellen Stand überschreiben.",
+      code: "OPTIMISTIC_LOCK_CONFLICT",
+      current: error.current
+    });
+    return;
+  }
+  next(error);
 });
 
 export default router;

@@ -33,8 +33,11 @@ async function addUser(adminToken: string, role: Role) {
   return login.body.token as string;
 }
 
-const upload = (method: "preview" | "commit", token: string, body: Buffer, query = "fileName=e2e.csv") =>
-  request(app).post(`/api/sidebar/import/${method}?${query}`).set("Authorization", `Bearer ${token}`).set("Content-Type", "application/octet-stream").send(body);
+const upload = async (method: "preview" | "commit", token: string, body: Buffer, query = "fileName=e2e.csv") => {
+  if (method === "preview") return request(app).post(`/api/sidebar/import/preview?${query}`).set("Authorization", `Bearer ${token}`).set("Content-Type", "application/octet-stream").send(body);
+  const preview = await request(app).post(`/api/sidebar/import/preview?${query}`).set("Authorization", `Bearer ${token}`).set("Content-Type", "application/octet-stream").send(body);
+  return request(app).post(`/api/sidebar/import/commit?${query}&expectedRevision=${preview.body.dataRevision}`).set("Authorization", `Bearer ${token}`).set("Content-Type", "application/octet-stream").send(body);
+};
 const csv = (rows: string[][]) => Buffer.from(serializeCsv(rows), "utf-8");
 const sidebar = async (token: string) => (await request(app).get("/api/sidebar").set("Authorization", `Bearer ${token}`)).body as SidebarState;
 
@@ -78,7 +81,9 @@ describe.skipIf(!url)("REQ-31 import/export against real PostgreSQL", () => {
     expect(await prisma.auditLogEntry.count({ where: { companyId: admin.companyId } })).toBe(0);
 
     // Elements first (relations reference the persisted external ids).
-    expect((await upload("commit", architect, file)).body.applied).toBe(true);
+    const elementCommit = await upload("commit", architect, file);
+    expect(elementCommit.status, JSON.stringify(elementCommit.body)).toBe(200);
+    expect(elementCommit.body.applied).toBe(true);
     const relationCommit = await upload("commit", architect, relations, "fileName=rel.csv");
     expect(relationCommit.status, JSON.stringify(relationCommit.body.rows)).toBe(200);
     expect(relationCommit.body.summary.relations.new).toBe(1);
@@ -137,9 +142,9 @@ describe.skipIf(!url)("REQ-31 import/export against real PostgreSQL", () => {
 
     const other = await create(first.token, type.id, "Three", "UNIQUE");
     expect(other.status).toBe(201);
-    const clash = await request(app).patch(`/api/sidebar/components/${other.body.id}`).set("Authorization", `Bearer ${first.token}`).send({ externalId: "SHARED" });
+    const clash = await request(app).patch(`/api/sidebar/components/${other.body.id}`).set("Authorization", `Bearer ${first.token}`).set("If-Match", String(other.body.version)).send({ externalId: "SHARED" });
     expect(clash.status).toBe(409);
-    const cleared = await request(app).patch(`/api/sidebar/components/${other.body.id}`).set("Authorization", `Bearer ${first.token}`).send({ externalId: "" });
+    const cleared = await request(app).patch(`/api/sidebar/components/${other.body.id}`).set("Authorization", `Bearer ${first.token}`).set("If-Match", String(other.body.version)).send({ externalId: "" });
     expect(cleared.status).toBe(200);
     expect(cleared.body.externalId).toBeUndefined();
 

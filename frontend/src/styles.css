@@ -3754,3 +3754,25 @@ tr.attention td {
 .catalog-fieldset legend { font-size: 12px; font-weight: 700; color: #475569; padding: 0 4px; }
 .catalog-checklist { display: grid; gap: 4px; max-height: 180px; overflow-y: auto; }
 .catalog-check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.conflict-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(15 23 42 / 55%);
+}
+
+.conflict-dialog {
+  width: min(34rem, 100%);
+  padding: 1.25rem;
+  border: 1px solid #f59e0b;
+  border-radius: 0.75rem;
+  background: #fff;
+  color: #172033;
+  box-shadow: 0 1.5rem 4rem rgb(15 23 42 / 30%);
+}
+
+.conflict-dialog h2 { margin-top: 0; }
+.conflict-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem; }

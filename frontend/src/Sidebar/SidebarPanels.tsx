@@ -4,6 +4,7 @@ import { sidebarApi } from "./sidebarApi";
 import type { SidebarSelection } from "./Sidebar";
 import { COMPONENT_SHAPES } from "./sidebarTypes";
 import { useAccess } from "../access";
+import { runOptimisticMutation } from "../optimisticConflict";
 import CatalogEditor from "./CatalogEditor";
 import type {
   ComponentInstance,
@@ -305,8 +306,12 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
           onSelect={onSelect}
           onOpenDiagram={onOpenDiagram}
           onSave={async (patch) => {
-            const updated = await sidebarApi.updateComponent(comp.id, patch);
-            onStateChange({ ...sidebarState, components: components.map((c) => (c.id === comp.id ? updated : c)) });
+            const result = await runOptimisticMutation(
+              comp.version ?? 1,
+              (version) => sidebarApi.updateComponent(comp.id, patch, version),
+              async () => onStateChange(await sidebarApi.getAll())
+            );
+            if (result.applied) onStateChange({ ...sidebarState, components: components.map((c) => (c.id === comp.id ? result.value : c)) });
           }}
         />
       </DetailWrapper>
@@ -356,8 +361,12 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
           onSelect={onSelect}
           onOpenDiagram={onOpenDiagram}
           onSave={async (patch) => {
-            const updated = await sidebarApi.updateConnection(conn.id, patch);
-            onStateChange({ ...sidebarState, connections: connections.map((c) => (c.id === conn.id ? updated : c)) });
+            const result = await runOptimisticMutation(
+              conn.version ?? 1,
+              (version) => sidebarApi.updateConnection(conn.id, patch, version),
+              async () => onStateChange(await sidebarApi.getAll())
+            );
+            if (result.applied) onStateChange({ ...sidebarState, connections: connections.map((c) => (c.id === conn.id ? result.value : c)) });
           }}
         />
       </DetailWrapper>
@@ -391,8 +400,12 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
           diagram={d}
           viewpoints={viewpoints}
           onSave={async (patch) => {
-            const updated = await sidebarApi.updateDiagram(d.id, patch);
-            onStateChange({ ...sidebarState, diagrams: diagrams.map((x) => (x.id === d.id ? updated : x)) });
+            const result = await runOptimisticMutation(
+              d.version ?? 1,
+              (version) => sidebarApi.updateDiagram(d.id, patch, version),
+              async () => onStateChange(await sidebarApi.getAll())
+            );
+            if (result.applied) onStateChange({ ...sidebarState, diagrams: diagrams.map((x) => (x.id === d.id ? result.value : x)) });
           }}
           onOpen={() => onOpenDiagram(d.id)}
         />

@@ -26,8 +26,7 @@ import { databaseSidebarRepository } from "../persistence/databaseSidebarReposit
 import {
   addConnectionToDiagramState,
   assertValidConnectionEndpoints,
-  diagramWithContents,
-  removeComponentWithConnections
+  diagramWithContents
 } from "../persistence/stateOperations.js";
 import { cloneSidebarStateForCompany } from "../persistence/tenantState.js";
 import { currentPrincipal, requireCompanyId } from "../tenant.js";
@@ -772,6 +771,7 @@ const STARTER_CATALOGS: Catalog[] = [
 ];
 
 const defaultState: SidebarState = {
+  dataRevision: 0,
   metamodel: DEFAULT_METAMODEL,
   componentTypes: [
     ...EAM_COMPONENT_TYPES,
@@ -972,8 +972,6 @@ const defaultState: SidebarState = {
   catalogs: STARTER_CATALOGS
 };
 
-const cachedByCompany = new Map<string, SidebarState>();
-
 function upsertById<T extends { id: string }>(items: T[], seeds: T[]): T[] {
   const existingIds = new Set(items.map((item) => item.id));
   return [...items, ...seeds.filter((seed) => !existingIds.has(seed.id))];
@@ -1020,8 +1018,8 @@ function normalizeSidebarState(raw: Partial<SidebarState>, seeds: SidebarState =
     };
   });
 
-  const components = upsertById(raw.components ?? [], seeds.components);
-  const connections = upsertById(raw.connections ?? [], seeds.connections);
+  const components = upsertById(raw.components ?? [], seeds.components).map((item) => ({ ...item, version: item.version ?? 1 }));
+  const connections = upsertById(raw.connections ?? [], seeds.connections).map((item) => ({ ...item, version: item.version ?? 1 }));
   const viewpoints = upsertById(raw.viewpoints ?? [], seeds.viewpoints);
   const persistedConnectionRules = (raw.connectionRules ?? []).filter((rule) => !isLegacyConnectionRule(rule));
   const connectionRules = upsertById(persistedConnectionRules, seeds.connectionRules);
@@ -1036,10 +1034,13 @@ function normalizeSidebarState(raw: Partial<SidebarState>, seeds: SidebarState =
   const validationRules = upsertById(raw.validationRules ?? [], seeds.validationRules);
   const diagrams = upsertById((raw.diagrams ?? []).map((diagram) => ({
     ...diagram,
+    version: diagram.version ?? 1,
     metamodelId: diagram.metamodelId ?? metamodel.id
-  })), seeds.diagrams.map((diagram) => ({ ...diagram, metamodelId: metamodel.id })));
+  })), seeds.diagrams.map((diagram) => ({ ...diagram, metamodelId: metamodel.id })))
+    .map((diagram) => ({ ...diagram, version: diagram.version ?? 1 }));
 
   return {
+    dataRevision: raw.dataRevision ?? seeds.dataRevision ?? 0,
     metamodel,
     componentTypes,
     connectionTypes,
@@ -1068,21 +1069,18 @@ export function normalizeSidebarStateForCompany(raw: Partial<SidebarState>, comp
 
 export async function readSidebarState(): Promise<SidebarState> {
   const companyId = requireCompanyId();
-  const cached = cachedByCompany.get(companyId);
-  if (cached) return structuredClone(cached);
   const persisted = await databaseSidebarRepository().read(companyId);
   if (persisted) {
-    const normalized = normalizeSidebarStateForCompany(persisted, companyId);
-    const stored = JSON.stringify(normalized) === JSON.stringify(persisted)
-      ? persisted as SidebarState
-      : await databaseSidebarRepository().write(normalized, companyId);
-    cachedByCompany.set(companyId, stored);
-    return structuredClone(stored);
+    // Only companies that have never stored catalogs receive that one compatibility backfill.
+    // Other persisted states, especially intentional REQ-33 replacements, are returned exactly;
+    // a GET must neither resurrect starter entities nor become a competing whole-state write.
+    return structuredClone(persisted.catalogs === undefined
+      ? normalizeSidebarStateForCompany(persisted, companyId)
+      : persisted as SidebarState);
   }
 
   const initial = buildInitialSidebarStateForCompany(companyId);
   const stored = await databaseSidebarRepository().write(initial, companyId);
-  cachedByCompany.set(companyId, stored);
   return structuredClone(stored);
 }
 
@@ -1157,7 +1155,6 @@ export async function writeSidebarState(state: SidebarState, audit?: AuditEntryI
   const companyId = requireCompanyId();
   const auditWrite = audit ? { ...audit, userId: currentPrincipal()?.userId } : undefined;
   const stored = await databaseSidebarRepository().write(structuredClone(state), companyId, auditWrite);
-  cachedByCompany.set(companyId, stored);
   return structuredClone(stored);
 }
 
@@ -1356,24 +1353,22 @@ export async function getComponents(): Promise<ComponentInstance[]> {
 
 export async function addComponent(comp: ComponentInstance): Promise<ComponentInstance> {
   const state = await readSidebarState();
+  comp = { ...comp, version: 1 };
   state.components.push(comp);
   await writeSidebarState(state);
   return comp;
 }
 
-export async function updateComponent(id: string, patch: Partial<ComponentInstance>): Promise<ComponentInstance | null> {
+export async function updateComponent(id: string, patch: Partial<ComponentInstance>, expectedVersion: number): Promise<ComponentInstance | null> {
   const state = await readSidebarState();
   const idx = state.components.findIndex((c) => c.id === id);
   if (idx === -1) return null;
-  state.components[idx] = { ...state.components[idx], ...patch, id };
-  await writeSidebarState(state);
-  return state.components[idx];
+  const value = { ...state.components[idx], ...patch, id, version: state.components[idx].version };
+  return databaseSidebarRepository().updateComponent(requireCompanyId(), value, expectedVersion);
 }
 
-export async function deleteComponent(id: string): Promise<boolean> {
-  const state = await readSidebarState();
-  if (!state.components.some((component) => component.id === id)) return false;
-  await writeSidebarState(removeComponentWithConnections(state, id));
+export async function deleteComponent(id: string, expectedVersion: number): Promise<boolean> {
+  await databaseSidebarRepository().deleteComponent(requireCompanyId(), id, expectedVersion);
   return true;
 }
 
@@ -1386,6 +1381,7 @@ export async function getConnections(): Promise<ConnectionInstance[]> {
 export async function addConnection(conn: ConnectionInstance): Promise<ConnectionInstance> {
   const state = await readSidebarState();
   assertValidConnectionEndpoints(state, conn);
+  conn = { ...conn, version: 1 };
   state.connections.push(conn);
   await writeSidebarState(state);
   return conn;
@@ -1404,25 +1400,16 @@ export async function addConnectionToDiagram(
   };
 }
 
-export async function updateConnection(id: string, patch: Partial<ConnectionInstance>): Promise<ConnectionInstance | null> {
+export async function updateConnection(id: string, patch: Partial<ConnectionInstance>, expectedVersion: number): Promise<ConnectionInstance | null> {
   const state = await readSidebarState();
   const idx = state.connections.findIndex((c) => c.id === id);
   if (idx === -1) return null;
-  state.connections[idx] = { ...state.connections[idx], ...patch, id };
-  await writeSidebarState(state);
-  return state.connections[idx];
+  const value = { ...state.connections[idx], ...patch, id, version: state.connections[idx].version };
+  return databaseSidebarRepository().updateConnection(requireCompanyId(), value, expectedVersion);
 }
 
-export async function deleteConnection(id: string): Promise<boolean> {
-  const state = await readSidebarState();
-  const before = state.connections.length;
-  state.connections = state.connections.filter((c) => c.id !== id);
-  state.diagrams = state.diagrams.map((d) => ({
-    ...d,
-    connectionIds: d.connectionIds.filter((cid) => cid !== id)
-  }));
-  if (state.connections.length === before) return false;
-  await writeSidebarState(state);
+export async function deleteConnection(id: string, expectedVersion: number): Promise<boolean> {
+  await databaseSidebarRepository().deleteConnection(requireCompanyId(), id, expectedVersion);
   return true;
 }
 
@@ -1442,18 +1429,18 @@ export async function getDiagramWithContents(id: string): Promise<{
 
 export async function addDiagram(diagram: Diagram): Promise<Diagram> {
   const state = await readSidebarState();
+  diagram = { ...diagram, version: 1 };
   state.diagrams.push(diagram);
   await writeSidebarState(state);
   return diagram;
 }
 
-export async function updateDiagram(id: string, patch: Partial<Diagram>): Promise<Diagram | null> {
+export async function updateDiagram(id: string, patch: Partial<Diagram>, expectedVersion: number): Promise<Diagram | null> {
   const state = await readSidebarState();
   const idx = state.diagrams.findIndex((d) => d.id === id);
   if (idx === -1) return null;
-  state.diagrams[idx] = { ...state.diagrams[idx], ...patch, id };
-  await writeSidebarState(state);
-  return state.diagrams[idx];
+  const value = { ...state.diagrams[idx], ...patch, id, version: state.diagrams[idx].version };
+  return databaseSidebarRepository().updateDiagram(requireCompanyId(), value, expectedVersion);
 }
 
 export async function addCatalog(catalog: Catalog): Promise<Catalog> {
@@ -1481,11 +1468,7 @@ export async function deleteCatalog(id: string): Promise<boolean> {
   return true;
 }
 
-export async function deleteDiagram(id: string): Promise<boolean> {
-  const state = await readSidebarState();
-  const before = state.diagrams.length;
-  state.diagrams = state.diagrams.filter((d) => d.id !== id);
-  if (state.diagrams.length === before) return false;
-  await writeSidebarState(state);
+export async function deleteDiagram(id: string, expectedVersion: number): Promise<boolean> {
+  await databaseSidebarRepository().deleteDiagram(requireCompanyId(), id, expectedVersion);
   return true;
 }
