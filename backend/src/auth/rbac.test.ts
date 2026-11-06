@@ -126,7 +126,7 @@ describe("complete route inventory", () => {
     async function files(directory: string): Promise<string[]> {
       return (await Promise.all((await readdir(directory, { withFileTypes: true })).map((item) => item.isDirectory() ? files(path.join(directory, item.name)) : [path.join(directory, item.name)]))).flat();
     }
-    const allowed = ["server.ts", "authRoutes.ts", "userRoutes.ts", "sidebarRoutes.ts", "transferRoutes.ts"];
+    const allowed = ["server.ts", "authRoutes.ts", "userRoutes.ts", "sidebarRoutes.ts", "transferRoutes.ts", "modelTransferRoutes.ts"];
     for (const file of (await files(path.resolve("src"))).filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))) {
       if (/\b(?:app|router)\.(?:post|put|patch|delete|all|route)\s*\(/.test(await readFile(file, "utf8"))) {
         expect(allowed, file).toContain(path.basename(file));

@@ -1,5 +1,22 @@
 # Evaluation Matrix
 
+## REQ-33 – lokaler Nacharbeitsstand, 05.11.2026
+
+Die Entwickler-Heads `6b9201b9…` und `72364525…` wurden unabhängig nicht freigegeben. Die folgende Matrix beschreibt den danach geänderten lokalen Kandidaten; jeder neue Head benötigt dieselbe getrennte Kontrolle.
+
+| Kriterium | Lokale Evidenz | Abnahmegrenze |
+|---|---|---|
+| `schemaVersion` und JSON Schema | `vibe-eam-model.schema.json`; positive/negative Ajv-Tests; getrennte Fehlercodes für missing/legacy/future | Version 1 lehnt unversionierte Legacy-Dateien ab; keine erfundene Migration aus Teilformaten |
+| Vollständiger aktueller Umfang | Metamodell/Regeln/Viewpoints, Instanzen/Relationen, Diagramme/Positionen und Kataloge im Vertrag und in der DB-Fixture | Benutzer, Secrets, Auditverlauf und technische DB-Zeitstempel bewusst ausgeschlossen |
+| Export → echter Import → Export | isolierter PostgreSQL-Lauf; byte-identische Antworten; reale Writes/Reads | Lokaler Test, kein Remote-CI-/Stagingnachweis |
+| Zeitstempel und nullable Upserts | gleiche portable Metamodell-ID in zwei Companies; verschiedene Zeitstempel und Altwerte; vollständiger Re-Export byteidentisch | Nur exportierte Vertragsfelder; technische Diagramm-/Katalogzeitstempel bleiben ausgeschlossen |
+| Portable IDs/Tenants | gleiche Datei gleichzeitig in zwei Companies; gemischte präfixierte/unpräfixierte Alt-IDs bleiben bijektiv; Referenzen und gleiche Re-Exporte geprüft | Replace statt Merge; 2-MiB-Parsergrenze |
+| Vollständiger Replace | Wechsel der Metamodell-ID, leerer Ersatz, keine alten Modellzeilen, erfolgreiche Wiederverwendung externer IDs | User, Audit-Historie und Legacy-Modellpfad bleiben absichtlich erhalten |
+| Fachregeln | bestehende Relation-/Diagrammvalidatoren auf importiertem Gesamtzustand; missing/denied Rule, Self-Connection und Viewpoint-Gegenfälle | Warnungen bleiben entsprechend bestehendem Validatorvertrag nicht blockierend |
+| DB-Eindeutigkeit | ConnectionRule-Tripel, ViewpointRule je Viewpoint, externe IDs und Mitgliedschaften vor Mutation geprüft; API-/DB-Rollback-Gegenfall | Schema- und semantische Fehler besitzen getrennte verständliche 400-Codes |
+| Fehler/Atomizität | Referenz-/Domänenfehler vor Mutation; Triggerfehler nach begonnenem Metamodell-Replace rollt alten Whole-State und Audit zurück | Keine allgemeine Konkurrenzkontrolle; Gegenstand von REQ-26 |
+| Rollen/Kompatibilität | Export für Viewer, Import nur Admin; 401/403; Legacy-/Metamodell-/CSV-/XLSX-Regression | Kein UI-Importdialog; bestehende Teilformate bleiben separat |
+
 ## REQ-24 – aktueller Prüfstand, 20.10.2026
 
 Die damaligen Auth-/Testbewertungen unten sind historisch. Die aktuelle kriteriumsweise Evidenz, tatsächlich ausgeführte Kommandos und Einschränkungen stehen in [REQ-24_IMPLEMENTATION_EVIDENCE.md](REQ-24_IMPLEMENTATION_EVIDENCE.md). Die lokale Umsetzung ist unabhängig bestätigt; der getrennte Auditdatensatz steht in [REQ-24_REVIEW.md](REQ-24_REVIEW.md). Draft-PR #88 ist veröffentlicht. Die beiden dort gemeldeten CodeQL-Befunde wurden lokal korrigiert. Eine getrennte Folgekontrolle fand und veranlasste zusätzliche Proxy-, Parser- und Registrierungsbegrenzungen; der neue Remote-Check bleibt bis zum Push separat nachzuweisen. Containerausführung, Deployment und menschliche Freigabe bleiben offen.
@@ -63,7 +80,7 @@ Status:
 | Risk-Cost Portfolio | 3 | Tatsaechlich funktional | Praesentationsfaehige 2x2-X/Y-Bubble-Matrix mit Cost-Achse, Impact-Achse, Risiko-Groesse, Layer-Farbe, Tooltip, Detailkarte, Filtern und einklappbarer kompakter Tabelle. |
 | Capability Map | 2 | Teilweise funktional | Dynamisch aus semantisch validierten Relationen berechnet, aber weiterhin ohne Hierarchie und Portfolio-Kennzahlen. |
 | Lifecycle Roadmap | 3 | Tatsaechlich funktional | Wird aus echten Modelldaten sortiert und gerendert; einfache Tabelle statt echter Timeline. |
-| Import/Export | 3 | Tatsaechlich funktional | Export/Import Roundtrip war modellgleich. Import validiert Struktur und semantische Relationen, aber keine Schema-Versionierung. |
+| Import/Export | 3 | Historischer Teilnachweis plus aktueller REQ-33-Nachweis | Die frühere Aussage bezog sich nur auf das Legacy-Teilmodell. Der vollständige aktuelle JSON-Vertrag mit Schema-Version 1 und echtem PostgreSQL-Roundtrip ist separat unter „REQ-33“ belegt. |
 | Audit Log | 3 | Tatsaechlich funktional | Create, Update, Delete und Import erzeugten Eintraege. Keine Before/After-Diffs. |
 | REST API | 3 | Tatsaechlich funktional | Alle geforderten Endpunkte wurden mindestens einmal technisch angesprochen. |
 | Seed-Daten | 3 | Tatsaechlich funktional | 12 Elemente und 12 Relationen vorhanden. |

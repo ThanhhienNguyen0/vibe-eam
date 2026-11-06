@@ -1,0 +1,248 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vibe-eam.example/schemas/model-transfer-v1.json",
+  "title": "Vibe-EAM complete model transfer",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "format", "model"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "format": { "const": "vibe-eam-model" },
+    "model": { "$ref": "#/$defs/sidebarState" }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 255 },
+    "text": { "type": "string" },
+    "nonEmptyText": { "type": "string", "minLength": 1 },
+    "stringArray": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "stringMap": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "metamodel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "description", "version", "isActive", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/nonEmptyText" },
+        "description": { "$ref": "#/$defs/text" },
+        "version": { "$ref": "#/$defs/nonEmptyText" },
+        "isActive": { "const": true },
+        "createdAt": { "type": "string", "minLength": 1 },
+        "updatedAt": { "type": "string", "minLength": 1 }
+      }
+    },
+    "componentType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "color", "icon", "description", "customPropertyKeys"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/nonEmptyText" },
+        "color": { "$ref": "#/$defs/text" },
+        "icon": { "$ref": "#/$defs/text" },
+        "description": { "$ref": "#/$defs/text" },
+        "customPropertyKeys": { "$ref": "#/$defs/stringArray" },
+        "shape": { "enum": ["box", "process", "event", "event-start", "event-end", "gateway", "gateway-xor", "gateway-and", "gateway-or", "datastore", "pool"] },
+        "category": { "$ref": "#/$defs/text" },
+        "layer": { "$ref": "#/$defs/text" },
+        "isRequiredInViewpoint": { "type": "boolean" },
+        "allowedInViewpointIds": { "$ref": "#/$defs/stringArray" },
+        "isAbstract": { "type": "boolean" },
+        "isStakeholderRelevant": { "type": "boolean" }
+      }
+    },
+    "connectionType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "color", "lineStyle", "allowedSourceTypeIds", "allowedTargetTypeIds", "description"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/nonEmptyText" },
+        "color": { "$ref": "#/$defs/text" },
+        "lineStyle": { "enum": ["solid", "dashed", "dotted"] },
+        "allowedSourceTypeIds": { "$ref": "#/$defs/stringArray" },
+        "allowedTargetTypeIds": { "$ref": "#/$defs/stringArray" },
+        "description": { "$ref": "#/$defs/text" },
+        "category": { "$ref": "#/$defs/text" },
+        "requiredForSourceTypes": { "$ref": "#/$defs/stringArray" },
+        "requiredForTargetTypes": { "$ref": "#/$defs/stringArray" },
+        "directionDescription": { "$ref": "#/$defs/text" },
+        "semanticCategory": { "$ref": "#/$defs/text" }
+      }
+    },
+    "connectionRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sourceComponentTypeId", "connectionTypeId", "targetComponentTypeId", "allowed", "required", "severity", "description", "rationale"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "sourceComponentTypeId": { "$ref": "#/$defs/id" },
+        "connectionTypeId": { "$ref": "#/$defs/id" },
+        "targetComponentTypeId": { "$ref": "#/$defs/id" },
+        "allowed": { "type": "boolean" },
+        "required": { "type": "boolean" },
+        "severity": { "enum": ["error", "warning"] },
+        "description": { "$ref": "#/$defs/text" },
+        "rationale": { "$ref": "#/$defs/text" },
+        "viewpointIds": { "$ref": "#/$defs/stringArray" },
+        "minOccurrences": { "type": "integer", "minimum": 0 },
+        "maxOccurrences": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "viewpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "description", "stakeholderRole", "allowedComponentTypeIds", "allowedConnectionTypeIds", "requiredComponentTypeIds", "requiredConnectionTypeIds", "purpose"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/nonEmptyText" },
+        "description": { "$ref": "#/$defs/text" },
+        "stakeholderRole": { "$ref": "#/$defs/text" },
+        "allowedComponentTypeIds": { "$ref": "#/$defs/stringArray" },
+        "allowedConnectionTypeIds": { "$ref": "#/$defs/stringArray" },
+        "requiredComponentTypeIds": { "$ref": "#/$defs/stringArray" },
+        "requiredConnectionTypeIds": { "$ref": "#/$defs/stringArray" },
+        "requiredConnectionRuleIds": { "$ref": "#/$defs/stringArray" },
+        "maxVisibleLayers": { "type": "integer", "minimum": 0 },
+        "visibleLayerIds": { "$ref": "#/$defs/stringArray" },
+        "purpose": { "$ref": "#/$defs/text" }
+      }
+    },
+    "viewpointRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "viewpointId", "allowedComponentTypeIds", "allowedConnectionTypeIds", "allowedConnectionRuleIds", "requiredComponentTypeIds", "requiredConnectionTypeIds", "requiredConnectionRuleIds"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "viewpointId": { "$ref": "#/$defs/id" },
+        "allowedComponentTypeIds": { "$ref": "#/$defs/stringArray" },
+        "allowedConnectionTypeIds": { "$ref": "#/$defs/stringArray" },
+        "allowedConnectionRuleIds": { "$ref": "#/$defs/stringArray" },
+        "requiredComponentTypeIds": { "$ref": "#/$defs/stringArray" },
+        "requiredConnectionTypeIds": { "$ref": "#/$defs/stringArray" },
+        "requiredConnectionRuleIds": { "$ref": "#/$defs/stringArray" },
+        "description": { "$ref": "#/$defs/text" },
+        "editableComponentTypeIds": { "$ref": "#/$defs/stringArray" },
+        "visibleComponentTypeIds": { "$ref": "#/$defs/stringArray" },
+        "severity": { "enum": ["error", "warning"] }
+      }
+    },
+    "validationRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "description", "scope", "direction", "minOccurrences", "severity", "message", "active"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/nonEmptyText" },
+        "description": { "$ref": "#/$defs/text" },
+        "scope": { "enum": ["metamodel", "viewpoint"] },
+        "viewpointId": { "$ref": "#/$defs/id" },
+        "sourceComponentTypeId": { "$ref": "#/$defs/id" },
+        "requiredConnectionTypeId": { "$ref": "#/$defs/id" },
+        "targetComponentTypeId": { "$ref": "#/$defs/id" },
+        "direction": { "enum": ["outgoing", "incoming"] },
+        "minOccurrences": { "type": "integer", "minimum": 0 },
+        "severity": { "enum": ["error", "warning"] },
+        "message": { "$ref": "#/$defs/text" },
+        "active": { "type": "boolean" }
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "componentTypeId", "properties", "description"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "externalId": { "$ref": "#/$defs/nonEmptyText" },
+        "name": { "$ref": "#/$defs/nonEmptyText" },
+        "componentTypeId": { "$ref": "#/$defs/id" },
+        "properties": { "$ref": "#/$defs/stringMap" },
+        "description": { "$ref": "#/$defs/text" }
+      }
+    },
+    "connection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "connectionTypeId", "sourceComponentId", "targetComponentId", "description"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "externalId": { "$ref": "#/$defs/nonEmptyText" },
+        "name": { "$ref": "#/$defs/text" },
+        "connectionTypeId": { "$ref": "#/$defs/id" },
+        "sourceComponentId": { "$ref": "#/$defs/id" },
+        "targetComponentId": { "$ref": "#/$defs/id" },
+        "description": { "$ref": "#/$defs/text" },
+        "properties": { "$ref": "#/$defs/stringMap" }
+      }
+    },
+    "position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "diagram": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "description", "componentIds", "connectionIds", "positions"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/nonEmptyText" },
+        "description": { "$ref": "#/$defs/text" },
+        "componentIds": { "$ref": "#/$defs/stringArray" },
+        "connectionIds": { "$ref": "#/$defs/stringArray" },
+        "positions": {
+          "type": "object",
+          "propertyNames": { "minLength": 1 },
+          "additionalProperties": { "$ref": "#/$defs/position" }
+        },
+        "metamodelId": { "$ref": "#/$defs/id" },
+        "viewpointId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "description", "kind", "componentTypeIds", "connectionTypeIds", "propertyKeys", "columns"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/nonEmptyText" },
+        "description": { "$ref": "#/$defs/text" },
+        "kind": { "enum": ["elements", "relations"] },
+        "componentTypeIds": { "$ref": "#/$defs/stringArray" },
+        "connectionTypeIds": { "$ref": "#/$defs/stringArray" },
+        "propertyKeys": { "$ref": "#/$defs/stringArray" },
+        "columns": { "$ref": "#/$defs/stringArray" }
+      }
+    },
+    "sidebarState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metamodel", "componentTypes", "connectionTypes", "connectionRules", "viewpointRules", "validationRules", "components", "connections", "diagrams", "viewpoints", "catalogs"],
+      "properties": {
+        "metamodel": { "$ref": "#/$defs/metamodel" },
+        "componentTypes": { "type": "array", "items": { "$ref": "#/$defs/componentType" } },
+        "connectionTypes": { "type": "array", "items": { "$ref": "#/$defs/connectionType" } },
+        "connectionRules": { "type": "array", "items": { "$ref": "#/$defs/connectionRule" } },
+        "viewpointRules": { "type": "array", "items": { "$ref": "#/$defs/viewpointRule" } },
+        "validationRules": { "type": "array", "items": { "$ref": "#/$defs/validationRule" } },
+        "components": { "type": "array", "items": { "$ref": "#/$defs/component" } },
+        "connections": { "type": "array", "items": { "$ref": "#/$defs/connection" } },
+        "diagrams": { "type": "array", "items": { "$ref": "#/$defs/diagram" } },
+        "viewpoints": { "type": "array", "items": { "$ref": "#/$defs/viewpoint" } },
+        "catalogs": { "type": "array", "items": { "$ref": "#/$defs/catalog" } }
+      }
+    }
+  }
+}

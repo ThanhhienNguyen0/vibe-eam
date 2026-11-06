@@ -84,7 +84,7 @@ Unabhängige Kontrolle muss finalen Diff, Anforderungsabdeckung, scoped Deepmerg
 - Filter nach Layer und Elementtyp sowie Risiko-/Kosten-Heatmap sind implementiert.
 - Capability Map wird dynamisch aus Modelldaten und Relationen abgeleitet.
 - Lifecycle Roadmap wird aus echten Modelldaten erzeugt.
-- JSON Export und Import sind roundtrip-faehig fuer valide Modelle.
+- Historischer Teilnachweis: Der damalige Legacy-JSON-Export und -Import waren für valide Legacy-Modelle roundtrip-fähig; dies belegte weder den aktuellen Sidebar-Zustand noch Schema-Versionierung.
 - Audit Log schreibt Eintraege fuer Create, Update, Delete und Import.
 
 ## Tatsaechlich Gepruefte Punkte
@@ -97,7 +97,41 @@ Unabhängige Kontrolle muss finalen Diff, Anforderungsabdeckung, scoped Deepmerg
 - Alle geforderten REST-Endpunkte wurden angesprochen.
 - Element Create, Patch und Delete funktionieren.
 - Relation Create und Delete funktionieren.
-- Import/Export Roundtrip war modellgleich.
+- Historischer Teilnachweis: Der damalige Legacy-Import/Export-Roundtrip war modellgleich; Diagramme, aktuelles Metamodell, Kataloge, Tenant-Portabilität und echte PostgreSQL-Writes waren nicht Gegenstand dieses Nachweises.
+
+## REQ-33: vollständiger JSON-Modelltransfer am 04.11.2026
+
+- Die zunächst naheliegende Wiederverwendung von `/api/model` wurde verworfen, weil dieser Pfad das historische Teilmodell statt des aktuellen Editors abbildet.
+- Der erste DB-Test zeigte, dass Starter-IDs intern Company-IDs enthalten. Der Vertrag wurde daraufhin auf tenant-neutrale Datei-IDs und deterministische Ziel-Tenant-Materialisierung geändert; die schwächere Annahme „interne IDs direkt exportieren“ wurde nicht beibehalten.
+- Kaputte Referenzen werden vor dem bestehenden Writer geprüft. Das ist erforderlich, weil dessen allgemeine Normalisierung verwaiste Instanzreferenzen für normale Laufzeitpfade bereinigt und damit als Datei-Validator zu permissiv wäre.
+- Ein PostgreSQL-Trigger erzwang einen Fehler innerhalb der Transaktion. Der unveränderte Export und die unveränderte Auditanzahl danach belegen Rollback statt nur Vorabvalidierung.
+- Fehlversuche wurden nicht als Produktdefekte umgedeutet: Sandbox-`ENOTFOUND`, ein PostgreSQL-16-Verzeichnis ohne `initdb.exe`, eine Fixture mit doppeltem Typ-ID-Eintrag, die Verwendung einer portablen ID an einer internen CRUD-Route und fehlender CSV-`sheet`-Parameter wurden jeweils konkret korrigiert.
+- Der erste Gesamtcheck löste wegen fehlender Root-Installation ein altes, außerhalb des Worktrees liegendes ESLint 8 auf. `npm ci` stellte den gelockten Repository-Stand her; danach war der einzige echte Lintbefund ein ungenutzter Testimport und wurde entfernt.
+- Parallele DB-Testdateien verursachten Last-Timeouts; nach serieller Ausführung überschritt eine bestehende REQ-31-Prüfung einmal das Vitest-Standardlimit von fünf Sekunden. Der gemeinsame DB-Runner verwendet deshalb ein transparentes 30-Sekunden-Einzeltestlimit; fachliche Assertions und die 30-Sekunden-Produkttransaktion blieben unverändert.
+- Der lokale Container-Image-Build blieb ein Umgebungsblocker: Docker Desktop war installiert, aber die Linux-Engine-Pipe fehlte und der Systemdienst konnte nicht geöffnet werden. Der Build wird deshalb nicht als bestanden dargestellt.
+- Keine Aussage über Remote-CI, CodeQL, Deployment, menschliche Freigabe oder Produktionsreife wird aus lokalen Tests abgeleitet.
+
+### REQ-33-Nacharbeit nach abgelehnter Kontrolle am 05.11.2026
+
+- Die unabhängige Kontrolle gab `6b9201b9…` wegen zwei P1-, eines P2- und eines P3-Befunds nicht frei. Der damalige lokale Grünstand war daher kein Abnahmenachweis.
+- Die Entwicklerreproduktion bestätigte alle technischen Befunde: Präfixentfernung kollabierte zwei zulässige Alt-IDs, der Parser akzeptierte eine Relation ohne passende ConnectionRule, und der reale Writer behielt beim Metamodellwechsel den alten Graphen. Die PostgreSQL-Reproduktion zeigte bereits nach dem ersten Wechsel zwei Company-Metamodelle.
+- Die Replace-Korrektur löscht ausschließlich frühere Metamodelle derselben Company in derselben Transaktion. FK-Cascades entfernen deren Typen, Regeln, Diagramme und Instanzen; User, Audit und Legacy-Modellpfad bleiben außerhalb. Ein Triggerfehler nach der Löschung bestätigt, dass der gesamte alte Graph samt Audit erhalten bleibt.
+- Import und Export verwenden nun die bestehenden Relation-/Diagrammvalidatoren auf dem übergebenen Gesamtzustand. Drei DB-Gegenbeispiele belegen unveränderten Export und unverändertes Audit bei ConnectionRule-, Self-Connection- und Viewpoint-Verstößen.
+- Die portable Abbildung gruppiert alle durch Präfixentfernung entstehenden Kandidaten. Der erste Kandidat bleibt lesbar; weitere Kollisionen erhalten deterministische freie IDs. Ein gemischter Altbestand prüft Bijektivität, Referenzen und den Fixpunkt nach Ziel-Tenant-Import.
+- Ein erster Testaufruf enthielt `--cache=false` doppelt und scheiterte nur am CLI-Argument; der korrigierte Lauf reproduzierte die zwei Produktfehler. Der erste DB-Aufruf war in der eingeschränkten Prozessumgebung mit `spawnSync ... initdb.exe UNKNOWN` blockiert und wurde identisch mit erlaubter lokaler Prozessausführung wiederholt.
+- Der erste korrigierte DB-Lauf fand eine fachlich ungültige Positiv-Fixture, der zweite einen wirkungslosen Viewpoint-Gegenfall bei zwei Komponenten desselben Typs. Beide Tests wurden präzisiert, ohne Assertions oder Produktregeln abzuschwächen; der folgende frische Lauf bestand mit sechs Migrationen und 12/12 DB-Tests.
+- Der Secret-Scan-Wert 72 gehörte nicht zum unabhängig geprüften Head; dort wurden tatsächlich 73 Commits geprüft. Erst nach Erstellung des Nacharbeitscommits wurde der neue Wert beobachtet: Canary korrekt abgelehnt, 74 Commits und 203 aktuelle Dateien ohne echten Fund. Der rein dokumentarisch amendierte finale Head wurde danach mit demselben Ergebnis erneut gescannt.
+- Nach der Testpräzisierung bestanden 25/25 fokussierte Tests, 12/12 echte DB-Tests und der vollständige Gate-Lauf mit 168 bestandenen/12 übersprungenen Backend- sowie 36/36 Frontendtests. Dependency-Scan und drei reale Compose-Parserläufe bestanden; der erneute Image-Build scheiterte unverändert vor dem Build an der fehlenden Docker-Linux-Engine-Pipe.
+
+### Zweite REQ-33-Nacharbeit nach abgelehnter Kontrolle am 05.11.2026
+
+- Die zweite unabhängige Kontrolle bestätigte die bisherigen vier Korrekturen, lehnte `72364525…` jedoch wegen verlorenem Metamodell-`createdAt` und einer ungeprüften ViewpointRule-Composite-Unique-Regel ab.
+- Die Reproduktion zeigte, dass das Problem nicht auf `createdAt` begrenzt war: Prisma ignoriert `undefined` in Updates, wodurch alte nullable Werte in sieben Entitätsklassen erhalten blieben. Der Writer setzt deshalb alle nullable Vertragsfelder explizit auf `null` und übernimmt beide exportierten Metamodellzeitstempel.
+- Der Schema-/Prisma-Abgleich fand vier Composite-Constraintklassen im importierten Umfang. ConnectionRule-Tripel und nichtleere externe IDs waren bereits semantisch geschützt, Mitgliedschaften bereits durch `uniqueItems`; ergänzt wurden ViewpointRule-Zuordnungen, ein einheitlicher `MODEL_UNIQUENESS_INVALID`-Fehler und Regressionen für alle Klassen.
+- Der erste neue Uniqueness-Test erwartete für Diagrammmitgliedschaften den semantischen Code, obwohl Ajv sie früher mit `MODEL_SCHEMA_INVALID` abweist. Ein weiterer Entwurf verwendete leere externe IDs, die ebenfalls bereits am Schema scheitern. Die Tests wurden auf die tatsächlichen Vertragsgrenzen und doppelte nichtleere externe IDs präzisiert; Produktregeln wurden nicht abgeschwächt.
+- Die erste PostgreSQL-Reproduktion bestätigte HTTP 500 für die doppelte ViewpointRule und einen nicht byteidentischen Cross-Tenant-Re-Export mit altem `createdAt` und alten nullable Feldern. Nach der Korrektur bestand der vollständig aufgezeichnete frische Lauf mit sechs Migrationen und 13/13 Tests.
+- Die frühere Secret-Zahl 74 gehört ausschließlich zum später abgelehnten Head `72364525…`. Der commitgebundene Scan des neuen Kandidaten bestätigte Canary-Erkennung, 75 Commits und 203 aktuelle Dateien ohne echten Fund; der rein dokumentarisch amendierte finale Head wurde danach mit demselben Ergebnis erneut gescannt.
+- Der Abschluss bestand mit 26/26 Zieltests, 13/13 realen DB-Tests, 169 bestandenen/13 übersprungenen Backend- und 36/36 Frontendtests. Dependency-Audit und drei reale Compose-Parserläufe bestanden; der Containerbuild blieb unverändert vor dem Build an der fehlenden Docker-Linux-Engine-Pipe blockiert.
 - Audit Log schrieb Eintraege fuer Create, Update, Delete und Import.
 - Ungueltige Selbstrelation wird abgelehnt.
 - Ungueltiger Import ohne `elements`/`relations` wird mit HTTP 400 abgelehnt.

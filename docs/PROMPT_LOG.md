@@ -1,5 +1,24 @@
 # Prompt Log
 
+## 04.11.2026 – REQ-33 / Issue #65
+
+Auftrag: REQ-33 als ersten Schritt der Sequenz REQ-33 → REQ-26 → REQ-23 auf exakt `origin/main` `8868629a8727c99bc5472e65dc261d49ebb34c0c` implementieren. Gefordert waren ein vollständiger aktueller JSON-Vertrag statt eines Legacy-Teilformats, `schemaVersion`, JSON Schema, deterministischer echter PostgreSQL-Roundtrip, klare Legacy-/Future-Fehler, portable IDs, Tenant-/Rollenisolation, atomare Fehler, Ausschluss von Benutzern/Secrets/Auditverlauf, Regression bestehender Teilformate sowie wahrheitsgemäße Forschungs- und Prüfdokumentation. Kein Push, PR, Merge, Issue-Close, Deployment oder Beginn von REQ-26.
+
+Umsetzung: neuer Vertrag unter `/api/sidebar/model/export|import`, Ajv-validiertes Draft-07-Schema, vollständige semantische Referenzprüfung, tenant-neutrale Datei-IDs mit Ziel-Tenant-Materialisierung, Admin-only Replace-Import und transaktionaler Audit-Summary. Die erste direkte-ID-Lösung wurde nach dem DB-Befund company-präfixierter Starter-IDs verworfen. Ausgeführte Fehlversuche und Sandbox-Wiederholungen stehen in `REQ-33_JSON_MODEL_TRANSFER.md` und `AI_REFLECTION_LOG.md`; keine Laufzeit- oder KI-Anteile wurden erfunden.
+
+## 05.11.2026 – REQ-33-Nacharbeit nach unabhängiger Ablehnung
+
+Die unabhängige Kontrolle lehnte Head `6b9201b96d373fd1d420c3b0a0db7a4d79cf8a64` ab: Ein Metamodellwechsel ließ den alten Company-Modellgraphen zurück, der Import umging vorhandene Relation-/Diagrammregeln, die Präfixentfernung konnte zwei zulässige IDs kollabieren, und die dokumentierte Secret-Scan-Zahl gehörte nicht zum geprüften Head.
+
+Der Folgeauftrag verlangt reproduzierte Fehler, einen transaktionalen vollständigen Replace bei wechselnder Metamodell-ID, Wiederverwendung externer IDs, bestehende Domänenvalidatoren auf dem importierten Gesamtzustand, eine bijektive deterministische ID-Abbildung, Export-Selbstvalidierung, neue Unit-/API-/PostgreSQL-Gegenbeispiele sowie vollständige lokale Gates und einen neuen Commit. Push, PR, Merge, Issue-Close und Freigabebehauptung bleiben untersagt; der neue Head geht erneut an dieselbe unabhängige Kontrolle.
+
+## 05.11.2026 – Zweite REQ-33-Nacharbeit nach unabhängiger Ablehnung
+
+Die erneute unabhängige Kontrolle bestätigte die vier vorherigen Findings als behoben, lehnte Head `7236452514c00f842a33a95e46783072aceff2ac` jedoch wegen zweier neuer Befunde ab: `metamodel.createdAt` wurde beim Upsert eines vorhandenen Ziel-Metamodells nicht übernommen, und mehrere ViewpointRules für denselben Viewpoint erreichten erst die DB-Composite-Unique-Constraint mit HTTP 500.
+
+Der Folgeauftrag verlangt die eigene Reproduktion, einen systematischen Abgleich aller exportierten Upsert-Felder und importrelevanten Composite-Unique-Constraints, Cross-Tenant-Zeitstempel-/Nullable-Regressionsfälle, verständliche 400-Fehler vor Mutation, vollständige lokale Gates, frisches PostgreSQL und einen erst nach dem neuen Commit dokumentierten Secret-Scan. Push, PR, Merge und Freigabebehauptung bleiben untersagt.
+
+
 ## REQ-24 – Authentifizierung und Rollenmodell (19.10.2026)
 
 Auftrag aus Umsetzungs-Chat `01a154a2-45c9-78b2-9b0d-3e1fb5d6a623`, delegiert durch Kontrollchat `01a14fce-41f9-7302-8f9b-873a6e0a2c51`: „Setze REQ-24 ‚Authentifizierung und Rollenmodell (Admin, Architekt, Viewer)‘ ... vollständig, wartbar und nachvollziehbar um.“ Issue [#56](https://github.com/ThanhhienNguyen0/vibe-eam/issues/56) wurde am 19.10.2026 gelesen. Der Issuetext nennt fünf Akzeptanzkriterien und OIDC-Erweiterbarkeit als Hinweis; der Auftrag behandelt diesen Hinweis ausdrücklich als sechsten Prüfpunkt.

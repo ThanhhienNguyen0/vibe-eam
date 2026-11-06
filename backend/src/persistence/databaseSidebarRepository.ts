@@ -18,6 +18,8 @@ export interface SidebarStateRepository {
   disconnect(): Promise<void>;
 }
 
+export class TenantResourceIdConflictError extends Error {}
+
 const json = (value: unknown): Prisma.InputJsonValue => value as Prisma.InputJsonValue;
 const stringArray = (value: Prisma.JsonValue | null | undefined): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
@@ -249,7 +251,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
       this.prisma.connectionInstance.count({ where: { id: { in: state.connections.map((item) => item.id) }, companyId: { not: companyId } } })
     ]);
     if (foreignCounts.some((count) => count > 0)) {
-      throw new Error("One or more resource IDs are already owned by another company.");
+      throw new TenantResourceIdConflictError("One or more resource IDs are already owned by another company.");
     }
   }
 
@@ -260,7 +262,10 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
     await this.assertTenantIdsAvailable(state, companyId);
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.metamodel.updateMany({ where: { companyId }, data: { isActive: false } });
+      // A whole-state write with a new metamodel id is a replacement, not an append. Deleting
+      // prior company metamodels here cascades their types, rules, diagrams and instances inside
+      // this same transaction; users, audit entries and legacy ModelRecords are not descendants.
+      await tx.metamodel.deleteMany({ where: { companyId, id: { not: metamodelId } } });
       await tx.metamodel.upsert({
         where: { id: metamodelId },
         create: {
@@ -274,6 +279,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           description: state.metamodel.description,
           version: state.metamodel.version,
           isActive: state.metamodel.isActive,
+          createdAt: new Date(state.metamodel.createdAt),
           updatedAt: new Date(state.metamodel.updatedAt)
         }
       });
@@ -283,13 +289,13 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           metamodelId,
           name: item.name,
           description: item.description,
-          layer: item.layer,
-          category: item.category,
+          layer: item.layer ?? null,
+          category: item.category ?? null,
           color: item.color,
           icon: item.icon,
-          shape: item.shape,
+          shape: item.shape ?? null,
           customPropertyKeys: json(item.customPropertyKeys),
-          isRequiredInViewpoint: item.isRequiredInViewpoint,
+          isRequiredInViewpoint: item.isRequiredInViewpoint ?? null,
           allowedInViewpointIds: json(item.allowedInViewpointIds ?? []),
           isAbstract: item.isAbstract ?? false,
           isStakeholderRelevant: item.isStakeholderRelevant ?? false
@@ -301,11 +307,11 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           metamodelId,
           name: item.name,
           description: item.description,
-          directionDescription: item.directionDescription,
+          directionDescription: item.directionDescription ?? null,
           color: item.color,
           lineStyle: item.lineStyle,
-          semanticCategory: item.semanticCategory,
-          category: item.category,
+          semanticCategory: item.semanticCategory ?? null,
+          category: item.category ?? null,
           allowedSourceTypeIds: json(item.allowedSourceTypeIds),
           allowedTargetTypeIds: json(item.allowedTargetTypeIds),
           requiredForSourceTypes: json(item.requiredForSourceTypes ?? []),
@@ -326,7 +332,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           requiredComponentTypeIds: json(item.requiredComponentTypeIds),
           requiredConnectionTypeIds: json(item.requiredConnectionTypeIds),
           requiredConnectionRuleIds: json(item.requiredConnectionRuleIds ?? []),
-          maxVisibleLayers: item.maxVisibleLayers
+          maxVisibleLayers: item.maxVisibleLayers ?? null
         };
         await tx.viewpoint.upsert({ where: { id: item.id }, create: { id: item.id, ...data }, update: data });
       }
@@ -342,8 +348,8 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           description: item.description,
           rationale: item.rationale,
           viewpointIds: json(item.viewpointIds ?? []),
-          minOccurrences: item.minOccurrences,
-          maxOccurrences: item.maxOccurrences
+          minOccurrences: item.minOccurrences ?? null,
+          maxOccurrences: item.maxOccurrences ?? null
         };
         await tx.connectionRule.upsert({ where: { id: item.id }, create: { id: item.id, ...data }, update: data });
       }
@@ -359,8 +365,8 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           requiredConnectionRuleIds: json(item.requiredConnectionRuleIds),
           editableComponentTypeIds: json(item.editableComponentTypeIds ?? []),
           visibleComponentTypeIds: json(item.visibleComponentTypeIds ?? []),
-          description: item.description,
-          severity: item.severity
+          description: item.description ?? null,
+          severity: item.severity ?? null
         };
         await tx.viewpointRule.upsert({ where: { id: item.id }, create: { id: item.id, ...data }, update: data });
       }
@@ -370,10 +376,10 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           name: item.name,
           description: item.description,
           scope: item.scope,
-          viewpointId: item.viewpointId,
-          sourceComponentTypeId: item.sourceComponentTypeId,
-          requiredConnectionTypeId: item.requiredConnectionTypeId,
-          targetComponentTypeId: item.targetComponentTypeId,
+          viewpointId: item.viewpointId ?? null,
+          sourceComponentTypeId: item.sourceComponentTypeId ?? null,
+          requiredConnectionTypeId: item.requiredConnectionTypeId ?? null,
+          targetComponentTypeId: item.targetComponentTypeId ?? null,
           direction: item.direction,
           minOccurrences: item.minOccurrences,
           severity: item.severity,
@@ -386,7 +392,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         const data = {
           companyId,
           metamodelId,
-          viewpointId: item.viewpointId,
+          viewpointId: item.viewpointId ?? null,
           name: item.name,
           description: item.description
         };

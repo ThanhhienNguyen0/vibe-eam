@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import sidebarRouter from "./Sidebar/sidebarRoutes.js";
 import transferRouter from "./importExport/transferRoutes.js";
+import modelTransferRouter from "./modelTransfer/modelTransferRoutes.js";
 import { createAuthRouter } from "./auth/authRoutes.js";
 import { requireAuth } from "./auth/authMiddleware.js";
 import { AuthService, AuthHttpError, requireJwtSecret } from "./auth/authService.js";
@@ -81,6 +82,7 @@ export function createApp(options: AppOptions): express.Express {
   app.use("/api/auth", createAuthRouter(authService));
   app.use("/api/users", createUserRouter(options.userRepository ?? databaseRepository!));
   app.use("/api/sidebar", transferRouter);
+  app.use("/api/sidebar", modelTransferRouter);
   app.use("/api/sidebar", sidebarRouter);
 
   app.get("/api/model", async (_req, res, next) => {
