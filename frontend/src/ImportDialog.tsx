@@ -76,7 +76,8 @@ export default function ImportDialog({ onClose, onImported }: Props) {
     setBusy(true);
     setError("");
     try {
-      const committed = await transferApi.commitImport(file, skipInvalid);
+      if (!preview) return;
+      const committed = await transferApi.commitImport(file, skipInvalid, preview.dataRevision);
       setResult(committed);
       await onImported();
     } catch (cause) {

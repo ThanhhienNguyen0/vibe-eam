@@ -136,7 +136,7 @@ describe("import routes", () => {
   });
 
   it("commits valid files, writes one audit entry and returns the summary", async () => {
-    const response = await request(application()).post("/api/sidebar/import/commit?fileName=C%3A%5Cfakepath%5Celements.csv").set("Authorization", bearer("Architect")).set("Content-Type", "application/octet-stream").send(newApp);
+    const response = await request(application()).post("/api/sidebar/import/commit?fileName=C%3A%5Cfakepath%5Celements.csv&expectedRevision=0").set("Authorization", bearer("Architect")).set("Content-Type", "application/octet-stream").send(newApp);
     expect(response.status).toBe(200);
     expect(response.body.applied).toBe(true);
     expect(store.writes).toHaveLength(1);
@@ -152,7 +152,7 @@ describe("import routes", () => {
 
   it("imports XLSX files that were detected by content, not by name", async () => {
     const workbook = await buildXlsx([{ name: "Elemente", rows: [["Typ", "Name"], ["Application", "From Excel"]] }]);
-    const response = await request(application()).post("/api/sidebar/import/commit").set("Authorization", bearer("Admin")).set("Content-Type", "application/octet-stream").send(workbook);
+    const response = await request(application()).post("/api/sidebar/import/commit?expectedRevision=0").set("Authorization", bearer("Admin")).set("Content-Type", "application/octet-stream").send(workbook);
     expect(response.status).toBe(200);
     expect(response.body.format).toBe("xlsx");
     expect(store.state.components.some((item) => item.name === "From Excel")).toBe(true);
@@ -161,13 +161,13 @@ describe("import routes", () => {
   it("blocks a commit with errors unless the invalid rows are skipped explicitly", async () => {
     const file = csvFile([["Typ", "Name"], ["Application", "Good"], ["Banana", "Bad"]]);
     const app = application();
-    const blocked = await request(app).post("/api/sidebar/import/commit?fileName=x.csv").set("Authorization", bearer("Architect")).set("Content-Type", "application/octet-stream").send(file);
+    const blocked = await request(app).post("/api/sidebar/import/commit?fileName=x.csv&expectedRevision=0").set("Authorization", bearer("Architect")).set("Content-Type", "application/octet-stream").send(file);
     expect(blocked.status).toBe(422);
     expect(blocked.body).toMatchObject({ errorCount: 1, canCommit: false, canCommitValidOnly: true });
     expect(blocked.body.rows.find((row: { status: string }) => row.status === "error").errors[0]).toMatch(/Banana/);
     expect(store.writes).toHaveLength(0);
 
-    const skipped = await request(app).post("/api/sidebar/import/commit?fileName=x.csv&skipInvalid=true").set("Authorization", bearer("Architect")).set("Content-Type", "application/octet-stream").send(file);
+    const skipped = await request(app).post("/api/sidebar/import/commit?fileName=x.csv&skipInvalid=true&expectedRevision=0").set("Authorization", bearer("Architect")).set("Content-Type", "application/octet-stream").send(file);
     expect(skipped.status).toBe(200);
     expect(store.state.components.map((item) => item.name)).toContain("Good");
     expect(store.state.components.map((item) => item.name)).not.toContain("Bad");
@@ -177,7 +177,7 @@ describe("import routes", () => {
 
   it("does not write or audit when nothing would change", async () => {
     const unchanged = csvFile([["ID", "Typ", "Name"], ["app-2", "", "CRM"]]);
-    const response = await request(application()).post("/api/sidebar/import/commit?fileName=same.csv").set("Authorization", bearer("Architect")).set("Content-Type", "application/octet-stream").send(unchanged);
+    const response = await request(application()).post("/api/sidebar/import/commit?fileName=same.csv&expectedRevision=0").set("Authorization", bearer("Architect")).set("Content-Type", "application/octet-stream").send(unchanged);
     expect(response.status).toBe(200);
     expect(response.body.applied).toBe(false);
     expect(store.writes).toHaveLength(0);
@@ -214,7 +214,7 @@ describe("audit log route", () => {
 
   it("lists recorded imports", async () => {
     const app = application();
-    await request(app).post("/api/sidebar/import/commit?fileName=a.csv").set("Authorization", bearer("Architect")).set("Content-Type", "application/octet-stream").send(csvFile([["Typ", "Name"], ["Application", "Logged"]]));
+    await request(app).post("/api/sidebar/import/commit?fileName=a.csv&expectedRevision=0").set("Authorization", bearer("Architect")).set("Content-Type", "application/octet-stream").send(csvFile([["Typ", "Name"], ["Application", "Logged"]]));
     const response = await request(app).get("/api/sidebar/audit-log").set("Authorization", bearer("Admin"));
     expect(response.body).toHaveLength(1);
     expect(response.body[0]).toMatchObject({ action: "import.commit", entityType: "model" });

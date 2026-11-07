@@ -22,6 +22,7 @@ export const ROUTE_POLICIES: readonly RoutePolicy[] = [
   route("POST", "/api/sidebar/metamodel/import", "metamodel:write"),
   ...["component-types", "connection-types", "connection-rules", "viewpoints"].flatMap((name) => crud(`/api/sidebar/${name}`, "metamodel:write")),
   ...["components", "connections", "diagrams", "catalogs"].flatMap((name) => crud(`/api/sidebar/${name}`, "architecture:write")),
+  route("POST", "/api/sidebar/diagrams/:id/components", "architecture:write"),
   route("POST", "/api/sidebar/diagrams/:id/connections", "architecture:write"),
   route("GET", "/api/sidebar/diagrams/:id", "read"), route("GET", "/api/sidebar/diagrams/:id/validate", "read"),
   route("GET", "/api/sidebar/export", "read"), route("GET", "/api/sidebar/import/template", "read"),

@@ -30,7 +30,16 @@ try {
   const environment = { ...process.env, DATABASE_URL: url, TEST_DATABASE_URL: url, STORAGE_BACKEND: "database", NODE_ENV: "test", PG_TEST_PSQL: executable("psql") };
   const node = process.execPath;
   execFileSync(node, ["node_modules/prisma/build/index.js", "migrate", "deploy", "--schema", "backend/prisma/schema.prisma"], { env: environment, stdio: "inherit", windowsHide: true });
-  execFileSync(node, [path.resolve("node_modules/vitest/vitest.mjs"), "run", "--config", "vitest.config.ts", "src/auth/rbac.database.test.ts", "src/importExport/transfer.database.test.ts", "src/modelTransfer/modelTransfer.database.test.ts", "--no-file-parallelism", "--testTimeout=30000", "--cache=false"], { cwd: path.resolve("backend"), env: environment, stdio: "inherit", windowsHide: true });
+  execFileSync(node, [path.resolve("node_modules/vitest/vitest.mjs"), "run", "--config", "vitest.config.ts", "src/auth/rbac.database.test.ts", "src/importExport/transfer.database.test.ts", "src/modelTransfer/modelTransfer.database.test.ts", "src/persistence/optimisticLocking.database.test.ts", "--no-file-parallelism", "--testTimeout=30000", "--cache=false"], { cwd: path.resolve("backend"), env: environment, stdio: "inherit", windowsHide: true });
+  const dump = path.join(directory, "req26-backup.dump");
+  execFileSync(executable("pg_dump"), ["-h", "127.0.0.1", "-p", String(port), "-U", "req24", "-d", database, "-Fc", "-f", dump], { env: environment, stdio: "pipe", windowsHide: true });
+  const restored = `${database}_restore`;
+  execFileSync(executable("psql"), ["-h", "127.0.0.1", "-p", String(port), "-U", "req24", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-c", `CREATE DATABASE ${restored}`], { env: environment, stdio: "pipe", windowsHide: true });
+  execFileSync(executable("pg_restore"), ["-h", "127.0.0.1", "-p", String(port), "-U", "req24", "-d", restored, "--exit-on-error", dump], { env: environment, stdio: "pipe", windowsHide: true });
+  execFileSync(executable("psql"), ["-h", "127.0.0.1", "-p", String(port), "-U", "req24", "-d", restored, "-v", "ON_ERROR_STOP=1", "-c", "SELECT COUNT(*) FROM \"_prisma_migrations\"; SELECT \"dataRevision\" FROM \"Company\" LIMIT 1;"], { env: environment, stdio: "inherit", windowsHide: true });
+  execFileSync(executable("psql"), ["-h", "127.0.0.1", "-p", String(port), "-U", "req24", "-d", restored, "-v", "ON_ERROR_STOP=1", "-f", path.resolve("backend/prisma/migrations/20261105190000_req26_optimistic_locking/rollback.sql")], { env: environment, stdio: "inherit", windowsHide: true });
+  execFileSync(executable("psql"), ["-h", "127.0.0.1", "-p", String(port), "-U", "req24", "-d", restored, "-v", "ON_ERROR_STOP=1", "-c", "DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'Company' AND column_name = 'dataRevision') THEN RAISE EXCEPTION 'REQ-26 rollback failed'; END IF; END $$;"], { env: environment, stdio: "inherit", windowsHide: true });
+  console.log("REQ-26 backup/restore/rollback rehearsal passed in disposable databases.");
 } finally {
   if (started) execFileSync(executable("pg_ctl"), ["-D", data, "-m", "fast", "-w", "stop"], { stdio: "ignore", windowsHide: true, timeout: 90000 });
   if (directory.startsWith(cache + path.sep)) await rm(directory, { recursive: true, force: true });

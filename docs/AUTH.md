@@ -39,7 +39,7 @@ Neue JWTs enthalten den internen Nutzer als `sub`, `iat`, `exp`, Issuer und Audi
 | POST/PATCH/DELETE für Sidebar-`component-types`, `connection-types`, `connection-rules`, `viewpoints`, zusätzlich `POST /metamodel/import` | `metamodel:write` |
 | `GET /api/users`, `POST /api/users`, `PATCH /api/users/:id/role` | `users:manage` |
 
-Vollständiges ausführbares Inventar: `backend/src/auth/routePolicies.ts` (52 Routen; 34 POST/PATCH/DELETE, davon zwei öffentliche Authaktionen und Logout als angemeldete Sitzungsaktion; 31 fachliche Schreibaktionen).
+Vollständiges ausführbares Inventar: `backend/src/auth/routePolicies.ts` (53 Routen; 35 POST/PATCH/DELETE, davon zwei öffentliche Authaktionen und Logout als angemeldete Sitzungsaktion; 32 fachliche Schreibaktionen). REQ-26 ergänzte den atomaren Create-and-Place-Endpunkt ausdrücklich als `architecture:write`.
 
 - **401:** fehlende, ungültige, abgelaufene Authentifizierung oder nicht mehr vorhandener interner Nutzer. Falsche Login-Zugangsdaten ergeben ebenfalls 401.
 - **403:** gültige Identität ohne gültige interne Rolle, fehlende Aktionsberechtigung oder fehlende Policy. Keine pauschale Abmeldung bei 403.

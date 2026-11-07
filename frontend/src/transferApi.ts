@@ -22,6 +22,7 @@ export interface PlannedRow {
 export interface SheetSummary { new: number; changed: number; unchanged: number; error: number }
 
 export interface ImportPreview {
+  dataRevision: number;
   fileName: string;
   format: TransferFormat;
   summary: Record<TransferSheet, SheetSummary>;
@@ -68,8 +69,8 @@ export function buildExportQuery(params: ExportParams): string {
 
 async function errorFrom(response: Response): Promise<ApiError> {
   if (response.status !== 403) handleAuthStatus(response.status);
-  const body = await response.json().catch(() => ({})) as { error?: string };
-  return new ApiError(response.status, body.error ?? `HTTP ${response.status}`);
+  const body = await response.json().catch(() => ({})) as { error?: string } & Record<string, unknown>;
+  return new ApiError(response.status, body.error ?? `HTTP ${response.status}`, body);
 }
 
 function fileNameFrom(response: Response, fallback: string): string {
@@ -111,6 +112,7 @@ export const transferApi = {
   downloadTemplate: (format: TransferFormat, sheet?: TransferSheet) =>
     download(`${BASE}/import/template?format=${format}${sheet ? `&sheet=${sheet}` : ""}`, `eam-import-vorlage.${format}`),
   previewImport: (file: File) => upload("/import/preview", file),
-  commitImport: (file: File, skipInvalid: boolean) => upload(`/import/commit${skipInvalid ? "?skipInvalid=true" : ""}`, file),
+  commitImport: (file: File, skipInvalid: boolean, expectedRevision: number) =>
+    upload(`/import/commit?expectedRevision=${expectedRevision}${skipInvalid ? "&skipInvalid=true" : ""}`, file),
   auditLog: (limit = 100) => apiRequest<AuditEntry[]>(`${BASE}/audit-log?limit=${limit}`)
 };

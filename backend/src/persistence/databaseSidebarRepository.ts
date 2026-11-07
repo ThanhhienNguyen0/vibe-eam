@@ -1,7 +1,9 @@
 import { Prisma, PrismaClient } from "@prisma/client";
+import { isDeepStrictEqual } from "node:util";
 import type {
   ComponentInstance,
   ConnectionInstance,
+  Diagram,
   SidebarState
 } from "../Sidebar/sidebarTypes.js";
 import type { AuditEntry, AuditWrite } from "../audit/auditTypes.js";
@@ -19,6 +21,12 @@ export interface SidebarStateRepository {
 }
 
 export class TenantResourceIdConflictError extends Error {}
+export class ResourceNotFoundError extends Error {}
+export class OptimisticLockError<T = unknown> extends Error {
+  constructor(readonly current: T, message = "The resource was changed by another request.") {
+    super(message);
+  }
+}
 
 const json = (value: unknown): Prisma.InputJsonValue => value as Prisma.InputJsonValue;
 const stringArray = (value: Prisma.JsonValue | null | undefined): string[] =>
@@ -67,12 +75,39 @@ function withoutUndefined<T extends object>(value: T): T {
 }
 
 export class PrismaSidebarStateRepository implements SidebarStateRepository {
-  constructor(private readonly prisma = new PrismaClient()) {}
+  constructor(
+    private readonly prisma = new PrismaClient(),
+    private readonly afterReadSnapshotEstablished?: () => Promise<void>,
+    private readonly afterCompanyLockAcquired?: () => Promise<void>
+  ) {}
+
+  private async withLockedCompany<T>(
+    companyId: string,
+    operation: (tx: Prisma.TransactionClient) => Promise<T>,
+    currentOnConflict: () => Promise<unknown>
+  ): Promise<T> {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const company = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT "id" FROM "Company" WHERE "id" = ${companyId} FOR UPDATE
+        `;
+        if (company.length !== 1) throw new ResourceNotFoundError("Company not found.");
+        await this.afterCompanyLockAcquired?.();
+        return operation(tx);
+      }, { timeout: 30_000 });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+        throw new OptimisticLockError(await currentOnConflict(), "Concurrent transaction conflict.");
+      }
+      throw error;
+    }
+  }
 
   async read(companyId: string): Promise<PersistedSidebarState | null> {
     return this.prisma.$transaction(async (tx) => {
       const metamodel = await tx.metamodel.findFirst({ where: { companyId }, orderBy: [{ isActive: "desc" }, { updatedAt: "desc" }] });
       if (!metamodel) return null;
+      await this.afterReadSnapshotEstablished?.();
 
       const [componentTypes, connectionTypes, connectionRules, viewpoints, viewpointRules, validationRules, diagrams, components, connections, catalogRows, company] = await Promise.all([
         tx.componentType.findMany({ where: { metamodelId: metamodel.id }, orderBy: { id: "asc" } }),
@@ -89,10 +124,11 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         tx.componentInstance.findMany({ where: { companyId, componentType: { metamodelId: metamodel.id } }, orderBy: { id: "asc" } }),
         tx.connectionInstance.findMany({ where: { companyId, connectionType: { metamodelId: metamodel.id } }, orderBy: { id: "asc" } }),
         tx.catalog.findMany({ where: { companyId }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }),
-        tx.company.findUnique({ where: { id: companyId }, select: { catalogsInitialized: true } })
+        tx.company.findUnique({ where: { id: companyId }, select: { catalogsInitialized: true, dataRevision: true } })
       ]);
 
       return {
+        dataRevision: company?.dataRevision ?? 0,
         metamodel: {
           id: metamodel.id,
           name: metamodel.name,
@@ -190,6 +226,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         })),
         components: components.map((item): ComponentInstance => withoutUndefined({
           id: item.id,
+          version: item.version,
           externalId: item.externalId ?? undefined,
           name: item.name,
           componentTypeId: item.componentTypeId,
@@ -198,6 +235,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         })),
         connections: connections.map((item): ConnectionInstance => withoutUndefined({
           id: item.id,
+          version: item.version,
           externalId: item.externalId ?? undefined,
           name: item.name,
           connectionTypeId: item.connectionTypeId,
@@ -221,6 +259,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         }) : undefined,
         diagrams: diagrams.map((item) => ({
           id: item.id,
+          version: item.version,
           name: item.name,
           description: item.description,
           metamodelId: item.metamodelId,
@@ -233,7 +272,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           ]))
         }))
       };
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
   }
 
   private async assertTenantIdsAvailable(state: SidebarState, companyId: string): Promise<void> {
@@ -261,7 +300,71 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
     const metamodelId = state.metamodel.id;
     await this.assertTenantIdsAvailable(state, companyId);
 
-    await this.prisma.$transaction(async (tx) => {
+    try {
+      await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.company.updateMany({
+        where: { id: companyId, dataRevision: state.dataRevision ?? 0 },
+        data: { dataRevision: { increment: 1 } }
+      });
+      if (claimed.count !== 1) {
+        const current = await tx.company.findUnique({ where: { id: companyId }, select: { dataRevision: true } });
+        throw new OptimisticLockError(current, "The company data changed after it was read.");
+      }
+      await this.afterCompanyLockAcquired?.();
+      const [storedComponents, storedConnections, storedDiagrams] = await Promise.all([
+        tx.componentInstance.findMany({ where: { companyId } }),
+        tx.connectionInstance.findMany({ where: { companyId } }),
+        tx.diagram.findMany({
+          where: { companyId },
+          include: { componentMemberships: true, connectionMemberships: true }
+        })
+      ]);
+      const storedComponentById = new Map(storedComponents.map((item) => [item.id, item]));
+      const storedConnectionById = new Map(storedConnections.map((item) => [item.id, item]));
+      const storedDiagramById = new Map(storedDiagrams.map((item) => [item.id, item]));
+      const sameIds = (left: string[], right: string[]) => {
+        const sortedLeft = [...left].sort();
+        const sortedRight = [...right].sort();
+        return sortedLeft.length === sortedRight.length && sortedLeft.every((id, index) => id === sortedRight[index]);
+      };
+      const componentVersion = (item: ComponentInstance) => {
+        const current = storedComponentById.get(item.id);
+        if (!current) return 1;
+        const unchanged = current.componentTypeId === item.componentTypeId
+          && current.externalId === (item.externalId ?? null)
+          && current.name === item.name
+          && current.description === item.description
+          && isDeepStrictEqual(objectValue(current.properties, {}), item.properties);
+        return current.version + (unchanged ? 0 : 1);
+      };
+      const connectionVersion = (item: ConnectionInstance) => {
+        const current = storedConnectionById.get(item.id);
+        if (!current) return 1;
+        const unchanged = current.connectionTypeId === item.connectionTypeId
+          && current.sourceComponentId === item.sourceComponentId
+          && current.targetComponentId === item.targetComponentId
+          && current.externalId === (item.externalId ?? null)
+          && current.name === item.name
+          && current.description === item.description
+          && isDeepStrictEqual(objectValue(current.properties, {}), item.properties ?? {});
+        return current.version + (unchanged ? 0 : 1);
+      };
+      const diagramVersion = (item: Diagram) => {
+        const current = storedDiagramById.get(item.id);
+        if (!current) return 1;
+        const currentPositions = Object.fromEntries(current.componentMemberships.map((membership) => [
+          membership.componentId,
+          objectValue(membership.position, { x: 0, y: 0 })
+        ]));
+        const unchanged = current.metamodelId === item.metamodelId
+          && current.viewpointId === (item.viewpointId ?? null)
+          && current.name === item.name
+          && current.description === item.description
+          && sameIds(current.componentMemberships.map((membership) => membership.componentId), item.componentIds)
+          && sameIds(current.connectionMemberships.map((membership) => membership.connectionId), item.connectionIds)
+          && isDeepStrictEqual(currentPositions, item.positions);
+        return current.version + (unchanged ? 0 : 1);
+      };
       // A whole-state write with a new metamodel id is a replacement, not an append. Deleting
       // prior company metamodels here cascades their types, rules, diagrams and instances inside
       // this same transaction; users, audit entries and legacy ModelRecords are not descendants.
@@ -394,7 +497,8 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           metamodelId,
           viewpointId: item.viewpointId ?? null,
           name: item.name,
-          description: item.description
+          description: item.description,
+          version: diagramVersion(item)
         };
         await tx.diagram.upsert({ where: { id: item.id }, create: { id: item.id, ...data }, update: data });
       }
@@ -422,7 +526,8 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           externalId: item.externalId ?? null,
           name: item.name,
           description: item.description,
-          properties: json(item.properties)
+          properties: json(item.properties),
+          version: componentVersion(item)
         };
         await tx.componentInstance.upsert({ where: { id: item.id }, create: { id: item.id, ...data }, update: data });
       }
@@ -435,7 +540,8 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           externalId: item.externalId ?? null,
           name: item.name,
           description: item.description,
-          properties: json(item.properties ?? {})
+          properties: json(item.properties ?? {}),
+          version: connectionVersion(item)
         };
         await tx.connectionInstance.upsert({ where: { id: item.id }, create: { id: item.id, ...data }, update: data });
       }
@@ -487,10 +593,264 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           }
         });
       }
-    }, { timeout: 30_000 });
+      }, { timeout: 30_000 });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+        const current = await this.prisma.company.findUnique({ where: { id: companyId }, select: { dataRevision: true } });
+        throw new OptimisticLockError(current, "Concurrent whole-state transaction conflict.");
+      }
+      throw error;
+    }
 
     // The company flag is set above, so catalogs are always present here.
     return ((await this.read(companyId)) as SidebarState | null) ?? structuredClone(state);
+  }
+
+  async updateComponent(companyId: string, value: ComponentInstance, expectedVersion: number): Promise<ComponentInstance> {
+    return this.withLockedCompany(companyId, async (tx) => {
+      const updated = await tx.componentInstance.updateMany({
+        where: { id: value.id, companyId, version: expectedVersion },
+        data: {
+          componentTypeId: value.componentTypeId,
+          externalId: value.externalId ?? null,
+          name: value.name,
+          description: value.description,
+          properties: json(value.properties),
+          version: { increment: 1 }
+        }
+      });
+      if (updated.count !== 1) {
+        const current = await tx.componentInstance.findFirst({ where: { id: value.id, companyId } });
+        if (!current) throw new ResourceNotFoundError("Component not found.");
+        throw new OptimisticLockError<ComponentInstance>({
+          id: current.id,
+          version: current.version,
+          externalId: current.externalId ?? undefined,
+          name: current.name,
+          componentTypeId: current.componentTypeId,
+          description: current.description,
+          properties: objectValue(current.properties, {}) as Record<string, string>
+        });
+      }
+      await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+      return { ...value, version: expectedVersion + 1 };
+    }, async () => (await this.prisma.componentInstance.findFirst({
+      where: { id: value.id, companyId }, select: { id: true, version: true, name: true }
+    })) ?? { id: value.id, version: expectedVersion });
+  }
+
+  async deleteComponent(companyId: string, id: string, expectedVersion: number): Promise<void> {
+    await this.withLockedCompany(companyId, async (tx) => {
+      const [directMemberships, connectionMemberships] = await Promise.all([
+        tx.diagramComponentMembership.findMany({ where: { componentId: id }, select: { diagramId: true } }),
+        tx.diagramConnectionMembership.findMany({
+          where: {
+            connection: { companyId, OR: [{ sourceComponentId: id }, { targetComponentId: id }] }
+          },
+          select: { diagramId: true }
+        })
+      ]);
+      const affectedDiagramIds = [...new Set([
+        ...directMemberships.map((item) => item.diagramId),
+        ...connectionMemberships.map((item) => item.diagramId)
+      ])];
+      const removed = await tx.componentInstance.deleteMany({ where: { id, companyId, version: expectedVersion } });
+      if (removed.count !== 1) {
+        const current = await tx.componentInstance.findFirst({ where: { id, companyId } });
+        if (!current) throw new ResourceNotFoundError("Component not found.");
+        throw new OptimisticLockError({ id: current.id, version: current.version, name: current.name });
+      }
+      if (affectedDiagramIds.length > 0) {
+        await tx.diagram.updateMany({
+          where: { companyId, id: { in: affectedDiagramIds } },
+          data: { version: { increment: 1 } }
+        });
+      }
+      await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+    }, async () => (await this.prisma.componentInstance.findFirst({
+      where: { id, companyId }, select: { id: true, version: true, name: true }
+    })) ?? { id, version: expectedVersion });
+  }
+
+  async createComponentInDiagram(
+    companyId: string,
+    component: ComponentInstance,
+    diagramId: string,
+    position: { x: number; y: number },
+    expectedDiagramVersion: number
+  ): Promise<{ component: ComponentInstance; diagram: Diagram }> {
+    return this.withLockedCompany(companyId, async (tx) => {
+      const advanced = await tx.diagram.updateMany({
+        where: { id: diagramId, companyId, version: expectedDiagramVersion },
+        data: { version: { increment: 1 } }
+      });
+      if (advanced.count !== 1) {
+        const current = await tx.diagram.findFirst({ where: { id: diagramId, companyId } });
+        if (!current) throw new ResourceNotFoundError("Diagram not found.");
+        throw new OptimisticLockError({ id: current.id, version: current.version, name: current.name });
+      }
+      const stored = await tx.componentInstance.create({
+        data: {
+          id: component.id,
+          companyId,
+          componentTypeId: component.componentTypeId,
+          externalId: component.externalId ?? null,
+          name: component.name,
+          description: component.description,
+          properties: json(component.properties),
+          version: 1
+        }
+      });
+      await tx.diagramComponentMembership.create({
+        data: { diagramId, componentId: stored.id, position: json(position) }
+      });
+      await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+      const diagram = await tx.diagram.findUniqueOrThrow({
+        where: { id: diagramId },
+        include: { componentMemberships: true, connectionMemberships: true }
+      });
+      return {
+        component: {
+          id: stored.id,
+          version: stored.version,
+          externalId: stored.externalId ?? undefined,
+          name: stored.name,
+          componentTypeId: stored.componentTypeId,
+          description: stored.description,
+          properties: objectValue(stored.properties, {}) as Record<string, string>
+        },
+        diagram: {
+          id: diagram.id,
+          version: diagram.version,
+          name: diagram.name,
+          description: diagram.description,
+          metamodelId: diagram.metamodelId,
+          viewpointId: diagram.viewpointId ?? undefined,
+          componentIds: diagram.componentMemberships.map((membership) => membership.componentId),
+          connectionIds: diagram.connectionMemberships.map((membership) => membership.connectionId),
+          positions: Object.fromEntries(diagram.componentMemberships.map((membership) => [
+            membership.componentId,
+            objectValue(membership.position, { x: 0, y: 0 })
+          ]))
+        }
+      };
+    }, async () => (await this.prisma.diagram.findFirst({
+      where: { id: diagramId, companyId }, select: { id: true, version: true, name: true }
+    })) ?? { id: diagramId, version: expectedDiagramVersion });
+  }
+
+  async updateConnection(companyId: string, value: ConnectionInstance, expectedVersion: number): Promise<ConnectionInstance> {
+    return this.withLockedCompany(companyId, async (tx) => {
+      const updated = await tx.connectionInstance.updateMany({
+        where: { id: value.id, companyId, version: expectedVersion },
+        data: {
+          connectionTypeId: value.connectionTypeId,
+          sourceComponentId: value.sourceComponentId,
+          targetComponentId: value.targetComponentId,
+          externalId: value.externalId ?? null,
+          name: value.name,
+          description: value.description,
+          properties: json(value.properties ?? {}),
+          version: { increment: 1 }
+        }
+      });
+      if (updated.count !== 1) {
+        const current = await tx.connectionInstance.findFirst({ where: { id: value.id, companyId } });
+        if (!current) throw new ResourceNotFoundError("Connection not found.");
+        throw new OptimisticLockError<ConnectionInstance>({
+          id: current.id,
+          version: current.version,
+          externalId: current.externalId ?? undefined,
+          name: current.name,
+          connectionTypeId: current.connectionTypeId,
+          sourceComponentId: current.sourceComponentId,
+          targetComponentId: current.targetComponentId,
+          description: current.description,
+          properties: objectValue(current.properties, {}) as Record<string, string>
+        });
+      }
+      await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+      return { ...value, version: expectedVersion + 1 };
+    }, async () => (await this.prisma.connectionInstance.findFirst({
+      where: { id: value.id, companyId }, select: { id: true, version: true, name: true }
+    })) ?? { id: value.id, version: expectedVersion });
+  }
+
+  async deleteConnection(companyId: string, id: string, expectedVersion: number): Promise<void> {
+    await this.withLockedCompany(companyId, async (tx) => {
+      const memberships = await tx.diagramConnectionMembership.findMany({
+        where: { connectionId: id }, select: { diagramId: true }
+      });
+      const removed = await tx.connectionInstance.deleteMany({ where: { id, companyId, version: expectedVersion } });
+      if (removed.count !== 1) {
+        const current = await tx.connectionInstance.findFirst({ where: { id, companyId } });
+        if (!current) throw new ResourceNotFoundError("Connection not found.");
+        throw new OptimisticLockError({ id: current.id, version: current.version, name: current.name });
+      }
+      const affectedDiagramIds = [...new Set(memberships.map((item) => item.diagramId))];
+      if (affectedDiagramIds.length > 0) {
+        await tx.diagram.updateMany({
+          where: { companyId, id: { in: affectedDiagramIds } },
+          data: { version: { increment: 1 } }
+        });
+      }
+      await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+    }, async () => (await this.prisma.connectionInstance.findFirst({
+      where: { id, companyId }, select: { id: true, version: true, name: true }
+    })) ?? { id, version: expectedVersion });
+  }
+
+  async updateDiagram(companyId: string, value: Diagram, expectedVersion: number): Promise<Diagram> {
+    return this.withLockedCompany(companyId, async (tx) => {
+      const updated = await tx.diagram.updateMany({
+        where: { id: value.id, companyId, version: expectedVersion },
+        data: {
+          viewpointId: value.viewpointId ?? null,
+          name: value.name,
+          description: value.description,
+          version: { increment: 1 }
+        }
+      });
+      if (updated.count !== 1) {
+        const current = await tx.diagram.findFirst({ where: { id: value.id, companyId } });
+        if (!current) throw new ResourceNotFoundError("Diagram not found.");
+        throw new OptimisticLockError({ id: current.id, version: current.version, name: current.name });
+      }
+      await tx.diagramComponentMembership.deleteMany({ where: { diagramId: value.id } });
+      if (value.componentIds.length > 0) {
+        await tx.diagramComponentMembership.createMany({
+          data: value.componentIds.map((componentId) => ({
+            diagramId: value.id,
+            componentId,
+            position: json(value.positions[componentId] ?? { x: 0, y: 0 })
+          }))
+        });
+      }
+      await tx.diagramConnectionMembership.deleteMany({ where: { diagramId: value.id } });
+      if (value.connectionIds.length > 0) {
+        await tx.diagramConnectionMembership.createMany({
+          data: value.connectionIds.map((connectionId) => ({ diagramId: value.id, connectionId }))
+        });
+      }
+      await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+      return { ...value, version: expectedVersion + 1 };
+    }, async () => (await this.prisma.diagram.findFirst({
+      where: { id: value.id, companyId }, select: { id: true, version: true, name: true }
+    })) ?? { id: value.id, version: expectedVersion });
+  }
+
+  async deleteDiagram(companyId: string, id: string, expectedVersion: number): Promise<void> {
+    await this.withLockedCompany(companyId, async (tx) => {
+      const removed = await tx.diagram.deleteMany({ where: { id, companyId, version: expectedVersion } });
+      if (removed.count !== 1) {
+        const current = await tx.diagram.findFirst({ where: { id, companyId } });
+        if (!current) throw new ResourceNotFoundError("Diagram not found.");
+        throw new OptimisticLockError({ id: current.id, version: current.version, name: current.name });
+      }
+      await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+    }, async () => (await this.prisma.diagram.findFirst({
+      where: { id, companyId }, select: { id: true, version: true, name: true }
+    })) ?? { id, version: expectedVersion });
   }
 
   async listAudit(companyId: string, limit: number): Promise<AuditEntry[]> {
