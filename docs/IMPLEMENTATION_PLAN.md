@@ -86,10 +86,11 @@ Root-Skripte starten Frontend und Backend parallel. Backend und Frontend bleiben
 
 - Kanonischer relationaler, tenantgebundener Auditpfad für alle Modellmutationen; Fachwrite und Beleg teilen eine PostgreSQL-Transaktion.
 - Serverseitig aufgelöster Akteur, serverseitige Ereigniszeit, stabile Objektart/-ID und redigierte strukturierte Vorher-/Nachherwerte.
-- Keine Auditmutation über UI/API; keine Erfolgszeile für Fehler, Konflikte oder No-ops; Importe ersetzen keine Historie.
-- Auditansicht mit Zeitraum-, Akteur- und Elementfilter, stabiler Keyset-Pagination und Elementhistorie im Komponenten-/Verbindungspanel.
+- Keine Auditmutation über UI/API; PostgreSQL-Trigger blockiert UPDATE/DELETE über die Runtime-Verbindung. DB-Owner/Superuser bleiben administrative Grenze.
+- Keine Erfolgszeile oder Revision/Version für Fehler, Konflikte oder Legacy-No-ops; echte Importe erhöhen Objektversionen weiterhin strikt.
+- Auditansicht mit Zeitraum-, Akteur- und Elementfilter, stabiler Keyset-Pagination und typgebundener, vollständig nachladbarer Elementhistorie.
 - Additive Legacy-Migration mit unveränderter JSONB-Quelle und ohne erfundene Altmetadaten.
-- Lokal vollständig geprüft; unabhängige Kontrolle, Push, PR, Remote-CI, Merge und Deployment offen.
+- Ersthead `8a9de7a…` unabhängig mit 2×P1/1×P2/1×P3 abgelehnt; technischer Korrekturhead `abff4e90…` lokal vollständig geprüft. Erneute Kontrolle, Push, PR, Remote-CI, Merge und Deployment offen.
 
 ## Datenmodell
 
