@@ -34,16 +34,42 @@ export function AuditEntryDetails({ entry }: { entry: AuditEntry }) {
   );
 }
 
-export function ElementAuditHistory({ entityId }: { entityId: string }) {
+export function ElementAuditHistory({ entityId, entityType }: { entityId: string; entityType: "component" | "connection" }) {
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   useEffect(() => {
     let active = true;
-    transferApi.auditLog({ entityId, limit: 20 })
-      .then((page) => { if (active) setEntries(page.items); })
-      .catch((cause: unknown) => { if (active) setError(cause instanceof Error ? cause.message : "Historie konnte nicht geladen werden."); });
+    setEntries(null);
+    setNextCursor(null);
+    setLoading(true);
+    setError("");
+    transferApi.auditLog({ entityId, entityType, limit: 20 })
+      .then((page) => {
+        if (!active) return;
+        setEntries(page.items);
+        setNextCursor(page.nextCursor);
+      })
+      .catch((cause: unknown) => { if (active) setError(cause instanceof Error ? cause.message : "Historie konnte nicht geladen werden."); })
+      .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [entityId]);
+  }, [entityId, entityType]);
+
+  async function loadMore() {
+    if (!nextCursor || loading) return;
+    setLoading(true);
+    setError("");
+    try {
+      const page = await transferApi.auditLog({ entityId, entityType, limit: 20, cursor: nextCursor });
+      setEntries((current) => [...(current ?? []), ...page.items]);
+      setNextCursor(page.nextCursor);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Weitere Historie konnte nicht geladen werden.");
+    } finally {
+      setLoading(false);
+    }
+  }
   return (
     <section className="element-history" aria-label="Elementhistorie">
       <h3>Historie</h3>
@@ -59,6 +85,7 @@ export function ElementAuditHistory({ entityId }: { entityId: string }) {
       ))}
       {entries?.length === 0 && <p className="muted">Noch keine Historie für dieses Objekt.</p>}
       {entries === null && !error && <p className="muted">Historie wird geladen…</p>}
+      {nextCursor && <button type="button" disabled={loading} onClick={loadMore}>Weitere Historieneinträge laden</button>}
     </section>
   );
 }

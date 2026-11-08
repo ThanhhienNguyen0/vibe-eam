@@ -38,17 +38,33 @@ describe("REQ-23 audit UI", () => {
     expect(html).toContain("Neu");
   });
 
-  it("loads the selected element history with an exact entity filter", async () => {
-    mocked.auditLog.mockResolvedValue({ items: [entry], nextCursor: null });
+  it("binds history to entity type and makes entries beyond the first 20 reachable", async () => {
+    const firstPage = Array.from({ length: 20 }, (_, index) => ({
+      ...entry,
+      id: `audit-${index + 1}`,
+      summary: `Komponentenänderung ${index + 1}`
+    }));
+    const finalEntry = { ...entry, id: "audit-21", summary: "Komponentenänderung 21" };
+    mocked.auditLog
+      .mockResolvedValueOnce({ items: firstPage, nextCursor: "cursor-20" })
+      .mockResolvedValueOnce({ items: [finalEntry], nextCursor: null });
     let renderer: ReactTestRenderer;
     await act(async () => {
-      renderer = create(<ElementAuditHistory entityId="component-1" />);
+      renderer = create(<ElementAuditHistory entityId="shared-id" entityType="component" />);
       await Promise.resolve();
     });
-    expect(mocked.auditLog).toHaveBeenCalledWith({ entityId: "component-1", limit: 20 });
+    expect(mocked.auditLog).toHaveBeenNthCalledWith(1, { entityId: "shared-id", entityType: "component", limit: 20 });
+    const button = renderer!.root.findAllByType("button").find((item) => item.children.join("").includes("Weitere Historieneinträge"));
+    expect(button).toBeDefined();
+    await act(async () => { await button!.props.onClick(); });
+    expect(mocked.auditLog).toHaveBeenNthCalledWith(2, {
+      entityId: "shared-id",
+      entityType: "component",
+      limit: 20,
+      cursor: "cursor-20"
+    });
     const rendered = JSON.stringify(renderer!.toJSON());
-    expect(rendered).toContain("Geändert");
-    expect(rendered).toContain("Titus");
-    expect(rendered).toContain("Komponente geändert");
+    expect(rendered).toContain("Komponentenänderung 1");
+    expect(rendered).toContain("Komponentenänderung 21");
   });
 });

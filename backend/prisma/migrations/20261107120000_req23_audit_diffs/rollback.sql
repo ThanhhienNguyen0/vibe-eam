@@ -1,4 +1,7 @@
 -- Manual rollback for the disposable REQ-23 migration rehearsal.
+DROP TRIGGER IF EXISTS "AuditLogEntry_append_only" ON "AuditLogEntry";
+DROP FUNCTION IF EXISTS "req23_prevent_audit_log_mutation"();
+
 DELETE FROM "AuditLogEntry"
 WHERE "details"->>'migration' = 'REQ-23-legacy-backfill';
 

@@ -498,7 +498,17 @@ describe.skipIf(!url)("REQ-26 optimistic locking against real PostgreSQL", () =>
     const current = await request(app).get("/api/model/export").set(authorized(company.token));
     const revision = Number(String(current.headers.etag).replaceAll('"', ""));
     expect(revision).toBe((await prisma.architectureModel.findUniqueOrThrow({ where: { companyId: company.companyId } })).revision);
-    const imported = await request(app).post("/api/model/import").set(authorized(company.token)).set("If-Match", current.headers.etag).send(current.body);
+    const auditBeforeNoOp = await prisma.auditLogEntry.count({ where: { companyId: company.companyId } });
+    const legacyAuditBeforeNoOp = (await prisma.architectureModel.findUniqueOrThrow({ where: { companyId: company.companyId } })).auditLog;
+    const noOpImport = await request(app).post("/api/model/import").set(authorized(company.token)).set("If-Match", current.headers.etag).send(current.body);
+    expect(noOpImport.status).toBe(200);
+    expect((await prisma.architectureModel.findUniqueOrThrow({ where: { companyId: company.companyId } })).revision).toBe(revision);
+    expect((await prisma.architectureModel.findUniqueOrThrow({ where: { companyId: company.companyId } })).auditLog).toEqual(legacyAuditBeforeNoOp);
+    expect(await prisma.auditLogEntry.count({ where: { companyId: company.companyId } })).toBe(auditBeforeNoOp);
+
+    const changedImport = structuredClone(current.body);
+    changedImport.elements[0].name = "Historical import update";
+    const imported = await request(app).post("/api/model/import").set(authorized(company.token)).set("If-Match", current.headers.etag).send(changedImport);
     expect(imported.status).toBe(200);
     const importedElement = imported.body.elements.find((item: { id: string }) => item.id === element.id);
     expect(importedElement.version).toBeGreaterThan(updated.body.version);

@@ -57,3 +57,23 @@ CREATE INDEX "AuditLogEntry_companyId_userId_occurredAt_idx"
   ON "AuditLogEntry"("companyId", "userId", "occurredAt");
 CREATE INDEX "AuditLogEntry_companyId_entityType_entityId_occurredAt_idx"
   ON "AuditLogEntry"("companyId", "entityType", "entityId", "occurredAt");
+
+-- Application/runtime connections may append evidence but cannot rewrite or
+-- delete it, even through direct SQL/Prisma calls. A database owner or
+-- superuser can deliberately drop/disable this trigger; that administrative
+-- boundary is documented and is not presented as cryptographic WORM storage.
+CREATE OR REPLACE FUNCTION "req23_prevent_audit_log_mutation"()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION USING
+    ERRCODE = '55000',
+    MESSAGE = 'REQ-23: AuditLogEntry is append-only; UPDATE and DELETE are forbidden.';
+END;
+$$;
+
+CREATE TRIGGER "AuditLogEntry_append_only"
+BEFORE UPDATE OR DELETE ON "AuditLogEntry"
+FOR EACH ROW
+EXECUTE FUNCTION "req23_prevent_audit_log_mutation"();

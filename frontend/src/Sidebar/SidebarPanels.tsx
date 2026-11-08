@@ -979,7 +979,7 @@ function ComponentReadOnly({
         isIncluded={(diagram) => diagram.componentIds.includes(comp.id)}
         onOpenDiagram={onOpenDiagram}
       />
-      {canReadAudit && <ElementAuditHistory entityId={comp.id} />}
+      {canReadAudit && <ElementAuditHistory entityId={comp.id} entityType="component" />}
     </div>
   );
 }
@@ -1095,7 +1095,7 @@ function ReadOnlyDetails({
       <h3>Eigenschaften</h3>
       {properties.length > 0 ? <ReadOnlyFields fields={properties} /> : <p className="muted">Keine Eigenschaften hinterlegt.</p>}
       <LinkedDiagrams diagrams={diagrams} isIncluded={(diagram) => diagram.connectionIds.includes(conn.id)} onOpenDiagram={onOpenDiagram} />
-      {canReadAudit && <ElementAuditHistory entityId={conn.id} />}
+      {canReadAudit && <ElementAuditHistory entityId={conn.id} entityType="connection" />}
     </>;
   } else {
     const diagram = diagrams.find((item) => item.id === selection.id);
@@ -1204,7 +1204,7 @@ function ComponentEditor({
         isIncluded={(d) => d.componentIds.includes(comp.id)}
         onOpenDiagram={onOpenDiagram}
       />
-      {canReadAudit && <ElementAuditHistory entityId={comp.id} />}
+      {canReadAudit && <ElementAuditHistory entityId={comp.id} entityType="component" />}
     </div>
   );
 }
@@ -1299,7 +1299,7 @@ function ConnectionEditor({
         isIncluded={(d) => d.connectionIds.includes(conn.id)}
         onOpenDiagram={onOpenDiagram}
       />
-      {canReadAudit && <ElementAuditHistory entityId={conn.id} />}
+      {canReadAudit && <ElementAuditHistory entityId={conn.id} entityType="connection" />}
     </div>
   );
 }

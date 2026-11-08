@@ -147,6 +147,54 @@ describe.skipIf(!url)("REQ-23 audit history against real PostgreSQL", () => {
     expect((await request(app).get(`/api/sidebar/audit-log?entityId=${createdIds[0]}`).set(auth(second.token))).body.items).toHaveLength(0);
   });
 
+  it("keeps type-bound element histories complete beyond the first 20 entries", async () => {
+    const company = await registerCompany();
+    const entityId = `shared-${randomUUID()}`;
+    const baseTime = Date.parse("2026-11-08T10:00:00.000Z");
+    await prisma.auditLogEntry.createMany({
+      data: [
+        ...Array.from({ length: 21 }, (_, index) => ({
+          companyId: company.companyId,
+          actorType: "system",
+          actorLabel: "Paginationstest",
+          action: "update",
+          entityType: "component",
+          entityId,
+          summary: `Komponentenänderung ${index + 1}`,
+          changes: [],
+          details: {},
+          occurredAt: new Date(baseTime + index)
+        })),
+        {
+          companyId: company.companyId,
+          actorType: "system",
+          actorLabel: "Paginationstest",
+          action: "update",
+          entityType: "connection",
+          entityId,
+          summary: "Gleichnamige Verbindung",
+          changes: [],
+          details: {},
+          occurredAt: new Date(baseTime + 100)
+        }
+      ]
+    });
+
+    const firstPage = await request(app).get(`/api/sidebar/audit-log?entityId=${entityId}&entityType=component&limit=20`).set(auth(company.token));
+    expect(firstPage.status).toBe(200);
+    expect(firstPage.body.items).toHaveLength(20);
+    expect(firstPage.body.items.every((item: { entityType: string }) => item.entityType === "component")).toBe(true);
+    expect(firstPage.body.nextCursor).toBeTypeOf("string");
+    const secondPage = await request(app)
+      .get(`/api/sidebar/audit-log?entityId=${entityId}&entityType=component&limit=20&cursor=${encodeURIComponent(firstPage.body.nextCursor)}`)
+      .set(auth(company.token));
+    expect(secondPage.body.items).toHaveLength(1);
+    expect(secondPage.body.nextCursor).toBeNull();
+    const connection = await request(app).get(`/api/sidebar/audit-log?entityId=${entityId}&entityType=connection`).set(auth(company.token));
+    expect(connection.body.items).toHaveLength(1);
+    expect(connection.body.items[0].summary).toBe("Gleichnamige Verbindung");
+  });
+
   it("preserves history across full JSON imports and keeps audit outside the transfer document", async () => {
     const company = await registerCompany();
     const state = await sidebar(company.token);
@@ -179,5 +227,42 @@ describe.skipIf(!url)("REQ-23 audit history against real PostgreSQL", () => {
     const legacy = await request(app).get("/api/audit-log").set(auth(company.token));
     expect(legacy.status).toBe(200);
     expect(legacy.body.some((entry: { entityId: string }) => entry.entityId === id)).toBe(true);
+  });
+
+  it("initializes the legacy model with one atomic system audit and keeps no-op patches entirely silent", async () => {
+    const company = await registerCompany();
+    expect(await prisma.architectureModel.findUnique({ where: { companyId: company.companyId } })).toBeNull();
+    const model = await request(app).get("/api/model").set(auth(company.token));
+    expect(model.status).toBe(200);
+    const initialized = await prisma.architectureModel.findUniqueOrThrow({ where: { companyId: company.companyId } });
+    expect(initialized.revision).toBe(0);
+    expect(initialized.auditLog).toEqual([]);
+    const initialization = await prisma.auditLogEntry.findMany({
+      where: { companyId: company.companyId, action: "system.initialize", entityType: "legacy-model" }
+    });
+    expect(initialization).toHaveLength(1);
+    expect(initialization[0]).toMatchObject({ actorType: "system", actorLabel: "Systeminitialisierung", entityId: initialized.id });
+    expect((await request(app).get("/api/model").set(auth(company.token))).status).toBe(200);
+    expect(await prisma.auditLogEntry.count({ where: { companyId: company.companyId, action: "system.initialize" } })).toBe(1);
+
+    const element = model.body.elements[0] as { id: string; name: string; version: number };
+    const canonicalBefore = await prisma.auditLogEntry.count({ where: { companyId: company.companyId } });
+    const noOp = await request(app).patch(`/api/model/elements/${element.id}`).set(auth(company.token))
+      .set("If-Match", String(element.version)).send({ name: element.name });
+    expect(noOp.status).toBe(200);
+    expect(noOp.body.version).toBe(element.version);
+    const after = await prisma.architectureModel.findUniqueOrThrow({ where: { companyId: company.companyId } });
+    expect(after.revision).toBe(initialized.revision);
+    expect(after.auditLog).toEqual([]);
+    expect(await prisma.auditLogEntry.count({ where: { companyId: company.companyId } })).toBe(canonicalBefore);
+  });
+
+  it("rejects direct UPDATE and DELETE through the runtime Prisma connection", async () => {
+    const company = await registerCompany();
+    expect((await request(app).get("/api/model").set(auth(company.token))).status).toBe(200);
+    const entry = await prisma.auditLogEntry.findFirstOrThrow({ where: { companyId: company.companyId } });
+    await expect(prisma.auditLogEntry.update({ where: { id: entry.id }, data: { summary: "tampered" } })).rejects.toThrow(/REQ-23.*append-only/i);
+    await expect(prisma.auditLogEntry.delete({ where: { id: entry.id } })).rejects.toThrow(/REQ-23.*append-only/i);
+    expect(await prisma.auditLogEntry.findUnique({ where: { id: entry.id } })).toMatchObject({ summary: entry.summary });
   });
 });

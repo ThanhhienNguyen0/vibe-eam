@@ -23,16 +23,51 @@ const dataFor = (state: PersistedState) => ({
   auditLog: state.auditLog as unknown as Prisma.InputJsonValue
 });
 
+type LegacyMutationResult<T> = { value: T; changed: boolean };
+
+async function lockCompany(tx: Prisma.TransactionClient, companyId: string): Promise<void> {
+  const company = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT "id" FROM "Company" WHERE "id" = ${companyId} FOR UPDATE
+  `;
+  if (company.length !== 1) throw new ResourceNotFoundError("Company not found.");
+}
+
+async function ensureArchitectureModel(
+  tx: Prisma.TransactionClient,
+  companyId: string
+): Promise<Prisma.ArchitectureModelGetPayload<object>> {
+  const existing = await tx.architectureModel.findUnique({ where: { companyId } });
+  if (existing) return existing;
+  const created = await tx.architectureModel.create({
+    data: { companyId, ...dataFor(withVersions(seedState)) }
+  });
+  await tx.auditLogEntry.create({
+    data: {
+      companyId,
+      userId: null,
+      userEmail: null,
+      actorType: "system",
+      actorLabel: "Systeminitialisierung",
+      action: "system.initialize",
+      entityType: "legacy-model",
+      entityId: created.id,
+      summary: "Historisches Architekturmodell initialisiert.",
+      changes: [],
+      details: { origin: "architecture-model-api" },
+      batchId: null,
+      occurredAt: new Date()
+    }
+  });
+  return created;
+}
+
 async function mutateState<T>(
-  mutation: (state: PersistedState, revision: number, tx: Prisma.TransactionClient, companyId: string) => Promise<T> | T
+  mutation: (state: PersistedState, revision: number, tx: Prisma.TransactionClient, companyId: string) => Promise<LegacyMutationResult<T>> | LegacyMutationResult<T>
 ): Promise<{ state: PersistedState; value: T; revision: number }> {
   const companyId = requireCompanyId();
   return prisma.$transaction(async (tx) => {
-    await tx.architectureModel.upsert({
-      where: { companyId },
-      create: { companyId, ...dataFor(withVersions(seedState)) },
-      update: {}
-    });
+    await lockCompany(tx, companyId);
+    await ensureArchitectureModel(tx, companyId);
     await tx.$queryRaw`SELECT "id" FROM "ArchitectureModel" WHERE "companyId" = ${companyId} FOR UPDATE`;
     const persisted = await tx.architectureModel.findUniqueOrThrow({ where: { companyId } });
     const state = withVersions({
@@ -40,13 +75,16 @@ async function mutateState<T>(
       relations: persisted.relations as unknown as EamRelation[],
       auditLog: persisted.auditLog as unknown as AuditLogEntry[]
     });
-    const value = await mutation(state, persisted.revision, tx, companyId);
+    const result = await mutation(state, persisted.revision, tx, companyId);
+    if (!result.changed) {
+      return { state: structuredClone(state), value: result.value, revision: persisted.revision };
+    }
     const saved = await tx.architectureModel.update({
       where: { companyId },
       data: { ...dataFor(state), revision: { increment: 1 } },
       select: { revision: true }
     });
-    return { state: structuredClone(state), value, revision: saved.revision };
+    return { state: structuredClone(state), value: result.value, revision: saved.revision };
   }, { timeout: 30_000 });
 }
 
@@ -90,8 +128,10 @@ async function readStateSnapshot(): Promise<{ state: PersistedState; revision: n
   const companyId = requireCompanyId();
   let persisted = await prisma.architectureModel.findUnique({ where: { companyId } });
   if (!persisted) {
-    await mutateState(() => undefined);
-    persisted = await prisma.architectureModel.findUniqueOrThrow({ where: { companyId } });
+    persisted = await prisma.$transaction(async (tx) => {
+      await lockCompany(tx, companyId);
+      return ensureArchitectureModel(tx, companyId);
+    }, { timeout: 30_000 });
   }
   return {
     state: withVersions({
@@ -128,6 +168,7 @@ export async function addElement(element: EamElement): Promise<PersistedState> {
     appendAuditLog(state, "create", stored.id, `Created element '${stored.name}'.`);
     const mutation = auditMutation("legacy-element", stored.id, "Legacy-Element", null, { ...stored, version: undefined });
     if (mutation) await appendCanonicalAudit(tx, companyId, [mutation]);
+    return { value: undefined, changed: true };
   })).state;
 }
 
@@ -137,11 +178,14 @@ export async function updateElement(id: string, patch: Partial<EamElement>, expe
     if (index === -1) throw new ResourceNotFoundError("Element not found.");
     const current = state.elements[index];
     if (current.version !== expectedVersion) throw new OptimisticLockError(current);
-    state.elements[index] = { ...current, ...patch, id, version: expectedVersion + 1 };
-    const mutation = auditMutation("legacy-element", id, "Legacy-Element", { ...current, version: undefined }, { ...state.elements[index], version: undefined });
-    appendAuditLog(state, "update", id, `Updated element '${state.elements[index].name}'.`);
-    if (mutation) await appendCanonicalAudit(tx, companyId, [mutation]);
-    return state.elements[index];
+    const candidate = { ...current, ...patch, id, version: expectedVersion };
+    const mutation = auditMutation("legacy-element", id, "Legacy-Element", { ...current, version: undefined }, { ...candidate, version: undefined });
+    if (!mutation) return { value: current, changed: false };
+    const updated = { ...candidate, version: expectedVersion + 1 };
+    state.elements[index] = updated;
+    appendAuditLog(state, "update", id, `Updated element '${updated.name}'.`);
+    await appendCanonicalAudit(tx, companyId, [mutation]);
+    return { value: updated, changed: true };
   })).value;
 }
 
@@ -160,6 +204,7 @@ export async function deleteElement(id: string, expectedVersion: number): Promis
       ...attachedRelations.map((relation) => auditMutation("legacy-relation", relation.id, "Legacy-Relation", { ...relation, version: undefined }, null))
     ].filter((item): item is AuditMutationInput => item !== null);
     await appendCanonicalAudit(tx, companyId, mutations);
+    return { value: undefined, changed: true };
   });
 }
 
@@ -170,6 +215,7 @@ export async function addRelation(relation: EamRelation): Promise<PersistedState
     appendAuditLog(state, "create", stored.id, `Created relation '${stored.type}' from ${stored.source} to ${stored.target}.`);
     const mutation = auditMutation("legacy-relation", stored.id, "Legacy-Relation", null, { ...stored, version: undefined });
     if (mutation) await appendCanonicalAudit(tx, companyId, [mutation]);
+    return { value: undefined, changed: true };
   })).state;
 }
 
@@ -182,6 +228,7 @@ export async function deleteRelation(id: string, expectedVersion: number): Promi
     appendAuditLog(state, "delete", id, "Deleted relation.");
     const mutation = auditMutation("legacy-relation", id, "Legacy-Relation", { ...current, version: undefined }, null);
     if (mutation) await appendCanonicalAudit(tx, companyId, [mutation]);
+    return { value: undefined, changed: true };
   });
 }
 
@@ -191,17 +238,24 @@ export async function importModel(model: EamModel, expectedRevision: number): Pr
     const previousElements = state.elements;
     const previousRelations = state.relations;
     const importedVersion = revision + 1;
-    state.elements = model.elements.map((item) => ({ ...item, version: importedVersion }));
-    state.relations = model.relations.map((item) => ({ ...item, version: importedVersion }));
-    appendAuditLog(state, "import", "model", `Imported model with ${state.elements.length} elements and ${state.relations.length} relations.`);
+    const previousElementVersions = new Map(previousElements.map((item) => [item.id, item.version ?? 1]));
+    const previousRelationVersions = new Map(previousRelations.map((item) => [item.id, item.version ?? 1]));
+    const nextElements = model.elements.map((item) => ({
+      ...item,
+      version: Math.max(importedVersion, (previousElementVersions.get(item.id) ?? 0) + 1)
+    }));
+    const nextRelations = model.relations.map((item) => ({
+      ...item,
+      version: Math.max(importedVersion, (previousRelationVersions.get(item.id) ?? 0) + 1)
+    }));
     type LegacyAudited = { type: "legacy-element" | "legacy-relation"; label: string; item: EamElement | EamRelation };
     const before = new Map<string, LegacyAudited>([
       ...previousElements.map((item) => [`legacy-element:${item.id}`, { type: "legacy-element", label: "Legacy-Element", item }] as const),
       ...previousRelations.map((item) => [`legacy-relation:${item.id}`, { type: "legacy-relation", label: "Legacy-Relation", item }] as const)
     ]);
     const after = new Map<string, LegacyAudited>([
-      ...state.elements.map((item) => [`legacy-element:${item.id}`, { type: "legacy-element", label: "Legacy-Element", item }] as const),
-      ...state.relations.map((item) => [`legacy-relation:${item.id}`, { type: "legacy-relation", label: "Legacy-Relation", item }] as const)
+      ...nextElements.map((item) => [`legacy-element:${item.id}`, { type: "legacy-element", label: "Legacy-Element", item }] as const),
+      ...nextRelations.map((item) => [`legacy-relation:${item.id}`, { type: "legacy-relation", label: "Legacy-Relation", item }] as const)
     ]);
     const mutations = [...new Set([...before.keys(), ...after.keys()])].sort().map((key) => {
       const left = before.get(key);
@@ -215,7 +269,12 @@ export async function importModel(model: EamModel, expectedRevision: number): Pr
         right ? { ...right.item, version: undefined } : null
       );
     }).filter((item): item is AuditMutationInput => item !== null);
+    if (mutations.length === 0) return { value: undefined, changed: false };
+    state.elements = nextElements;
+    state.relations = nextRelations;
+    appendAuditLog(state, "import", "model", `Imported model with ${state.elements.length} elements and ${state.relations.length} relations.`);
     await appendCanonicalAudit(tx, companyId, mutations);
+    return { value: undefined, changed: true };
   })).state;
 }
 
