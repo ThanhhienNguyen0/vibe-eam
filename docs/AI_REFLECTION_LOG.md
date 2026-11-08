@@ -1,5 +1,42 @@
 # AI Reflection Log
 
+## REQ-26 – Optimistic Locking und Datenbasisrevision (05.–06.11.2026)
+
+### KI-Beitrag und Architekturentscheidungen
+
+KI-gestützt entstanden Migration, Persistenzvertrag, API-Vorbedingungen, Konfliktoberfläche, Mehrprozess-DB-Tests und Nachweisdokumentation. Objektversionen und globale Datenrevision wurden bewusst getrennt: Einzelobjektänderungen dürfen unabhängige Objekte nicht über veraltete Whole-State-Snapshots zurücksetzen; vollständige Importe benötigen dagegen eine atomare Vorbedingung für den gesamten Unternehmensstand. Ein „Bewusst überschreiben“ umgeht die Sperre nicht, sondern wiederholt die Mutation mit der zuletzt vom Server gemeldeten aktuellen Version.
+
+Prozesslokale Caches oder JavaScript-Mutexe wurden als Konkurrenzschutz verworfen, weil mehrere Backendprozesse damit weiterhin verschiedene Wahrheiten besitzen. Komponenten-, Relationen- und Diagrammoperationen arbeiten direkt mit DB-Prädikaten aus Tenant, ID und Version. Der bestehende Whole-State-Writer beansprucht die Company-Revision in derselben Transaktion. Die historische JSONB-Modell-API verwendet eine PostgreSQL-Zeilensperre. Portable REQ-33-Dateien enthalten keine Laufzeitversionen; `schemaVersion`, Metamodellversion und Locking-Version bleiben unterschiedliche Begriffe.
+
+### Tatsächliche Fehlversuche und Korrekturen
+
+- Die neue Arbeitskopie benötigte zunächst ihre gelockten Abhängigkeiten und einen erzeugten Prisma-Client. Ein eingeschränkter Downloadversuch scheiterte an der Ausführungsumgebung; derselbe reproduzierbare Installations-/Generierungsschritt wurde im erlaubten Kontext wiederholt.
+- Der erste reale PostgreSQL-Lauf deckte zwei Produktfehler auf: Read-Normalisierung schrieb Zustände zurück und konnte dadurch neuere Daten überschreiben; außerdem bildete der Legacy-GET seinen ETag vor einer möglichen Erstinitialisierung. Read-Pfade wurden schreibfrei gemacht und der ETag wird erst nach der Initialisierung gelesen. Der folgende frische Gesamtlauf bestand.
+- Ein zunächst gefundener `docker`-Pfadeintrag war eine unbrauchbare Nullbyte-Datei. Die echte Docker-Desktop-CLI validierte alle drei Compose-Konfigurationen. Die Linux-Engine-Pipe startete nicht; Image-Builds wurden daher nicht ausgeführt und nicht als erfolgreich dokumentiert.
+- Parallelitätstests verwenden getrennte Node-Prozesse, eigene Prisma-Clients und eine IPC-Barriere statt Schlafzeiten. Damit wird keine bloß innerhalb eines Prozesses simulierte Konkurrenz als Mehrprozessbeleg ausgegeben.
+
+### Grenzen und erforderliche Kontrolle
+
+Belegt sind lokale statische Prüfungen, Unit-/Frontendtests, echte PostgreSQL-Migrationen und Konkurrenzfälle, Backup/Restore sowie der manuelle Rollback in isolierten Wegwerfdatenbanken. Das Dependency-Gate meldet 10 moderate und keine hohen oder kritischen Befunde; der Secret-Scan bestand einschließlich negativem Canarytest. Nicht belegt sind Container-Image-Build, Remote-CI/CodeQL, Browser-E2E, Staging, Produktion, menschliche Freigabe oder allgemeine Wartbarkeit.
+
+Diese Entwicklerinstanz erteilt keine unabhängige Freigabe. Der unveränderte lokale Commit muss anschließend in einem getrennten, read-only Kontrollkontext gegen Issue #58, Abschlussdokumentation, Claim-Evidence-Matrix und tatsächliche Testausgaben geprüft werden. Erst danach dürfen mit gesonderter Autorisierung Push und PR-Fortschreibung erfolgen. REQ-23 bleibt unberührt.
+
+### Unabhängige Ablehnung von `7c1079e6` und Korrektur
+
+Die getrennte Kontrolle fand drei P1-Bereiche: Unter PostgreSQL `READ COMMITTED` konnten Sidebar-Nutzdaten und Company-Revision aus verschiedenen Snapshots stammen; Whole-State-Writes erhöhten pauschal alle Objektversionen und der zweistufige Create-and-Place-Ablauf konnte eine unplatzierte Komponente hinterlassen; die Legacy-API las Body und ETag getrennt und setzte Importversionen auf 1 zurück. Zwei P2-Bereiche betrafen den nach „Neu laden“ weiter sichtbaren lokalen Draft sowie Testclaims ohne passende Konkurrenzfälle. Der Head wurde nicht freigegeben.
+
+Die Korrektur verwendet `RepeatableRead`, vergleicht bestehende Objektinhalte vor Versionssteigerung, führt Create-and-Place in einer DB-Transaktion aus, liest Legacy-Body und Revision aus derselben Zeile und verwendet die nächste Aggregatrevision als Importversion. Editorinstanzen sind an ID und Revision gebunden. Ein React-Test-Renderer wurde ausschließlich als Testabhängigkeit ergänzt, um Draft-Erhalt, echtes Reload, erfolgreichen Folgesave und wiederholte Überschreibkonflikte am zustandsbehafteten Editor zu prüfen.
+
+Der erste korrigierte DB-Lauf fand keine Produktregression, sondern zwei Test-/Policyfehler: Der neue Endpunkt war durch das deny-by-default Routeninventar erwartungsgemäß 403 und wurde explizit als `architecture:write` klassifiziert; zwölf Testregistrierungen trafen das absichtlich strikte Registerlimit, weshalb jede isolierte Testcompany eine eigene dokumentierte Test-IP verwendet. Danach bestand der frische Lauf. Ein fokussierter HTTP-Testaufruf scheiterte im eingeschränkten Kontext ausschließlich an `connect EACCES 127.0.0.1`; das vollständige erlaubte Gate bestand anschließend einschließlich aller 169 Backendtests.
+
+### Unabhängige Ablehnung von `6cfaec668507865d0b37f835565de7400beab015` und zweite Korrektur
+
+Die getrennte Kontrolle fand zwei P1-Bereiche: Whole-State-Writer sperrten Company→Objekt, während Einzelmutationen Objekt→Company sperrten; außerdem entfernten Komponenten- und Relationskaskaden Diagrammmitgliedschaften ohne Erhöhung der Diagrammversion. Ein P2-Befund betraf die vor dem Write gebildete, veraltete Diagrammversion in der Relation-anlegen-und-platzieren-Antwort. Ein P3-Befund betraf die fehlende vollständige SHA-Bindung und zu weite Kaskadenclaims. Auch dieser Head wurde nicht freigegeben.
+
+Die zweite Korrektur sperrt in sämtlichen Sidebar-Schreibpfaden zuerst die Company-Zeile und erst danach Objekt- oder Diagrammzeilen. PostgreSQL-`P2034` wird in den Optimistic-Locking-Konflikt übersetzt. Vor Komponenten- und Relationslöschungen werden die durch direkte und kaskadierte Mitgliedschaften betroffenen Diagramme bestimmt und in derselben Transaktion versioniert. Die Create-and-Place-Antwort wird aus dem gespeicherten Zustand gebildet.
+
+Die neuen DB-Regressionen warten über `pg_stat_activity` deterministisch auf reale Lockbarrieren für Whole-State gegen PATCH, DELETE und Create-and-Place; sie prüfen Konflikt statt 500 sowie die erwartete Datenrevision und Komponentenanzahl. Unveränderte Auditanzahlen werden in getrennten Kaskaden- und Importkonfliktfällen geprüft. Weitere Fälle prüfen Kaskadenversionen, stale Diagramm-409, Rollback, einen separaten Prozess für Komponenten-DELETE gegen Diagrammupdate und die unmittelbare Wiederverwendbarkeit der zurückgegebenen Diagrammversion. Der isolierte Lauf bestand nach sieben Migrationen mit 31 von 31 Tests. Der erste eingeschränkte Start scheiterte vor Testausführung an `spawnSync initdb.exe UNKNOWN`; der identische Lauf wurde im erlaubten Kontext erfolgreich wiederholt. Das vollständige lokale Gate bestand mit 169 Backend- und 40 Frontendtests. Der erste abschließende Dependency-Scan erhielt im eingeschränkten Kontext eine unvollständige Audit-Antwort und brach gemäß Fail-closed-Regel ab; die Wiederholung mit Registry-Zugriff bestand mit 10 moderaten, 0 hohen und 0 kritischen Befunden. Der commitgebundene Secret-Scan bestand für 78 Commits und 212 Dateien. Drei Compose-Konfigurationen wurden mit der echten Docker-CLI validiert; die Linux-Engine blieb unerreichbar, daher wird weiterhin kein Image-Build behauptet.
+
 ## REQ-24 – technische Umsetzung, unabhängige Kontrolle und PR-Fortschreibung (20.10.2026)
 
 Geltung: Implementierungsprotokoll; die ursprüngliche lokale Umsetzung ist unabhängig bestätigt. Maßgebliche Belege sind `REQ-24_IMPLEMENTATION_EVIDENCE.md` und `REQ-24_REVIEW.md`; Draft-PR #88 und sein erster Remote-Lauf existieren. Die beiden dort zusätzlich erkannten CodeQL-Befunde sind lokal korrigiert; der erneute Remote-Lauf des Korrekturcommits, Containerausführung, Deployment und menschliche Freigabe werden separat belegt. Frühere Abschnitte bleiben historische Entwicklungsstände.

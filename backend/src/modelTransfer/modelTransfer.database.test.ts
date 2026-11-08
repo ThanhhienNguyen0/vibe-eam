@@ -37,7 +37,10 @@ async function addUser(adminToken: string, role: Role) {
 
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 const exportModel = (token: string) => request(app).get("/api/sidebar/model/export").set(auth(token));
-const importModel = (token: string, document: object) => request(app).post("/api/sidebar/model/import").set(auth(token)).send(document);
+const importModel = async (token: string, document: object) => {
+  const current = await exportModel(token);
+  return request(app).post("/api/sidebar/model/import").set(auth(token)).set("If-Match", current.headers.etag ?? "0").send(document);
+};
 
 function fixtureFrom(document: ModelTransferDocument): ModelTransferDocument {
   const result = structuredClone(document);
@@ -191,7 +194,7 @@ describe.skipIf(!url)("REQ-33 complete JSON round-trip against real PostgreSQL",
     expect(firstImport.status, JSON.stringify(firstImport.body)).toBe(200);
 
     const firstExport = await exportModel(viewer);
-    expect(firstExport.status).toBe(200);
+    expect(firstExport.status, JSON.stringify(firstExport.body)).toBe(200);
     const firstText = firstExport.text;
     expect(firstExport.body.schemaVersion).toBe(1);
     expect(firstExport.body.model.metamodel.version).toBe("req33-domain-7");
@@ -270,7 +273,7 @@ describe.skipIf(!url)("REQ-33 complete JSON round-trip against real PostgreSQL",
     // Existing partial formats remain operational: legacy model JSON, metamodel JSON and CSV/XLSX.
     const legacy = await request(app).get("/api/model/export").set(auth(source.token));
     expect(legacy.status).toBe(200);
-    expect((await request(app).post("/api/model/import").set(auth(source.token)).send(legacy.body)).status).toBe(200);
+    expect((await request(app).post("/api/model/import").set(auth(source.token)).set("If-Match", legacy.headers.etag ?? "0").send(legacy.body)).status).toBe(200);
     const metamodel = await request(app).get("/api/sidebar/metamodel/export").set(auth(source.token));
     expect(metamodel.status).toBe(200);
     const metamodelImport = await request(app).post("/api/sidebar/metamodel/import").set(auth(source.token)).send(metamodel.body);

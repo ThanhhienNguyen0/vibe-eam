@@ -24,6 +24,7 @@ export interface Position {
 
 export interface EamElement {
   id: string;
+  version?: number;
   name: string;
   type: ElementType;
   layer: Layer;
@@ -39,6 +40,7 @@ export interface EamElement {
 
 export interface EamRelation {
   id: string;
+  version?: number;
   source: string;
   target: string;
   type: RelationType;

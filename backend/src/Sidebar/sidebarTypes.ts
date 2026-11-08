@@ -104,6 +104,8 @@ export interface ValidationRule {
 
 export interface ComponentInstance {
   id: string;
+  /** Server-managed runtime revision (REQ-26). */
+  version?: number;
   /** Optional identifier from a source system (REQ-35); unique per company. */
   externalId?: string;
   name: string;
@@ -114,6 +116,8 @@ export interface ComponentInstance {
 
 export interface ConnectionInstance {
   id: string;
+  /** Server-managed runtime revision (REQ-26). */
+  version?: number;
   /** Optional identifier from a source system (REQ-35); unique per company. */
   externalId?: string;
   name: string;
@@ -133,6 +137,8 @@ export interface DiagramPosition {
 
 export interface Diagram {
   id: string;
+  /** Server-managed runtime revision (REQ-26). */
+  version?: number;
   name: string;
   description: string;
   componentIds: string[];
@@ -217,6 +223,8 @@ export interface MetamodelImportResult {
 }
 
 export interface SidebarState {
+  /** Server-managed company data revision; excluded from REQ-33 transfer documents. */
+  dataRevision?: number;
   metamodel: Metamodel;
   componentTypes: ComponentType[];
   connectionTypes: ConnectionType[];

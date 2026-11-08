@@ -17,6 +17,7 @@ import {
   X
 } from "lucide-react";
 import { sidebarApi } from "./sidebarApi";
+import { runOptimisticMutation } from "../optimisticConflict";
 import { COMPONENT_DRAG_MIME, COMPONENT_TYPE_DRAG_MIME, DEFAULT_TYPE_CATEGORY } from "./sidebarTypes";
 import type { ComponentType, SidebarState } from "./sidebarTypes";
 import { useAccess } from "../access";
@@ -518,9 +519,16 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
   }
 
   async function deleteComponent(id: string) {
-    const name = components.find((c) => c.id === id)?.name ?? "Komponente";
+    const component = components.find((c) => c.id === id);
+    const name = component?.name ?? "Komponente";
     if (!window.confirm(`Komponente „${name}“ löschen? Zugehörige Verbindungen werden mit entfernt.`)) return;
-    await sidebarApi.deleteComponent(id);
+    if (!component) return;
+    const result = await runOptimisticMutation(
+      component.version ?? 1,
+      (version) => sidebarApi.deleteComponent(id, version),
+      async () => onStateChange(await sidebarApi.getAll())
+    );
+    if (!result.applied) return;
     onStateChange({
       ...sidebarState,
       components: components.filter((c) => c.id !== id),
@@ -530,14 +538,28 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
 
   async function deleteConnection(id: string) {
     if (!window.confirm(`Verbindung „${connectionLabel(id)}“ wirklich löschen?`)) return;
-    await sidebarApi.deleteConnection(id);
+    const connection = connections.find((item) => item.id === id);
+    if (!connection) return;
+    const result = await runOptimisticMutation(
+      connection.version ?? 1,
+      (version) => sidebarApi.deleteConnection(id, version),
+      async () => onStateChange(await sidebarApi.getAll())
+    );
+    if (!result.applied) return;
     onStateChange({ ...sidebarState, connections: connections.filter((c) => c.id !== id) });
   }
 
   async function deleteDiagram(id: string) {
-    const name = diagrams.find((d) => d.id === id)?.name ?? "Diagramm";
+    const diagram = diagrams.find((d) => d.id === id);
+    const name = diagram?.name ?? "Diagramm";
     if (!window.confirm(`Diagramm „${name}“ wirklich löschen?`)) return;
-    await sidebarApi.deleteDiagram(id);
+    if (!diagram) return;
+    const result = await runOptimisticMutation(
+      diagram.version ?? 1,
+      (version) => sidebarApi.deleteDiagram(id, version),
+      async () => onStateChange(await sidebarApi.getAll())
+    );
+    if (!result.applied) return;
     onStateChange({ ...sidebarState, diagrams: diagrams.filter((d) => d.id !== id) });
   }
 
@@ -567,17 +589,23 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
       const u = await sidebarApi.updateViewpoint(id, { name });
       onStateChange({ ...sidebarState, viewpoints: viewpoints.map((v) => (v.id === id ? u : v)) });
     } else if (kind === "component") {
-      const u = await sidebarApi.updateComponent(id, { name });
-      onStateChange({ ...sidebarState, components: components.map((c) => (c.id === id ? u : c)) });
+      const item = components.find((c) => c.id === id);
+      if (!item) return;
+      const result = await runOptimisticMutation(item.version ?? 1, (version) => sidebarApi.updateComponent(id, { name }, version), async () => onStateChange(await sidebarApi.getAll()));
+      if (result.applied) onStateChange({ ...sidebarState, components: components.map((c) => (c.id === id ? result.value : c)) });
     } else if (kind === "connection") {
-      const u = await sidebarApi.updateConnection(id, { name });
-      onStateChange({ ...sidebarState, connections: connections.map((c) => (c.id === id ? u : c)) });
+      const item = connections.find((c) => c.id === id);
+      if (!item) return;
+      const result = await runOptimisticMutation(item.version ?? 1, (version) => sidebarApi.updateConnection(id, { name }, version), async () => onStateChange(await sidebarApi.getAll()));
+      if (result.applied) onStateChange({ ...sidebarState, connections: connections.map((c) => (c.id === id ? result.value : c)) });
     } else if (kind === "catalog") {
       const u = await sidebarApi.updateCatalog(id, { name });
       onStateChange({ ...sidebarState, catalogs: catalogs.map((c) => (c.id === id ? u : c)) });
     } else {
-      const u = await sidebarApi.updateDiagram(id, { name });
-      onStateChange({ ...sidebarState, diagrams: diagrams.map((d) => (d.id === id ? u : d)) });
+      const item = diagrams.find((d) => d.id === id);
+      if (!item) return;
+      const result = await runOptimisticMutation(item.version ?? 1, (version) => sidebarApi.updateDiagram(id, { name }, version), async () => onStateChange(await sidebarApi.getAll()));
+      if (result.applied) onStateChange({ ...sidebarState, diagrams: diagrams.map((d) => (d.id === id ? result.value : d)) });
     }
   }
 

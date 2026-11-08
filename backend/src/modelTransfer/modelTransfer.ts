@@ -248,7 +248,8 @@ function compareStrings(left: string, right: string): number {
 }
 
 function canonicalState(state: SidebarState): SidebarState {
-  const copy = structuredClone(state);
+  const copy = structuredClone(state) as SidebarState & { dataRevision?: number };
+  delete copy.dataRevision;
   for (const collection of [
     copy.componentTypes,
     copy.connectionTypes,
@@ -263,9 +264,12 @@ function canonicalState(state: SidebarState): SidebarState {
     collection.sort((left, right) => compareStrings(left.id, right.id));
   }
   for (const diagram of copy.diagrams) {
+    delete (diagram as Partial<typeof diagram>).version;
     diagram.componentIds.sort(compareStrings);
     diagram.connectionIds.sort(compareStrings);
   }
+  for (const component of copy.components) delete (component as Partial<typeof component>).version;
+  for (const connection of copy.connections) delete (connection as Partial<typeof connection>).version;
   return canonicalize(copy) as SidebarState;
 }
 
@@ -395,7 +399,12 @@ function portableIdMap(state: SidebarState, companyId?: string): Map<string, str
 
 export function materializeModelTransferState(document: ModelTransferDocument, companyId: string): SidebarState {
   const prefix = `${companyId}:`;
-  return mapStateIds(document.model, (id) => `${prefix}${id}`);
+  const state = mapStateIds(document.model, (id) => `${prefix}${id}`);
+  state.dataRevision = 0;
+  state.components = state.components.map((item) => ({ ...item, version: 1 }));
+  state.connections = state.connections.map((item) => ({ ...item, version: 1 }));
+  state.diagrams = state.diagrams.map((item) => ({ ...item, version: 1 }));
+  return state;
 }
 
 export function exportModelTransferDocument(state: SidebarState, companyId?: string): ModelTransferDocument {

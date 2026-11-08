@@ -2,6 +2,7 @@ import express, { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import { createHash } from "node:crypto";
 import { readSidebarState, writeSidebarState, listAuditLog } from "../Sidebar/sidebarStore.js";
+import { OptimisticLockError } from "../persistence/databaseSidebarRepository.js";
 import {
   catalogElementFilter,
   catalogPropertyKeys,
@@ -131,6 +132,7 @@ interface UploadedImport {
   fileName: string;
   format: "xlsx" | "csv";
   sha256: string;
+  dataRevision: number;
 }
 
 async function planUpload(req: Request): Promise<UploadedImport> {
@@ -142,16 +144,18 @@ async function planUpload(req: Request): Promise<UploadedImport> {
   const format = formatParam(req.query.format)
     ?? (fileName.toLowerCase().endsWith(".csv") ? "csv" : fileName.toLowerCase().endsWith(".xlsx") ? "xlsx" : body.subarray(0, 2).toString("latin1") === "PK" ? "xlsx" : "csv");
   const parsed = await parseImportFile(body, format, sheetParam(req.query.sheet));
-  const plan = planImport(await readSidebarState(), parsed);
-  return { plan, fileName, format, sha256: createHash("sha256").update(body).digest("hex") };
+  const state = await readSidebarState();
+  const plan = planImport(state, parsed);
+  return { plan, fileName, format, dataRevision: state.dataRevision ?? 0, sha256: createHash("sha256").update(body).digest("hex") };
 }
 
-function describePlan({ plan, fileName, format }: UploadedImport) {
+function describePlan({ plan, fileName, format, dataRevision }: UploadedImport) {
   const errorCount = countErrors(plan);
   const applicable = plan.rows.filter((row) => row.status === "new" || row.status === "changed").length;
   return {
     fileName,
     format,
+    dataRevision,
     summary: plan.summary,
     errorCount,
     applicableRows: applicable,
@@ -178,6 +182,20 @@ router.post("/import/commit", rawUpload, async (req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
     const upload = await planUpload(req);
     const description = describePlan(upload);
+    const expectedRaw = firstString(req.query.expectedRevision);
+    if (expectedRaw === undefined) throw new TransferError(428, "Der Commit benötigt die Datenbasisrevision aus der Vorschau.");
+    const expectedRevision = Number(expectedRaw);
+    if (!/^\d+$/.test(expectedRaw) || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
+      throw new TransferError(400, "expectedRevision muss eine nichtnegative ganze Zahl sein.");
+    }
+    if (expectedRevision !== upload.dataRevision) {
+      res.status(409).json({
+        error: "Die Datenbasis wurde seit der Vorschau geändert. Bitte Import erneut prüfen.",
+        code: "IMPORT_BASE_REVISION_CONFLICT",
+        currentRevision: upload.dataRevision
+      });
+      return;
+    }
     const skipInvalid = firstString(req.query.skipInvalid) === "true";
     if (description.errorCount > 0 && !skipInvalid) {
       res.status(422).json({ error: "Die Datei enthält Fehler. Bitte korrigieren oder fehlerhafte Zeilen bewusst überspringen.", ...description });
@@ -227,6 +245,10 @@ router.use((error: unknown, _req: Request, res: Response, next: NextFunction) =>
   }
   if (error instanceof ImportFormatError) {
     res.status(400).json({ error: error.message });
+    return;
+  }
+  if (error instanceof OptimisticLockError) {
+    res.status(409).json({ error: "Die Datenbasis wurde während des Imports geändert. Bitte Import erneut prüfen.", code: "IMPORT_BASE_REVISION_CONFLICT" });
     return;
   }
   if (typeof error === "object" && error !== null && (error as { type?: string }).type === "entity.too.large") {

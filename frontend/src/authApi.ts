@@ -31,7 +31,7 @@ export function clearAuthToken(): void {
 }
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string) { super(message); }
+  constructor(public readonly status: number, message: string, public readonly body: Record<string, unknown> = {}) { super(message); }
 }
 
 export function handleAuthStatus(status: number): void {
@@ -56,7 +56,7 @@ export async function apiRequest<T>(url: string, init?: RequestInit): Promise<T>
   if (!response.ok) {
     if (response.status !== 403 || !url.endsWith("/auth/me")) handleAuthStatus(response.status);
     const body = await response.json().catch(() => ({}));
-    throw new ApiError(response.status, (body as { error?: string }).error ?? `HTTP ${response.status}`);
+    throw new ApiError(response.status, (body as { error?: string }).error ?? `HTTP ${response.status}`, body as Record<string, unknown>);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;

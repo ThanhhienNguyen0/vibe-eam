@@ -22,9 +22,11 @@ import {
   deleteRelation,
   getAuditLog,
   getModel,
+  getModelSnapshot,
   importModel,
   updateElement
 } from "./store.js";
+import { OptimisticLockError, ResourceNotFoundError } from "./persistence/databaseSidebarRepository.js";
 import {
   layerForType,
   normalizeElement,
@@ -39,6 +41,16 @@ export interface AppOptions {
   jwtSecret: string;
   authRepository?: AuthRepository;
   userRepository?: UserRepository;
+}
+
+function parseIfMatch(value: string | undefined, allowZero = false): number {
+  if (value === undefined) throw new AuthHttpError(428, "If-Match precondition is required.");
+  const normalized = value.trim().replace(/^W\//, "").replace(/^"|"$/g, "");
+  const parsed = Number(normalized);
+  if (!/^\d+$/.test(normalized) || !Number.isSafeInteger(parsed) || parsed < (allowZero ? 0 : 1)) {
+    throw new AuthHttpError(400, "If-Match must contain a valid runtime revision.");
+  }
+  return parsed;
 }
 
 export function createApp(options: AppOptions): express.Express {
@@ -87,7 +99,9 @@ export function createApp(options: AppOptions): express.Express {
 
   app.get("/api/model", async (_req, res, next) => {
   try {
-    res.json(await getModel());
+    const snapshot = await getModelSnapshot();
+    res.setHeader("ETag", `"${snapshot.revision}"`);
+    res.json(snapshot.model);
   } catch (error) {
     next(error);
   }
@@ -111,6 +125,7 @@ export function createApp(options: AppOptions): express.Express {
 
   app.patch("/api/model/elements/:id", async (req, res, next) => {
   try {
+    const expectedVersion = parseIfMatch(req.header("if-match"));
     const existing = (await getModel()).elements.find((element) => element.id === req.params.id);
     if (!existing) return res.status(404).json({ error: "Element not found." });
 
@@ -118,7 +133,7 @@ export function createApp(options: AppOptions): express.Express {
     const validation = validateElement(updatedCandidate);
     if (!validation.valid) return res.status(400).json(validation);
 
-    const updated = await updateElement(req.params.id, updatedCandidate);
+    const updated = await updateElement(req.params.id, updatedCandidate, expectedVersion);
     res.json(updated);
   } catch (error) {
     next(error);
@@ -127,8 +142,7 @@ export function createApp(options: AppOptions): express.Express {
 
   app.delete("/api/model/elements/:id", async (req, res, next) => {
   try {
-    const deleted = await deleteElement(req.params.id);
-    if (!deleted) return res.status(404).json({ error: "Element not found." });
+    await deleteElement(req.params.id, parseIfMatch(req.header("if-match")));
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -150,8 +164,7 @@ export function createApp(options: AppOptions): express.Express {
 
   app.delete("/api/model/relations/:id", async (req, res, next) => {
   try {
-    const deleted = await deleteRelation(req.params.id);
-    if (!deleted) return res.status(404).json({ error: "Relation not found." });
+    await deleteRelation(req.params.id, parseIfMatch(req.header("if-match")));
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -160,10 +173,11 @@ export function createApp(options: AppOptions): express.Express {
 
   app.post("/api/model/import", async (req, res, next) => {
   try {
+    const expectedRevision = parseIfMatch(req.header("if-match"), true);
     const model = req.body as EamModel;
     const validation = validateModel(model);
     if (!validation.valid) return res.status(400).json(validation);
-    const state = await importModel(model);
+    const state = await importModel(model, expectedRevision);
     res.json({ elements: state.elements, relations: state.relations });
   } catch (error) {
     next(error);
@@ -172,7 +186,9 @@ export function createApp(options: AppOptions): express.Express {
 
   app.get("/api/model/export", async (_req, res, next) => {
   try {
-    res.json(await getModel());
+    const snapshot = await getModelSnapshot();
+    res.setHeader("ETag", `"${snapshot.revision}"`);
+    res.json(snapshot.model);
   } catch (error) {
     next(error);
   }
@@ -191,6 +207,14 @@ export function createApp(options: AppOptions): express.Express {
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     if (error instanceof AuthHttpError) {
       res.status(error.status).json({ error: error.message });
+      return;
+    }
+    if (error instanceof ResourceNotFoundError) {
+      res.status(404).json({ error: error.message, code: "RESOURCE_NOT_FOUND" });
+      return;
+    }
+    if (error instanceof OptimisticLockError) {
+      res.status(409).json({ error: "The resource changed after it was read.", code: "OPTIMISTIC_LOCK_CONFLICT", current: error.current });
       return;
     }
     // Do not log database input/errors: those may contain credentials or password hashes.
