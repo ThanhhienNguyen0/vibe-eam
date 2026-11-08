@@ -1,8 +1,11 @@
 // Historical ArchitectureModel API. JSONB writes are serialized by a DB row lock so separate
 // backend processes cannot overwrite one another (REQ-26).
 import { Prisma, PrismaClient } from "@prisma/client";
+import { randomUUID } from "node:crypto";
+import { auditMutation } from "./audit/auditDiff.js";
+import type { AuditMutationInput } from "./audit/auditTypes.js";
 import { seedState } from "./seed.js";
-import { requireCompanyId } from "./tenant.js";
+import { currentPrincipal, requireCompanyId } from "./tenant.js";
 import type { AuditLogEntry, EamElement, EamModel, EamRelation, PersistedState } from "./types.js";
 import { OptimisticLockError, ResourceNotFoundError } from "./persistence/databaseSidebarRepository.js";
 
@@ -21,7 +24,7 @@ const dataFor = (state: PersistedState) => ({
 });
 
 async function mutateState<T>(
-  mutation: (state: PersistedState, revision: number) => Promise<T> | T
+  mutation: (state: PersistedState, revision: number, tx: Prisma.TransactionClient, companyId: string) => Promise<T> | T
 ): Promise<{ state: PersistedState; value: T; revision: number }> {
   const companyId = requireCompanyId();
   return prisma.$transaction(async (tx) => {
@@ -37,7 +40,7 @@ async function mutateState<T>(
       relations: persisted.relations as unknown as EamRelation[],
       auditLog: persisted.auditLog as unknown as AuditLogEntry[]
     });
-    const value = await mutation(state, persisted.revision);
+    const value = await mutation(state, persisted.revision, tx, companyId);
     const saved = await tx.architectureModel.update({
       where: { companyId },
       data: { ...dataFor(state), revision: { increment: 1 } },
@@ -45,6 +48,42 @@ async function mutateState<T>(
     });
     return { state: structuredClone(state), value, revision: saved.revision };
   }, { timeout: 30_000 });
+}
+
+async function appendCanonicalAudit(
+  tx: Prisma.TransactionClient,
+  companyId: string,
+  mutations: AuditMutationInput[]
+): Promise<void> {
+  if (mutations.length === 0) return;
+  const principal = currentPrincipal();
+  if (!principal || principal.companyId !== companyId) throw new Error("Authenticated audit actor is required.");
+  const actor = await tx.user.findFirst({
+    where: { id: principal.userId, companyId },
+    select: { id: true, email: true, name: true }
+  });
+  if (!actor) throw new Error("Authenticated audit actor no longer belongs to the company.");
+  const occurredAt = new Date();
+  const batchId = mutations.length > 1 ? randomUUID() : null;
+  for (const mutation of mutations) {
+    await tx.auditLogEntry.create({
+      data: {
+        companyId,
+        userId: actor.id,
+        userEmail: actor.email,
+        actorType: "user",
+        actorLabel: actor.name ?? actor.email,
+        action: mutation.action,
+        entityType: mutation.entityType,
+        entityId: mutation.entityId,
+        summary: mutation.summary,
+        changes: mutation.changes as unknown as Prisma.InputJsonValue,
+        details: { origin: "architecture-model-api", ...(mutation.details ?? {}) } as Prisma.InputJsonValue,
+        batchId,
+        occurredAt
+      }
+    });
+  }
 }
 
 async function readStateSnapshot(): Promise<{ state: PersistedState; revision: number }> {
@@ -83,62 +122,100 @@ function appendAuditLog(state: PersistedState, action: AuditLogEntry["action"], 
 }
 
 export async function addElement(element: EamElement): Promise<PersistedState> {
-  return (await mutateState((state) => {
+  return (await mutateState(async (state, _revision, tx, companyId) => {
     const stored = { ...element, version: 1 };
     state.elements.push(stored);
     appendAuditLog(state, "create", stored.id, `Created element '${stored.name}'.`);
+    const mutation = auditMutation("legacy-element", stored.id, "Legacy-Element", null, { ...stored, version: undefined });
+    if (mutation) await appendCanonicalAudit(tx, companyId, [mutation]);
   })).state;
 }
 
 export async function updateElement(id: string, patch: Partial<EamElement>, expectedVersion: number): Promise<EamElement> {
-  return (await mutateState((state) => {
+  return (await mutateState(async (state, _revision, tx, companyId) => {
     const index = state.elements.findIndex((element) => element.id === id);
     if (index === -1) throw new ResourceNotFoundError("Element not found.");
     const current = state.elements[index];
     if (current.version !== expectedVersion) throw new OptimisticLockError(current);
     state.elements[index] = { ...current, ...patch, id, version: expectedVersion + 1 };
+    const mutation = auditMutation("legacy-element", id, "Legacy-Element", { ...current, version: undefined }, { ...state.elements[index], version: undefined });
     appendAuditLog(state, "update", id, `Updated element '${state.elements[index].name}'.`);
+    if (mutation) await appendCanonicalAudit(tx, companyId, [mutation]);
     return state.elements[index];
   })).value;
 }
 
 export async function deleteElement(id: string, expectedVersion: number): Promise<void> {
-  await mutateState((state) => {
+  await mutateState(async (state, _revision, tx, companyId) => {
     const current = state.elements.find((element) => element.id === id);
     if (!current) throw new ResourceNotFoundError("Element not found.");
     if (current.version !== expectedVersion) throw new OptimisticLockError(current);
-    const removedRelations = state.relations.filter((relation) => relation.source === id || relation.target === id).length;
+    const attachedRelations = state.relations.filter((relation) => relation.source === id || relation.target === id);
+    const removedRelations = attachedRelations.length;
     state.elements = state.elements.filter((element) => element.id !== id);
     state.relations = state.relations.filter((relation) => relation.source !== id && relation.target !== id);
     appendAuditLog(state, "delete", id, `Deleted element and ${removedRelations} attached relation(s).`);
+    const mutations = [
+      auditMutation("legacy-element", id, "Legacy-Element", { ...current, version: undefined }, null),
+      ...attachedRelations.map((relation) => auditMutation("legacy-relation", relation.id, "Legacy-Relation", { ...relation, version: undefined }, null))
+    ].filter((item): item is AuditMutationInput => item !== null);
+    await appendCanonicalAudit(tx, companyId, mutations);
   });
 }
 
 export async function addRelation(relation: EamRelation): Promise<PersistedState> {
-  return (await mutateState((state) => {
+  return (await mutateState(async (state, _revision, tx, companyId) => {
     const stored = { ...relation, version: 1 };
     state.relations.push(stored);
     appendAuditLog(state, "create", stored.id, `Created relation '${stored.type}' from ${stored.source} to ${stored.target}.`);
+    const mutation = auditMutation("legacy-relation", stored.id, "Legacy-Relation", null, { ...stored, version: undefined });
+    if (mutation) await appendCanonicalAudit(tx, companyId, [mutation]);
   })).state;
 }
 
 export async function deleteRelation(id: string, expectedVersion: number): Promise<void> {
-  await mutateState((state) => {
+  await mutateState(async (state, _revision, tx, companyId) => {
     const current = state.relations.find((relation) => relation.id === id);
     if (!current) throw new ResourceNotFoundError("Relation not found.");
     if (current.version !== expectedVersion) throw new OptimisticLockError(current);
     state.relations = state.relations.filter((relation) => relation.id !== id);
     appendAuditLog(state, "delete", id, "Deleted relation.");
+    const mutation = auditMutation("legacy-relation", id, "Legacy-Relation", { ...current, version: undefined }, null);
+    if (mutation) await appendCanonicalAudit(tx, companyId, [mutation]);
   });
 }
 
 export async function importModel(model: EamModel, expectedRevision: number): Promise<PersistedState> {
-  return (await mutateState((state, revision) => {
+  return (await mutateState(async (state, revision, tx, companyId) => {
     if (revision !== expectedRevision) throw new OptimisticLockError({ revision });
+    const previousElements = state.elements;
+    const previousRelations = state.relations;
     const importedVersion = revision + 1;
     state.elements = model.elements.map((item) => ({ ...item, version: importedVersion }));
     state.relations = model.relations.map((item) => ({ ...item, version: importedVersion }));
     appendAuditLog(state, "import", "model", `Imported model with ${state.elements.length} elements and ${state.relations.length} relations.`);
+    type LegacyAudited = { type: "legacy-element" | "legacy-relation"; label: string; item: EamElement | EamRelation };
+    const before = new Map<string, LegacyAudited>([
+      ...previousElements.map((item) => [`legacy-element:${item.id}`, { type: "legacy-element", label: "Legacy-Element", item }] as const),
+      ...previousRelations.map((item) => [`legacy-relation:${item.id}`, { type: "legacy-relation", label: "Legacy-Relation", item }] as const)
+    ]);
+    const after = new Map<string, LegacyAudited>([
+      ...state.elements.map((item) => [`legacy-element:${item.id}`, { type: "legacy-element", label: "Legacy-Element", item }] as const),
+      ...state.relations.map((item) => [`legacy-relation:${item.id}`, { type: "legacy-relation", label: "Legacy-Relation", item }] as const)
+    ]);
+    const mutations = [...new Set([...before.keys(), ...after.keys()])].sort().map((key) => {
+      const left = before.get(key);
+      const right = after.get(key);
+      const current = right ?? left!;
+      return auditMutation(
+        current.type,
+        current.item.id,
+        current.label,
+        left ? { ...left.item, version: undefined } : null,
+        right ? { ...right.item, version: undefined } : null
+      );
+    }).filter((item): item is AuditMutationInput => item !== null);
+    await appendCanonicalAudit(tx, companyId, mutations);
   })).state;
 }
 

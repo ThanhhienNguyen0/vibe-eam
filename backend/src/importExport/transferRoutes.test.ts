@@ -22,10 +22,15 @@ vi.mock("../Sidebar/sidebarStore.js", async (original) => ({
     store.state = structuredClone(state);
     return state;
   }),
-  listAuditLog: vi.fn(async () => store.writes.filter((write) => write.audit).map((write, index) => ({
-    id: String(index), createdAt: "2026-01-01T00:00:00.000Z", userId: null, userEmail: null,
-    entityType: write.audit!.entityType, action: write.audit!.action, summary: write.audit!.summary, details: write.audit!.details ?? {}
-  })))
+  listAuditLog: vi.fn(async () => ({
+    items: store.writes.filter((write) => write.audit).map((write, index) => ({
+      id: String(index), occurredAt: "2026-01-01T00:00:00.000Z", createdAt: "2026-01-01T00:00:00.000Z",
+      actorType: "user" as const, actorLabel: null, userId: null, userEmail: null,
+      entityType: write.audit!.entityType, entityId: null, action: write.audit!.action,
+      summary: write.audit!.summary, changes: [], details: write.audit!.details ?? {}, batchId: null
+    })),
+    nextCursor: null
+  }))
 }));
 
 const secret = "req31-test-only-signing-secret-at-least-32-characters";
@@ -208,7 +213,7 @@ describe("audit log route", () => {
     for (const role of ["Admin", "Architect"]) {
       const response = await request(app).get("/api/sidebar/audit-log").set("Authorization", bearer(role));
       expect(response.status).toBe(200);
-      expect(response.body).toEqual([]);
+      expect(response.body).toEqual({ items: [], nextCursor: null });
     }
   });
 
@@ -216,7 +221,22 @@ describe("audit log route", () => {
     const app = application();
     await request(app).post("/api/sidebar/import/commit?fileName=a.csv&expectedRevision=0").set("Authorization", bearer("Architect")).set("Content-Type", "application/octet-stream").send(csvFile([["Typ", "Name"], ["Application", "Logged"]]));
     const response = await request(app).get("/api/sidebar/audit-log").set("Authorization", bearer("Admin"));
-    expect(response.body).toHaveLength(1);
-    expect(response.body[0]).toMatchObject({ action: "import.commit", entityType: "model" });
+    expect(response.body.items).toHaveLength(1);
+    expect(response.body.items[0]).toMatchObject({ action: "import.commit", entityType: "model" });
+  });
+
+  it("rejects ambiguous dates, invalid ranges, oversized filters and malformed cursors", async () => {
+    const app = application();
+    const paths = [
+      "/api/sidebar/audit-log?from=2026-11-08T10%3A00%3A00",
+      "/api/sidebar/audit-log?from=2026-11-09T00%3A00%3A00Z&to=2026-11-08T00%3A00%3A00Z",
+      "/api/sidebar/audit-log?limit=0",
+      "/api/sidebar/audit-log?limit=201",
+      "/api/sidebar/audit-log?cursor=not-base64-json",
+      `/api/sidebar/audit-log?actor=${"a".repeat(201)}`
+    ];
+    for (const path of paths) {
+      expect((await request(app).get(path).set("Authorization", bearer("Admin"))).status, path).toBe(400);
+    }
   });
 });

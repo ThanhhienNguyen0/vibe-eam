@@ -306,18 +306,27 @@ model DiagramConnectionMembership {
 /// Append-only, company-scoped record of business events (e.g. imports).
 /// userId/userEmail are copied values so entries survive user deletion.
 model AuditLogEntry {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   companyId  String
   userId     String?
   userEmail  String?
+  actorType  String    @default("legacy")
+  actorLabel String?
   action     String
   entityType String
+  entityId   String?
   summary    String
-  details    Json     @default("{}") @db.JsonB
-  createdAt  DateTime @default(now())
-  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  changes    Json      @default("[]") @db.JsonB
+  details    Json      @default("{}") @db.JsonB
+  batchId    String?
+  occurredAt DateTime?
+  createdAt  DateTime  @default(now())
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, createdAt])
+  @@index([companyId, occurredAt, id])
+  @@index([companyId, userId, occurredAt])
+  @@index([companyId, entityType, entityId, occurredAt])
 }
 
 model Catalog {

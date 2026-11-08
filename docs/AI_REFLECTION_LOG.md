@@ -470,3 +470,13 @@ Stakeholder wurden bewusst als normale Diagrammelemente erhalten. Ein Stakeholde
 - Vollständiger lokaler Check: 88 Backendtests bestanden, 7 übersprungen; 21 Frontendtests bestanden; Lint, Typechecks und beide Builds erfolgreich; 112 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfigurationsprüfung bestanden.
 - Unabhängige read-only Kontrolle von Viewpoint-Korrektur und anschließendem Security-Patch: keine offenen P0–P3. `npm ci` auditierte 443 Pakete ohne Schwachstelle; das Dependency-Gate meldete null Findings. Remote-, Staging- und Produktionsnachweise bleiben getrennt offen.
 - Die Buildpfad-Korrektur `007be0c2` wurde ebenfalls unabhängig ohne P0–P3 freigegeben. Vollständiger Check und Produktbundle waren lokal erfolgreich; ein lokaler Docker-Image-Build war mangels laufender Docker-Engine nicht möglich und muss durch den erneuten Remote-CI-Lauf belegt werden.
+
+## REQ-23: transaktionaler Audit-Trail
+
+- Eine vorhandene Import-Audittabelle war eine geeignete kanonische Basis, deckte aber weder alle Schreibpfade noch Objekt-ID, Felddiffs, Filter oder lange Historien ab. Die Lösung erweitert diesen Pfad statt einen dritten Auditmechanismus einzuführen.
+- Akteursermittlung und Auditinsert gehören in dieselbe Datenbanktransaktion wie die Fachmutation. Der erzwungene fehlende Auditakteur zeigte praktisch, dass auch eine bereits ausgeführte Objektänderung zurückgerollt wird.
+- Kaskaden benötigen fachliche Einträge für gelöschte Relationen und geänderte Diagrammmitgliedschaften. Nur das primär angeforderte Objekt zu loggen hätte die tatsächliche Wirkung verschleiert.
+- Legacy-Erhalt bedeutet nicht, fehlende Daten rückwirkend zu erfinden. Unbekannter Akteur, fehlender Diff und nicht belastbarer Ereigniszeitpunkt bleiben explizit unbekannt; das Originalpayload bleibt als Provenienz erhalten.
+- Append-only ist eine Anwendungs- und API-Eigenschaft, kein unveränderbarer Datenbankbeweis. Diese Grenze wird in UI und Abschlussdokumentation sichtbar gehalten.
+- Der Secret-Scan war erst nach Wiederverwendung eines lokal vorhandenen, weiterhin hashgeprüften Scannerarchivs möglich. Zwei HTTP-504 sind Infrastrukturbelege, keine Rechtfertigung, das Gate auszulassen.
+- Lokale Entwicklerprüfung und unabhängige Freigabe bleiben getrennt. Der Abschluss dokumentiert deshalb erfolgreiche Gates, aber keine unabhängige Akzeptanz, Remote-CI- oder Deploymentaussage.

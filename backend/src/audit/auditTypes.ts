@@ -1,25 +1,72 @@
-/** Business event to be recorded in the company-scoped audit log (REQ-31, groundwork for REQ-23). */
+export type AuditActorType = "user" | "system" | "legacy";
+
+export type AuditJsonValue = null | boolean | number | string | AuditJsonValue[] | { [key: string]: AuditJsonValue };
+
+export interface AuditFieldChange {
+  field: string;
+  before: AuditJsonValue;
+  after: AuditJsonValue;
+}
+
+/** Business event recorded in addition to automatically derived object changes. */
 export interface AuditEntryInput {
-  /** Machine readable action, e.g. "import.commit". */
   action: string;
-  /** Affected entity kind, e.g. "model". */
   entityType: string;
-  /** Short human readable summary (German, shown in the UI). */
+  entityId?: string;
   summary: string;
-  /** Structured, non-sensitive details (counts, file name, checksum). */
+  details?: Record<string, unknown>;
+}
+
+export type AuditActorInput =
+  | { type: "user"; userId: string }
+  | { type: "system"; label: string };
+
+/** Context for one atomic state transition. The client never supplies the actor. */
+export interface AuditWrite {
+  actor: AuditActorInput;
+  event?: AuditEntryInput;
+  /** Snapshot used only to derive field changes; the DB revision still decides whether the write may commit. */
+  beforeState?: import("../Sidebar/sidebarTypes.js").SidebarState | null;
+}
+
+export interface AuditMutationInput {
+  action: "create" | "update" | "delete";
+  entityType: string;
+  entityId: string;
+  summary: string;
+  changes: AuditFieldChange[];
   details?: Record<string, unknown>;
 }
 
 export interface AuditEntry {
   id: string;
+  occurredAt: string | null;
   createdAt: string;
+  actorType: AuditActorType;
+  actorLabel: string | null;
   userId: string | null;
   userEmail: string | null;
   action: string;
   entityType: string;
+  entityId: string | null;
   summary: string;
+  changes: AuditFieldChange[];
   details: Record<string, unknown>;
+  batchId: string | null;
 }
 
-/** The acting user is attached by the store from the authenticated principal. */
-export type AuditWrite = AuditEntryInput & { userId?: string };
+export interface AuditQuery {
+  limit: number;
+  from?: Date;
+  to?: Date;
+  actor?: string;
+  entityId?: string;
+  entityType?: string;
+  action?: string;
+  cursor?: { occurredAt: Date | null; id: string };
+}
+
+export interface AuditPage {
+  items: AuditEntry[];
+  nextCursor: string | null;
+}

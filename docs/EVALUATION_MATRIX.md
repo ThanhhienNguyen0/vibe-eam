@@ -102,7 +102,7 @@ Status:
 | Capability Map | 2 | Teilweise funktional | Dynamisch aus semantisch validierten Relationen berechnet, aber weiterhin ohne Hierarchie und Portfolio-Kennzahlen. |
 | Lifecycle Roadmap | 3 | Tatsaechlich funktional | Wird aus echten Modelldaten sortiert und gerendert; einfache Tabelle statt echter Timeline. |
 | Import/Export | 3 | Historischer Teilnachweis plus aktueller REQ-33-Nachweis | Die frühere Aussage bezog sich nur auf das Legacy-Teilmodell. Der vollständige aktuelle JSON-Vertrag mit Schema-Version 1 und echtem PostgreSQL-Roundtrip ist separat unter „REQ-33“ belegt. |
-| Audit Log | 3 | Tatsaechlich funktional | Create, Update, Delete und Import erzeugten Eintraege. Keine Before/After-Diffs. |
+| Audit Log | 4 | Lokal robust geprüft, unabhängige Freigabe offen | Alle Modellschreibpfade erzeugen atomare tenantgebundene Belege mit serverseitigem Akteur, Objekt-ID und redigierten Before/After-Diffs; Filter, Keyset-Pagination, Elementhistorie, Legacy-Erhalt und Fehler-/Mehrprozessfälle sind mit echtem PostgreSQL geprüft. Kein WORM-Schutz gegen DB-Administratoren; Remote-CI und unabhängige Freigabe offen. |
 | REST API | 3 | Tatsaechlich funktional | Alle geforderten Endpunkte wurden mindestens einmal technisch angesprochen. |
 | Seed-Daten | 3 | Tatsaechlich funktional | 12 Elemente und 12 Relationen vorhanden. |
 | Dokumentation | 3 | Tatsaechlich funktional | Metamodell, Impact-Analyse, Validierung und Reflexion dokumentiert. |

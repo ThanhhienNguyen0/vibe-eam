@@ -93,10 +93,12 @@ describe.skipIf(!url)("REQ-26 optimistic locking against real PostgreSQL", () =>
   it("atomically resolves update/update across independent backend processes", async () => {
     const company = await registerCompany();
     const component = (await sidebar(company.token)).components[0];
+    const auditBefore = await prisma.auditLogEntry.count({ where: { companyId: company.companyId } });
     const outcomes = await processRace(company.companyId, component);
     expect(outcomes.sort()).toEqual(["conflict", "updated"]);
     const stored = await prisma.componentInstance.findUniqueOrThrow({ where: { id: component.id } });
     expect(stored.version).toBe((component.version ?? 1) + 1);
+    expect(await prisma.auditLogEntry.count({ where: { companyId: company.companyId } })).toBe(auditBefore + 1);
   });
 
   it("lets independent objects advance without restoring stale peer data", async () => {
@@ -256,6 +258,7 @@ describe.skipIf(!url)("REQ-26 optimistic locking against real PostgreSQL", () =>
   it("returns 428/400/409, supports explicit current-version overwrite, and conflicts again after another write", async () => {
     const company = await registerCompany();
     const component = (await sidebar(company.token)).components[0];
+    const auditBefore = await prisma.auditLogEntry.count({ where: { companyId: company.companyId } });
     const path = `/api/sidebar/components/${component.id}`;
     expect((await request(app).patch(path).set(authorized(company.token)).send({ name: "missing" })).status).toBe(428);
     expect((await request(app).patch(path).set(authorized(company.token)).set("If-Match", "zero").send({ name: "invalid" })).status).toBe(400);
@@ -270,7 +273,7 @@ describe.skipIf(!url)("REQ-26 optimistic locking against real PostgreSQL", () =>
     expect(intervening.status).toBe(200);
     const secondConflict = await request(app).patch(path).set(authorized(company.token)).set("If-Match", String(overwrite.body.version)).send({ name: "second stale" });
     expect(secondConflict.status).toBe(409);
-    expect(await prisma.auditLogEntry.count({ where: { companyId: company.companyId } })).toBe(0);
+    expect(await prisma.auditLogEntry.count({ where: { companyId: company.companyId } })).toBe(auditBefore + 3);
   });
 
   it("protects relations, diagrams, cascade deletes, and tenant boundaries", async () => {
@@ -311,9 +314,11 @@ describe.skipIf(!url)("REQ-26 optimistic locking against real PostgreSQL", () =>
     const changedDiagram = afterComponentDelete.diagrams.find((item) => item.id === componentDiagram.id)!;
     expect(changedDiagram.version).toBe((componentDiagram.version ?? 1) + 1);
     expect(changedDiagram.componentIds).not.toContain(component.id);
+    const auditAfterComponentDelete = await prisma.auditLogEntry.count({ where: { companyId: company.companyId } });
+    expect(auditAfterComponentDelete).toBeGreaterThan(auditBefore);
     expect((await request(app).patch(`/api/sidebar/diagrams/${componentDiagram.id}`).set(authorized(company.token))
       .set("If-Match", String(componentDiagram.version)).send({ name: "stale after cascade" })).status).toBe(409);
-    expect(await prisma.auditLogEntry.count({ where: { companyId: company.companyId } })).toBe(auditBefore);
+    expect(await prisma.auditLogEntry.count({ where: { companyId: company.companyId } })).toBe(auditAfterComponentDelete);
 
     const connectionDiagram = afterComponentDelete.diagrams.find((item) => item.connectionIds.length > 0)!;
     const connection = afterComponentDelete.connections.find((item) => item.id === connectionDiagram.connectionIds[0])!;
@@ -329,6 +334,7 @@ describe.skipIf(!url)("REQ-26 optimistic locking against real PostgreSQL", () =>
     const updated = await request(app).patch(`/api/sidebar/components/${rollbackComponent.id}`).set(authorized(company.token))
       .set("If-Match", String(rollbackComponent.version)).send({ name: "advance before stale delete" });
     expect(updated.status).toBe(200);
+    const auditBeforeStaleDelete = await prisma.auditLogEntry.count({ where: { companyId: company.companyId } });
     const beforeStaleDelete = await sidebar(company.token);
     const revisionBefore = beforeStaleDelete.dataRevision;
     const diagramVersionBefore = beforeStaleDelete.diagrams.find((item) => item.id === rollbackDiagram.id)!.version;
@@ -338,7 +344,7 @@ describe.skipIf(!url)("REQ-26 optimistic locking against real PostgreSQL", () =>
     const afterStaleDelete = await sidebar(company.token);
     expect(afterStaleDelete.dataRevision).toBe(revisionBefore);
     expect(afterStaleDelete.diagrams.find((item) => item.id === rollbackDiagram.id)!.version).toBe(diagramVersionBefore);
-    expect(await prisma.auditLogEntry.count({ where: { companyId: company.companyId } })).toBe(auditBefore);
+    expect(await prisma.auditLogEntry.count({ where: { companyId: company.companyId } })).toBe(auditBeforeStaleDelete);
   });
 
   it("serializes a component cascade against a diagram update across backend processes", async () => {
@@ -370,7 +376,7 @@ describe.skipIf(!url)("REQ-26 optimistic locking against real PostgreSQL", () =>
     const storedDiagram = stored.diagrams.find((item) => item.id === diagram.id)!;
     expect(storedDiagram.componentIds).not.toContain(component.id);
     expect(storedDiagram.version).toBeGreaterThan(diagram.version ?? 1);
-    expect(await prisma.auditLogEntry.count({ where: { companyId: company.companyId } })).toBe(auditBefore);
+    expect(await prisma.auditLogEntry.count({ where: { companyId: company.companyId } })).toBeGreaterThan(auditBefore);
   });
 
   it("returns the stored diagram version after adding a connection and accepts it immediately", async () => {

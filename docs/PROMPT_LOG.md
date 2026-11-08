@@ -316,3 +316,9 @@ Umgesetzt wurde:
 - Der getrennte Kontrollchat `01a1699f-2854-7233-8203-0d9326bbddfe` prüfte jede Korrekturstufe read-only. Das finale Urteil für `74aa718e` lautet: keine offenen P0–P3.
 
 Nicht Teil dieses lokalen Abschlusses sind Push, Aktualisierung von PR #90, neues Staging-Deployment, Liveprüfung oder Produktion.
+
+## REQ-23: Audit Log am 08.11.2026
+
+Der Auftrag verlangte die vollständige Umsetzung von Issue #55 auf der unabhängig akzeptierten REQ-26-Basis, beginnend mit Abnahmematrix und Schreibpfadinventar. Gefordert waren atomare, append-only Anwendungsbelege mit serverseitigem Akteur, Objekt und Felddiff, Elementhistorie, Filter und Cursor, Erhalt beider Legacy-Pfade, echte PostgreSQL-/Mehrprozesstests sowie Backup-, Restore- und Rollbackprobe. Push, PR, Merge, Issue-Schließung und Deployment waren ausdrücklich ausgeschlossen.
+
+Umgesetzt wurden ein gemeinsamer Actor-/Action-/Object-Vertrag, strukturierte Redaction und Größenlimits, die Transaktionsintegration aller Modellschreibpfade, additive Migration mit beweistreuem Legacy-Backfill, tenantgebundene Lese-API und die Audit-/Elementhistorienoberfläche. Der Entwicklungsstand wurde mit isolierter PostgreSQL-14-Instanz, Gesamtgate, Dependency- und Secret-Gate geprüft. Dokumentierte Fehlversuche waren eine lokale Loopback-Sperre, zwei HTTP-504 beim Scannerdownload und eine nicht nutzbare Docker-Platzhalterdatei; daraus wurden keine Produktfehler oder Container-Nachweise abgeleitet.

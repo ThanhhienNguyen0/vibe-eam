@@ -44,6 +44,38 @@ const firstString = (value: unknown): string | undefined => {
 const listParam = (value: unknown): string[] =>
   (firstString(value)?.split(",") ?? []).map((item) => item.trim()).filter(Boolean);
 
+function boundedFilter(value: unknown, name: string): string | undefined {
+  const result = firstString(value);
+  if (result && result.length > 200) throw new TransferError(400, `${name} ist zu lang.`);
+  return result;
+}
+
+function dateFilter(value: unknown, name: string): Date | undefined {
+  const raw = firstString(value);
+  if (!raw) return undefined;
+  const parsed = new Date(raw);
+  if (!/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(raw) || Number.isNaN(parsed.getTime())) {
+    throw new TransferError(400, `${name} muss ein ISO-8601-Zeitpunkt mit Zeitzone sein.`);
+  }
+  return parsed;
+}
+
+function auditCursor(value: unknown): { occurredAt: Date | null; id: string } | undefined {
+  const raw = firstString(value);
+  if (!raw) return undefined;
+  try {
+    const decoded = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as { occurredAt?: unknown; id?: unknown };
+    if (typeof decoded.id !== "string" || decoded.id.length < 1 || decoded.id.length > 200) throw new Error("invalid id");
+    if (decoded.occurredAt === null) return { occurredAt: null, id: decoded.id };
+    if (typeof decoded.occurredAt !== "string") throw new Error("invalid timestamp");
+    const occurredAt = new Date(decoded.occurredAt);
+    if (Number.isNaN(occurredAt.getTime())) throw new Error("invalid timestamp");
+    return { occurredAt, id: decoded.id };
+  } catch {
+    throw new TransferError(400, "cursor ist ungültig.");
+  }
+}
+
 function formatParam(value: unknown): "xlsx" | "csv" | undefined {
   const raw = firstString(value)?.toLowerCase();
   if (raw === undefined) return undefined;
@@ -231,7 +263,24 @@ router.post("/import/commit", rawUpload, async (req, res, next) => {
 router.get("/audit-log", async (req, res, next) => {
   try {
     res.setHeader("Cache-Control", "no-store");
-    res.json(await listAuditLog(Number(firstString(req.query.limit) ?? 100)));
+    const limitRaw = firstString(req.query.limit) ?? "50";
+    const limit = Number(limitRaw);
+    if (!/^\d+$/.test(limitRaw) || !Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
+      throw new TransferError(400, "limit muss zwischen 1 und 200 liegen.");
+    }
+    const from = dateFilter(req.query.from, "from");
+    const to = dateFilter(req.query.to, "to");
+    if (from && to && from > to) throw new TransferError(400, "from darf nicht nach to liegen.");
+    res.json(await listAuditLog({
+      limit,
+      from,
+      to,
+      actor: boundedFilter(req.query.actor, "actor"),
+      entityId: boundedFilter(req.query.entityId, "entityId"),
+      entityType: boundedFilter(req.query.entityType, "entityType"),
+      action: boundedFilter(req.query.action, "action"),
+      cursor: auditCursor(req.query.cursor)
+    }));
   } catch (error) {
     next(error);
   }

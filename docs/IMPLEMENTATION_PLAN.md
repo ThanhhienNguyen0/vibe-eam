@@ -82,6 +82,15 @@ Root-Skripte starten Frontend und Backend parallel. Backend und Frontend bleiben
 - Import/Export
 - Audit Log Ansicht
 
+### REQ-23 – Audit Log (lokaler Stand 08.11.2026)
+
+- Kanonischer relationaler, tenantgebundener Auditpfad für alle Modellmutationen; Fachwrite und Beleg teilen eine PostgreSQL-Transaktion.
+- Serverseitig aufgelöster Akteur, serverseitige Ereigniszeit, stabile Objektart/-ID und redigierte strukturierte Vorher-/Nachherwerte.
+- Keine Auditmutation über UI/API; keine Erfolgszeile für Fehler, Konflikte oder No-ops; Importe ersetzen keine Historie.
+- Auditansicht mit Zeitraum-, Akteur- und Elementfilter, stabiler Keyset-Pagination und Elementhistorie im Komponenten-/Verbindungspanel.
+- Additive Legacy-Migration mit unveränderter JSONB-Quelle und ohne erfundene Altmetadaten.
+- Lokal vollständig geprüft; unabhängige Kontrolle, Push, PR, Remote-CI, Merge und Deployment offen.
+
 ## Datenmodell
 
 ### Element

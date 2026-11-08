@@ -61,6 +61,7 @@ describe.skipIf(!url)("REQ-31 import/export against real PostgreSQL", () => {
     const state = await sidebar(admin.token);
     const { source, target, connection } = pickRule(state);
     const before = state.components.length;
+    const auditBefore = await prisma.auditLogEntry.count({ where: { companyId: admin.companyId } });
 
     const file = csv([
       ["Externe ID", "Typ", "Name", "Beschreibung"],
@@ -78,7 +79,7 @@ describe.skipIf(!url)("REQ-31 import/export against real PostgreSQL", () => {
     expect(preview.status).toBe(200);
     expect(preview.body.summary.elements.new).toBe(2);
     expect((await sidebar(admin.token)).components).toHaveLength(before);
-    expect(await prisma.auditLogEntry.count({ where: { companyId: admin.companyId } })).toBe(0);
+    expect(await prisma.auditLogEntry.count({ where: { companyId: admin.companyId } })).toBe(auditBefore);
 
     // Elements first (relations reference the persisted external ids).
     const elementCommit = await upload("commit", architect, file);
@@ -94,14 +95,14 @@ describe.skipIf(!url)("REQ-31 import/export against real PostgreSQL", () => {
     expect(storedRelation.connectionTypeId).toBe(connection.id);
 
     // Audit entries: one per commit, with the acting user, inside the company only.
-    const entries = await prisma.auditLogEntry.findMany({ where: { companyId: admin.companyId }, orderBy: { createdAt: "asc" } });
+    const entries = await prisma.auditLogEntry.findMany({ where: { companyId: admin.companyId, action: "import.commit" }, orderBy: { createdAt: "asc" } });
     expect(entries.map((entry) => entry.action)).toEqual(["import.commit", "import.commit"]);
     expect(entries[0].userEmail).toMatch(/@example\.invalid$/);
     expect(entries[0].summary).toContain("2 neu");
     expect(entries[0].details).toMatchObject({ fileName: "e2e.csv", format: "csv", elements: { new: 2 } });
     const log = await request(app).get("/api/sidebar/audit-log").set("Authorization", `Bearer ${architect}`);
     expect(log.status).toBe(200);
-    expect(log.body).toHaveLength(2);
+    expect(log.body.items.filter((entry: { action: string }) => entry.action === "import.commit")).toHaveLength(2);
     expect((await request(app).get("/api/sidebar/audit-log").set("Authorization", `Bearer ${viewer}`)).status).toBe(403);
 
     // Export (also for Viewers) and re-import of the unmodified workbook changes nothing.
@@ -125,7 +126,7 @@ describe.skipIf(!url)("REQ-31 import/export against real PostgreSQL", () => {
     expect(update.body.summary.elements.changed).toBe(1);
     const renamed = await prisma.componentInstance.findFirstOrThrow({ where: { companyId: admin.companyId, externalId: "EXT-A" } });
     expect(renamed.name).toBe("E2E Source (renamed)");
-    expect(await prisma.auditLogEntry.count({ where: { companyId: admin.companyId } })).toBe(3);
+    expect(await prisma.auditLogEntry.count({ where: { companyId: admin.companyId, action: "import.commit" } })).toBe(3);
   });
 
   it("keeps external ids unique per company only, and audit logs isolated", async () => {
@@ -149,8 +150,10 @@ describe.skipIf(!url)("REQ-31 import/export against real PostgreSQL", () => {
     expect(cleared.body.externalId).toBeUndefined();
 
     await upload("commit", first.token, csv([["Typ", "Name"], [type.name, "Only first"]]));
-    expect((await request(app).get("/api/sidebar/audit-log").set("Authorization", `Bearer ${first.token}`)).body).toHaveLength(1);
-    expect((await request(app).get("/api/sidebar/audit-log").set("Authorization", `Bearer ${second.token}`)).body).toHaveLength(0);
+    const firstLog = await request(app).get("/api/sidebar/audit-log?action=import.commit").set("Authorization", `Bearer ${first.token}`);
+    const secondLog = await request(app).get("/api/sidebar/audit-log?action=import.commit").set("Authorization", `Bearer ${second.token}`);
+    expect(firstLog.body.items).toHaveLength(1);
+    expect(secondLog.body.items).toHaveLength(0);
   });
 
   it("seeds starter catalogs once and persists create, update, delete and catalog export per company", async () => {

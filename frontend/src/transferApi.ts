@@ -38,13 +38,31 @@ export interface ImportPreview {
 
 export interface AuditEntry {
   id: string;
+  occurredAt: string | null;
   createdAt: string;
+  actorType: "user" | "system" | "legacy";
+  actorLabel: string | null;
   userId: string | null;
   userEmail: string | null;
   action: string;
   entityType: string;
+  entityId: string | null;
   summary: string;
+  changes: Array<{ field: string; before: unknown; after: unknown }>;
   details: Record<string, unknown>;
+  batchId: string | null;
+}
+
+export interface AuditPage { items: AuditEntry[]; nextCursor: string | null }
+export interface AuditFilters {
+  limit?: number;
+  from?: string;
+  to?: string;
+  actor?: string;
+  entityId?: string;
+  entityType?: string;
+  action?: string;
+  cursor?: string;
 }
 
 export interface ExportParams {
@@ -114,5 +132,11 @@ export const transferApi = {
   previewImport: (file: File) => upload("/import/preview", file),
   commitImport: (file: File, skipInvalid: boolean, expectedRevision: number) =>
     upload(`/import/commit?expectedRevision=${expectedRevision}${skipInvalid ? "&skipInvalid=true" : ""}`, file),
-  auditLog: (limit = 100) => apiRequest<AuditEntry[]>(`${BASE}/audit-log?limit=${limit}`)
+  auditLog: (filters: AuditFilters = {}) => {
+    const search = new URLSearchParams({ limit: String(filters.limit ?? 50) });
+    for (const [key, value] of Object.entries(filters)) {
+      if (key !== "limit" && value) search.set(key, String(value));
+    }
+    return apiRequest<AuditPage>(`${BASE}/audit-log?${search.toString()}`);
+  }
 };

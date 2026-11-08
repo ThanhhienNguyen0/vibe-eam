@@ -3742,6 +3742,18 @@ tr.attention td {
 .import-note, .import-success { display: flex; align-items: center; gap: 6px; }
 .import-success { color: #166534; font-weight: 700; }
 .audit-details { margin: 6px 0 0; max-width: 480px; max-height: 200px; overflow: auto; font-size: 12px; background: #f8fafc; padding: 8px; border-radius: 6px; }
+.audit-filters { display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)) auto auto; gap: 10px; align-items: end; padding: 0 24px 16px; }
+.audit-filters label { display: grid; gap: 4px; font-size: 12px; color: #475569; }
+.audit-change-list { margin: 8px 0; display: grid; gap: 6px; min-width: 320px; }
+.audit-change-list div { display: grid; grid-template-columns: minmax(110px, 0.7fr) minmax(180px, 1.3fr); gap: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+.audit-change-list dt { font-weight: 700; overflow-wrap: anywhere; }
+.audit-change-list dd { margin: 0; overflow-wrap: anywhere; }
+.audit-change-list del { color: #991b1b; background: #fef2f2; text-decoration: none; }
+.audit-change-list ins { color: #166534; background: #f0fdf4; text-decoration: none; }
+.element-history { margin-top: 18px; border-top: 1px solid #d8dee8; padding-top: 12px; }
+.element-history-entry { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; padding: 8px 0; border-bottom: 1px solid #eef2f7; font-size: 12px; }
+.element-history-entry small, .element-history-entry p, .element-history-entry details { grid-column: 1 / -1; }
+@media (max-width: 1100px) { .audit-filters { grid-template-columns: repeat(2, minmax(150px, 1fr)); } }
 
 @media (max-width: 760px) {
   .catalog-body { grid-template-columns: 1fr; }
