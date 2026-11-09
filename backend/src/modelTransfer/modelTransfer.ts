@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { Ajv, type ErrorObject } from "ajv";
+import AjvModule, { type ErrorObject } from "ajv";
 import { validateConnectionInstance, validateDiagram } from "../Sidebar/metamodelRules.js";
 import type { SidebarState, ValidationMessage } from "../Sidebar/sidebarTypes.js";
 
@@ -39,6 +39,7 @@ function loadSchema(): object {
   throw new Error("The REQ-33 model transfer JSON Schema is missing.");
 }
 
+const Ajv = AjvModule as unknown as typeof import("ajv").default;
 const validateSchema = new Ajv({ allErrors: true, strict: true }).compile<ModelTransferDocument>(loadSchema());
 
 function schemaMessage(error: ErrorObject): string {
