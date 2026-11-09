@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type {
   ComponentInstance,
@@ -6,7 +7,16 @@ import type {
   Diagram,
   SidebarState
 } from "../Sidebar/sidebarTypes.js";
-import type { AuditEntry, AuditWrite } from "../audit/auditTypes.js";
+import { auditMutation, diffSidebarStates } from "../audit/auditDiff.js";
+import type {
+  AuditActorInput,
+  AuditEntry,
+  AuditFieldChange,
+  AuditMutationInput,
+  AuditPage,
+  AuditQuery,
+  AuditWrite
+} from "../audit/auditTypes.js";
 import { removeDanglingInstanceReferences } from "./stateOperations.js";
 
 /** `catalogs` is undefined until the company stored catalogs once, so starter catalogs can be seeded. */
@@ -16,7 +26,7 @@ export interface SidebarStateRepository {
   read(companyId: string): Promise<PersistedSidebarState | null>;
   /** Writes the whole state; an optional audit entry is stored in the same transaction. */
   write(state: SidebarState, companyId: string, audit?: AuditWrite): Promise<SidebarState>;
-  listAudit(companyId: string, limit: number): Promise<AuditEntry[]>;
+  listAudit(companyId: string, query: AuditQuery): Promise<AuditPage>;
   disconnect(): Promise<void>;
 }
 
@@ -33,6 +43,11 @@ const stringArray = (value: Prisma.JsonValue | null | undefined): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 const objectValue = <T extends object>(value: Prisma.JsonValue | null | undefined, fallback: T): T =>
   value && typeof value === "object" && !Array.isArray(value) ? value as T : fallback;
+const withoutVersion = <T extends { version?: unknown }>(value: T): Omit<T, "version"> => {
+  const business = { ...value };
+  delete business.version;
+  return business;
+};
 
 export function assertDiagramMemberships(state: SidebarState): void {
   const viewpointIds = new Set(state.viewpoints.map((viewpoint) => viewpoint.id));
@@ -80,6 +95,67 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
     private readonly afterReadSnapshotEstablished?: () => Promise<void>,
     private readonly afterCompanyLockAcquired?: () => Promise<void>
   ) {}
+
+  private async appendAuditEntries(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    actorInput: AuditActorInput,
+    mutations: AuditMutationInput[],
+    event?: AuditWrite["event"]
+  ): Promise<void> {
+    if (mutations.length === 0 && !event) return;
+    const actor = actorInput.type === "user"
+      ? await tx.user.findFirst({
+        where: { id: actorInput.userId, companyId },
+        select: { id: true, email: true, name: true }
+      })
+      : null;
+    if (actorInput.type === "user" && !actor) {
+      throw new Error("Authenticated audit actor no longer belongs to the company.");
+    }
+    const actorType = actorInput.type;
+    const actorLabel = actor ? actor.name ?? actor.email : actorInput.type === "system" ? actorInput.label : null;
+    const occurredAt = new Date();
+    const batchId = mutations.length + (event ? 1 : 0) > 1 ? randomUUID() : null;
+    const rows: Array<{
+      action: string;
+      entityType: string;
+      entityId?: string;
+      summary: string;
+      changes: AuditFieldChange[];
+      details?: Record<string, unknown>;
+    }> = [
+      ...mutations,
+      ...(event ? [{
+        ...event,
+        changes: [] as AuditFieldChange[],
+        details: { ...(event.details ?? {}), affectedObjectEntries: mutations.length }
+      }] : [])
+    ];
+    for (const row of rows) {
+      const rawDetails = row.details ?? {};
+      const details = JSON.stringify(rawDetails).length <= 32_000
+        ? rawDetails
+        : { truncated: true, reason: "Auditdetails überschritten 32000 Zeichen." };
+      await tx.auditLogEntry.create({
+        data: {
+          companyId,
+          userId: actor?.id ?? null,
+          userEmail: actor?.email ?? null,
+          actorType,
+          actorLabel,
+          action: row.action,
+          entityType: row.entityType,
+          entityId: row.entityId ?? null,
+          summary: row.summary.slice(0, 500),
+          changes: json(row.changes),
+          details: json(details),
+          batchId,
+          occurredAt
+        }
+      });
+    }
+  }
 
   private async withLockedCompany<T>(
     companyId: string,
@@ -298,6 +374,11 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
     state = removeDanglingInstanceReferences(state);
     assertDiagramMemberships(state);
     const metamodelId = state.metamodel.id;
+    const auditMutations = audit
+      ? audit.event?.action === "system.initialize" && audit.beforeState === null
+        ? []
+        : diffSidebarStates(audit.beforeState ?? null, state)
+      : [];
     await this.assertTenantIdsAvailable(state, companyId);
 
     try {
@@ -577,22 +658,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
       await tx.connectionType.deleteMany({ where: { metamodelId, ...missing(state.connectionTypes.map((item) => item.id)) } });
       await tx.componentType.deleteMany({ where: { metamodelId, ...missing(state.componentTypes.map((item) => item.id)) } });
 
-      if (audit) {
-        const actor = audit.userId
-          ? await tx.user.findFirst({ where: { id: audit.userId, companyId }, select: { id: true, email: true } })
-          : null;
-        await tx.auditLogEntry.create({
-          data: {
-            companyId,
-            userId: actor?.id ?? null,
-            userEmail: actor?.email ?? null,
-            action: audit.action,
-            entityType: audit.entityType,
-            summary: audit.summary,
-            details: json(audit.details ?? {})
-          }
-        });
-      }
+      if (audit) await this.appendAuditEntries(tx, companyId, audit.actor, auditMutations, audit.event);
       }, { timeout: 30_000 });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
@@ -606,8 +672,27 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
     return ((await this.read(companyId)) as SidebarState | null) ?? structuredClone(state);
   }
 
-  async updateComponent(companyId: string, value: ComponentInstance, expectedVersion: number): Promise<ComponentInstance> {
+  async updateComponent(
+    companyId: string,
+    value: ComponentInstance,
+    expectedVersion: number,
+    actor: AuditActorInput = { type: "system", label: "System" }
+  ): Promise<ComponentInstance> {
     return this.withLockedCompany(companyId, async (tx) => {
+      const current = await tx.componentInstance.findFirst({ where: { id: value.id, companyId } });
+      if (!current) throw new ResourceNotFoundError("Component not found.");
+      const currentValue: ComponentInstance = {
+        id: current.id,
+        version: current.version,
+        externalId: current.externalId ?? undefined,
+        name: current.name,
+        componentTypeId: current.componentTypeId,
+        description: current.description,
+        properties: objectValue(current.properties, {}) as Record<string, string>
+      };
+      if (current.version !== expectedVersion) throw new OptimisticLockError(currentValue);
+      const mutation = auditMutation("component", value.id, "Komponente", withoutVersion(currentValue), withoutVersion(value));
+      if (!mutation) return currentValue;
       const updated = await tx.componentInstance.updateMany({
         where: { id: value.id, companyId, version: expectedVersion },
         data: {
@@ -620,40 +705,76 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         }
       });
       if (updated.count !== 1) {
-        const current = await tx.componentInstance.findFirst({ where: { id: value.id, companyId } });
-        if (!current) throw new ResourceNotFoundError("Component not found.");
-        throw new OptimisticLockError<ComponentInstance>({
-          id: current.id,
-          version: current.version,
-          externalId: current.externalId ?? undefined,
-          name: current.name,
-          componentTypeId: current.componentTypeId,
-          description: current.description,
-          properties: objectValue(current.properties, {}) as Record<string, string>
-        });
+        throw new OptimisticLockError(currentValue);
       }
       await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+      await this.appendAuditEntries(tx, companyId, actor, [mutation]);
       return { ...value, version: expectedVersion + 1 };
     }, async () => (await this.prisma.componentInstance.findFirst({
       where: { id: value.id, companyId }, select: { id: true, version: true, name: true }
     })) ?? { id: value.id, version: expectedVersion });
   }
 
-  async deleteComponent(companyId: string, id: string, expectedVersion: number): Promise<void> {
+  async deleteComponent(companyId: string, id: string, expectedVersion: number, actor: AuditActorInput = { type: "system", label: "System" }): Promise<void> {
     await this.withLockedCompany(companyId, async (tx) => {
-      const [directMemberships, connectionMemberships] = await Promise.all([
-        tx.diagramComponentMembership.findMany({ where: { componentId: id }, select: { diagramId: true } }),
-        tx.diagramConnectionMembership.findMany({
-          where: {
-            connection: { companyId, OR: [{ sourceComponentId: id }, { targetComponentId: id }] }
-          },
-          select: { diagramId: true }
+      const current = await tx.componentInstance.findFirst({ where: { id, companyId } });
+      if (!current) throw new ResourceNotFoundError("Component not found.");
+      if (current.version !== expectedVersion) throw new OptimisticLockError({ id: current.id, version: current.version, name: current.name });
+      const connected = await tx.connectionInstance.findMany({
+        where: { companyId, OR: [{ sourceComponentId: id }, { targetComponentId: id }] }
+      });
+      const connectedIds = connected.map((item) => item.id);
+      const affectedDiagrams = await tx.diagram.findMany({
+        where: {
+          companyId,
+          OR: [
+            { componentMemberships: { some: { componentId: id } } },
+            ...(connectedIds.length > 0 ? [{ connectionMemberships: { some: { connectionId: { in: connectedIds } } } }] : [])
+          ]
+        },
+        include: { componentMemberships: true, connectionMemberships: true }
+      });
+      const affectedDiagramIds = affectedDiagrams.map((item) => item.id);
+      const mutations = [
+        auditMutation("component", id, "Komponente", withoutVersion({
+          id: current.id,
+          version: current.version,
+          externalId: current.externalId ?? undefined,
+          name: current.name,
+          componentTypeId: current.componentTypeId,
+          description: current.description,
+          properties: objectValue(current.properties, {})
+        }), null),
+        ...connected.map((item) => auditMutation("connection", item.id, "Verbindung", withoutVersion({
+          id: item.id,
+          version: item.version,
+          externalId: item.externalId ?? undefined,
+          name: item.name,
+          connectionTypeId: item.connectionTypeId,
+          sourceComponentId: item.sourceComponentId,
+          targetComponentId: item.targetComponentId,
+          description: item.description,
+          properties: objectValue(item.properties, {})
+        }), null)),
+        ...affectedDiagrams.map((item) => {
+          const before = {
+            id: item.id,
+            name: item.name,
+            description: item.description,
+            metamodelId: item.metamodelId,
+            viewpointId: item.viewpointId ?? undefined,
+            componentIds: item.componentMemberships.map((membership) => membership.componentId),
+            connectionIds: item.connectionMemberships.map((membership) => membership.connectionId),
+            positions: Object.fromEntries(item.componentMemberships.map((membership) => [membership.componentId, objectValue(membership.position, { x: 0, y: 0 })]))
+          };
+          return auditMutation("diagram", item.id, "Diagramm", before, {
+            ...before,
+            componentIds: before.componentIds.filter((componentId) => componentId !== id),
+            connectionIds: before.connectionIds.filter((connectionId) => !connectedIds.includes(connectionId)),
+            positions: Object.fromEntries(Object.entries(before.positions).filter(([componentId]) => componentId !== id))
+          });
         })
-      ]);
-      const affectedDiagramIds = [...new Set([
-        ...directMemberships.map((item) => item.diagramId),
-        ...connectionMemberships.map((item) => item.diagramId)
-      ])];
+      ].filter((item): item is AuditMutationInput => item !== null);
       const removed = await tx.componentInstance.deleteMany({ where: { id, companyId, version: expectedVersion } });
       if (removed.count !== 1) {
         const current = await tx.componentInstance.findFirst({ where: { id, companyId } });
@@ -667,6 +788,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         });
       }
       await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+      await this.appendAuditEntries(tx, companyId, actor, mutations);
     }, async () => (await this.prisma.componentInstance.findFirst({
       where: { id, companyId }, select: { id: true, version: true, name: true }
     })) ?? { id, version: expectedVersion });
@@ -677,9 +799,18 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
     component: ComponentInstance,
     diagramId: string,
     position: { x: number; y: number },
-    expectedDiagramVersion: number
+    expectedDiagramVersion: number,
+    actor: AuditActorInput = { type: "system", label: "System" }
   ): Promise<{ component: ComponentInstance; diagram: Diagram }> {
     return this.withLockedCompany(companyId, async (tx) => {
+      const beforeDiagram = await tx.diagram.findFirst({
+        where: { id: diagramId, companyId },
+        include: { componentMemberships: true, connectionMemberships: true }
+      });
+      if (!beforeDiagram) throw new ResourceNotFoundError("Diagram not found.");
+      if (beforeDiagram.version !== expectedDiagramVersion) {
+        throw new OptimisticLockError({ id: beforeDiagram.id, version: beforeDiagram.version, name: beforeDiagram.name });
+      }
       const advanced = await tx.diagram.updateMany({
         where: { id: diagramId, companyId, version: expectedDiagramVersion },
         data: { version: { increment: 1 } }
@@ -709,6 +840,29 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         where: { id: diagramId },
         include: { componentMemberships: true, connectionMemberships: true }
       });
+      const diagramValue = (item: typeof diagram) => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        metamodelId: item.metamodelId,
+        viewpointId: item.viewpointId ?? undefined,
+        componentIds: item.componentMemberships.map((membership) => membership.componentId),
+        connectionIds: item.connectionMemberships.map((membership) => membership.connectionId),
+        positions: Object.fromEntries(item.componentMemberships.map((membership) => [membership.componentId, objectValue(membership.position, { x: 0, y: 0 })]))
+      });
+      const mutations = [
+        auditMutation("component", stored.id, "Komponente", null, withoutVersion({
+          id: stored.id,
+          version: stored.version,
+          externalId: stored.externalId ?? undefined,
+          name: stored.name,
+          componentTypeId: stored.componentTypeId,
+          description: stored.description,
+          properties: objectValue(stored.properties, {})
+        })),
+        auditMutation("diagram", diagram.id, "Diagramm", diagramValue(beforeDiagram), diagramValue(diagram))
+      ].filter((item): item is AuditMutationInput => item !== null);
+      await this.appendAuditEntries(tx, companyId, actor, mutations);
       return {
         component: {
           id: stored.id,
@@ -739,8 +893,29 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
     })) ?? { id: diagramId, version: expectedDiagramVersion });
   }
 
-  async updateConnection(companyId: string, value: ConnectionInstance, expectedVersion: number): Promise<ConnectionInstance> {
+  async updateConnection(
+    companyId: string,
+    value: ConnectionInstance,
+    expectedVersion: number,
+    actor: AuditActorInput = { type: "system", label: "System" }
+  ): Promise<ConnectionInstance> {
     return this.withLockedCompany(companyId, async (tx) => {
+      const current = await tx.connectionInstance.findFirst({ where: { id: value.id, companyId } });
+      if (!current) throw new ResourceNotFoundError("Connection not found.");
+      const currentValue: ConnectionInstance = {
+        id: current.id,
+        version: current.version,
+        externalId: current.externalId ?? undefined,
+        name: current.name,
+        connectionTypeId: current.connectionTypeId,
+        sourceComponentId: current.sourceComponentId,
+        targetComponentId: current.targetComponentId,
+        description: current.description,
+        properties: objectValue(current.properties, {}) as Record<string, string>
+      };
+      if (current.version !== expectedVersion) throw new OptimisticLockError(currentValue);
+      const mutation = auditMutation("connection", value.id, "Verbindung", withoutVersion(currentValue), withoutVersion(value));
+      if (!mutation) return currentValue;
       const updated = await tx.connectionInstance.updateMany({
         where: { id: value.id, companyId, version: expectedVersion },
         data: {
@@ -755,9 +930,28 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         }
       });
       if (updated.count !== 1) {
-        const current = await tx.connectionInstance.findFirst({ where: { id: value.id, companyId } });
-        if (!current) throw new ResourceNotFoundError("Connection not found.");
-        throw new OptimisticLockError<ConnectionInstance>({
+        throw new OptimisticLockError(currentValue);
+      }
+      await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+      await this.appendAuditEntries(tx, companyId, actor, [mutation]);
+      return { ...value, version: expectedVersion + 1 };
+    }, async () => (await this.prisma.connectionInstance.findFirst({
+      where: { id: value.id, companyId }, select: { id: true, version: true, name: true }
+    })) ?? { id: value.id, version: expectedVersion });
+  }
+
+  async deleteConnection(companyId: string, id: string, expectedVersion: number, actor: AuditActorInput = { type: "system", label: "System" }): Promise<void> {
+    await this.withLockedCompany(companyId, async (tx) => {
+      const current = await tx.connectionInstance.findFirst({ where: { id, companyId } });
+      if (!current) throw new ResourceNotFoundError("Connection not found.");
+      if (current.version !== expectedVersion) throw new OptimisticLockError({ id: current.id, version: current.version, name: current.name });
+      const diagrams = await tx.diagram.findMany({
+        where: { companyId, connectionMemberships: { some: { connectionId: id } } },
+        include: { componentMemberships: true, connectionMemberships: true }
+      });
+      const affectedDiagramIds = diagrams.map((item) => item.id);
+      const mutations = [
+        auditMutation("connection", id, "Verbindung", withoutVersion({
           id: current.id,
           version: current.version,
           externalId: current.externalId ?? undefined,
@@ -766,28 +960,31 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
           sourceComponentId: current.sourceComponentId,
           targetComponentId: current.targetComponentId,
           description: current.description,
-          properties: objectValue(current.properties, {}) as Record<string, string>
-        });
-      }
-      await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
-      return { ...value, version: expectedVersion + 1 };
-    }, async () => (await this.prisma.connectionInstance.findFirst({
-      where: { id: value.id, companyId }, select: { id: true, version: true, name: true }
-    })) ?? { id: value.id, version: expectedVersion });
-  }
-
-  async deleteConnection(companyId: string, id: string, expectedVersion: number): Promise<void> {
-    await this.withLockedCompany(companyId, async (tx) => {
-      const memberships = await tx.diagramConnectionMembership.findMany({
-        where: { connectionId: id }, select: { diagramId: true }
-      });
+          properties: objectValue(current.properties, {})
+        }), null),
+        ...diagrams.map((item) => {
+          const before = {
+            id: item.id,
+            name: item.name,
+            description: item.description,
+            metamodelId: item.metamodelId,
+            viewpointId: item.viewpointId ?? undefined,
+            componentIds: item.componentMemberships.map((membership) => membership.componentId),
+            connectionIds: item.connectionMemberships.map((membership) => membership.connectionId),
+            positions: Object.fromEntries(item.componentMemberships.map((membership) => [membership.componentId, objectValue(membership.position, { x: 0, y: 0 })]))
+          };
+          return auditMutation("diagram", item.id, "Diagramm", before, {
+            ...before,
+            connectionIds: before.connectionIds.filter((connectionId) => connectionId !== id)
+          });
+        })
+      ].filter((item): item is AuditMutationInput => item !== null);
       const removed = await tx.connectionInstance.deleteMany({ where: { id, companyId, version: expectedVersion } });
       if (removed.count !== 1) {
         const current = await tx.connectionInstance.findFirst({ where: { id, companyId } });
         if (!current) throw new ResourceNotFoundError("Connection not found.");
         throw new OptimisticLockError({ id: current.id, version: current.version, name: current.name });
       }
-      const affectedDiagramIds = [...new Set(memberships.map((item) => item.diagramId))];
       if (affectedDiagramIds.length > 0) {
         await tx.diagram.updateMany({
           where: { companyId, id: { in: affectedDiagramIds } },
@@ -795,13 +992,33 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         });
       }
       await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+      await this.appendAuditEntries(tx, companyId, actor, mutations);
     }, async () => (await this.prisma.connectionInstance.findFirst({
       where: { id, companyId }, select: { id: true, version: true, name: true }
     })) ?? { id, version: expectedVersion });
   }
 
-  async updateDiagram(companyId: string, value: Diagram, expectedVersion: number): Promise<Diagram> {
+  async updateDiagram(companyId: string, value: Diagram, expectedVersion: number, actor: AuditActorInput = { type: "system", label: "System" }): Promise<Diagram> {
     return this.withLockedCompany(companyId, async (tx) => {
+      const current = await tx.diagram.findFirst({
+        where: { id: value.id, companyId },
+        include: { componentMemberships: true, connectionMemberships: true }
+      });
+      if (!current) throw new ResourceNotFoundError("Diagram not found.");
+      const currentValue: Diagram = {
+        id: current.id,
+        version: current.version,
+        name: current.name,
+        description: current.description,
+        metamodelId: current.metamodelId,
+        viewpointId: current.viewpointId ?? undefined,
+        componentIds: current.componentMemberships.map((membership) => membership.componentId),
+        connectionIds: current.connectionMemberships.map((membership) => membership.connectionId),
+        positions: Object.fromEntries(current.componentMemberships.map((membership) => [membership.componentId, objectValue(membership.position, { x: 0, y: 0 })]))
+      };
+      if (current.version !== expectedVersion) throw new OptimisticLockError({ id: current.id, version: current.version, name: current.name });
+      const mutation = auditMutation("diagram", value.id, "Diagramm", withoutVersion(currentValue), withoutVersion(value));
+      if (!mutation) return currentValue;
       const updated = await tx.diagram.updateMany({
         where: { id: value.id, companyId, version: expectedVersion },
         data: {
@@ -812,8 +1029,6 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         }
       });
       if (updated.count !== 1) {
-        const current = await tx.diagram.findFirst({ where: { id: value.id, companyId } });
-        if (!current) throw new ResourceNotFoundError("Diagram not found.");
         throw new OptimisticLockError({ id: current.id, version: current.version, name: current.name });
       }
       await tx.diagramComponentMembership.deleteMany({ where: { diagramId: value.id } });
@@ -833,14 +1048,31 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         });
       }
       await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+      await this.appendAuditEntries(tx, companyId, actor, [mutation]);
       return { ...value, version: expectedVersion + 1 };
     }, async () => (await this.prisma.diagram.findFirst({
       where: { id: value.id, companyId }, select: { id: true, version: true, name: true }
     })) ?? { id: value.id, version: expectedVersion });
   }
 
-  async deleteDiagram(companyId: string, id: string, expectedVersion: number): Promise<void> {
+  async deleteDiagram(companyId: string, id: string, expectedVersion: number, actor: AuditActorInput = { type: "system", label: "System" }): Promise<void> {
     await this.withLockedCompany(companyId, async (tx) => {
+      const current = await tx.diagram.findFirst({
+        where: { id, companyId },
+        include: { componentMemberships: true, connectionMemberships: true }
+      });
+      if (!current) throw new ResourceNotFoundError("Diagram not found.");
+      if (current.version !== expectedVersion) throw new OptimisticLockError({ id: current.id, version: current.version, name: current.name });
+      const mutation = auditMutation("diagram", id, "Diagramm", {
+        id: current.id,
+        name: current.name,
+        description: current.description,
+        metamodelId: current.metamodelId,
+        viewpointId: current.viewpointId ?? undefined,
+        componentIds: current.componentMemberships.map((membership) => membership.componentId),
+        connectionIds: current.connectionMemberships.map((membership) => membership.connectionId),
+        positions: Object.fromEntries(current.componentMemberships.map((membership) => [membership.componentId, objectValue(membership.position, { x: 0, y: 0 })]))
+      }, null)!;
       const removed = await tx.diagram.deleteMany({ where: { id, companyId, version: expectedVersion } });
       if (removed.count !== 1) {
         const current = await tx.diagram.findFirst({ where: { id, companyId } });
@@ -848,27 +1080,69 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         throw new OptimisticLockError({ id: current.id, version: current.version, name: current.name });
       }
       await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
+      await this.appendAuditEntries(tx, companyId, actor, [mutation]);
     }, async () => (await this.prisma.diagram.findFirst({
       where: { id, companyId }, select: { id: true, version: true, name: true }
     })) ?? { id, version: expectedVersion });
   }
 
-  async listAudit(companyId: string, limit: number): Promise<AuditEntry[]> {
+  async listAudit(companyId: string, query: AuditQuery): Promise<AuditPage> {
+    const occurredAt: Prisma.DateTimeNullableFilter = {};
+    if (query.from) occurredAt.gte = query.from;
+    if (query.to) occurredAt.lte = query.to;
+    const cursorFilter = query.cursor
+      ? query.cursor.occurredAt
+        ? {
+          OR: [
+            { occurredAt: { lt: query.cursor.occurredAt } },
+            { occurredAt: query.cursor.occurredAt, id: { lt: query.cursor.id } },
+            { occurredAt: null }
+          ]
+        }
+        : { occurredAt: null, id: { lt: query.cursor.id } }
+      : {};
     const entries = await this.prisma.auditLogEntry.findMany({
-      where: { companyId },
-      orderBy: { createdAt: "desc" },
-      take: limit
+      where: {
+        companyId,
+        ...(query.from || query.to ? { occurredAt } : {}),
+        ...(query.actor ? {
+          OR: [
+            { userId: query.actor },
+            { userEmail: { equals: query.actor, mode: "insensitive" } },
+            { actorLabel: { equals: query.actor, mode: "insensitive" } }
+          ]
+        } : {}),
+        ...(query.entityId ? { entityId: query.entityId } : {}),
+        ...(query.entityType ? { entityType: query.entityType } : {}),
+        ...(query.action ? { action: query.action } : {}),
+        ...cursorFilter
+      },
+      orderBy: [{ occurredAt: { sort: "desc", nulls: "last" } }, { id: "desc" }],
+      take: query.limit + 1
     });
-    return entries.map((entry) => ({
+    const hasMore = entries.length > query.limit;
+    if (hasMore) entries.pop();
+    const items: AuditEntry[] = entries.map((entry) => ({
       id: entry.id,
+      occurredAt: entry.occurredAt?.toISOString() ?? null,
       createdAt: entry.createdAt.toISOString(),
+      actorType: entry.actorType as AuditEntry["actorType"],
+      actorLabel: entry.actorLabel,
       userId: entry.userId,
       userEmail: entry.userEmail,
       action: entry.action,
       entityType: entry.entityType,
+      entityId: entry.entityId,
       summary: entry.summary,
-      details: objectValue(entry.details, {}) as Record<string, unknown>
+      changes: Array.isArray(entry.changes) ? entry.changes as unknown as AuditEntry["changes"] : [],
+      details: objectValue(entry.details, {}) as Record<string, unknown>,
+      batchId: entry.batchId
     }));
+    const last = entries.at(-1);
+    const nextCursor = hasMore && last
+      ? Buffer.from(JSON.stringify({ occurredAt: last.occurredAt?.toISOString() ?? null, id: last.id })).toString("base64url")
+      : null;
+    return { items, nextCursor };
   }
 
   async disconnect(): Promise<void> {

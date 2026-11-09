@@ -6,6 +6,7 @@ import { COMPONENT_SHAPES } from "./sidebarTypes";
 import { useAccess } from "../access";
 import { runOptimisticMutation, type ConflictResolution } from "../optimisticConflict";
 import CatalogEditor from "./CatalogEditor";
+import { ElementAuditHistory } from "../AuditLogView";
 import type {
   ComponentInstance,
   ComponentShape,
@@ -946,6 +947,7 @@ function ComponentReadOnly({
   onSelect: (sel: SidebarSelection) => void;
   onOpenDiagram: (id: string) => void;
 }) {
+  const { canReadAudit } = useAccess();
   const selectedType = componentTypes.find((type) => type.id === comp.componentTypeId);
   const propertyKeys = [...new Set([...(selectedType?.customPropertyKeys ?? []), ...Object.keys(comp.properties)])];
 
@@ -977,6 +979,7 @@ function ComponentReadOnly({
         isIncluded={(diagram) => diagram.componentIds.includes(comp.id)}
         onOpenDiagram={onOpenDiagram}
       />
+      {canReadAudit && <ElementAuditHistory entityId={comp.id} entityType="component" />}
     </div>
   );
 }
@@ -1010,6 +1013,7 @@ function ReadOnlyDetails({
   onSelect: (sel: SidebarSelection) => void;
   onOpenDiagram: (id: string) => void;
 }) {
+  const { canReadAudit } = useAccess();
   const { componentTypes, connectionTypes, connectionRules, viewpoints, components, connections, diagrams } = sidebarState;
   const names = (items: { id: string; name: string }[], ids: string[] | undefined) =>
     ids?.length ? ids.map((id) => items.find((item) => item.id === id)?.name ?? "Unbekannt").join(", ") : "";
@@ -1091,6 +1095,7 @@ function ReadOnlyDetails({
       <h3>Eigenschaften</h3>
       {properties.length > 0 ? <ReadOnlyFields fields={properties} /> : <p className="muted">Keine Eigenschaften hinterlegt.</p>}
       <LinkedDiagrams diagrams={diagrams} isIncluded={(diagram) => diagram.connectionIds.includes(conn.id)} onOpenDiagram={onOpenDiagram} />
+      {canReadAudit && <ElementAuditHistory entityId={conn.id} entityType="connection" />}
     </>;
   } else {
     const diagram = diagrams.find((item) => item.id === selection.id);
@@ -1134,6 +1139,7 @@ function ComponentEditor({
   onOpenDiagram: (id: string) => void;
   onSave: (p: Partial<ComponentInstance>) => Promise<void>;
 }) {
+  const { canReadAudit } = useAccess();
   const [draft, setDraft] = useState(comp);
   const [saveError, setSaveError] = useState("");
   const dirty = JSON.stringify(draft) !== JSON.stringify(comp);
@@ -1198,6 +1204,7 @@ function ComponentEditor({
         isIncluded={(d) => d.componentIds.includes(comp.id)}
         onOpenDiagram={onOpenDiagram}
       />
+      {canReadAudit && <ElementAuditHistory entityId={comp.id} entityType="component" />}
     </div>
   );
 }
@@ -1221,6 +1228,7 @@ function ConnectionEditor({
   onOpenDiagram: (id: string) => void;
   onSave: (p: Partial<ConnectionInstance>) => Promise<void>;
 }) {
+  const { canReadAudit } = useAccess();
   const [draft, setDraft] = useState<ConnectionInstance>({ ...conn, properties: conn.properties ?? {} });
   const [saveError, setSaveError] = useState("");
   const dirty = JSON.stringify(draft) !== JSON.stringify({ ...conn, properties: conn.properties ?? {} });
@@ -1291,6 +1299,7 @@ function ConnectionEditor({
         isIncluded={(d) => d.connectionIds.includes(conn.id)}
         onOpenDiagram={onOpenDiagram}
       />
+      {canReadAudit && <ElementAuditHistory entityId={conn.id} entityType="connection" />}
     </div>
   );
 }

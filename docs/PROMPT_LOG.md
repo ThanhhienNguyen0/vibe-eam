@@ -316,3 +316,25 @@ Umgesetzt wurde:
 - Der getrennte Kontrollchat `01a1699f-2854-7233-8203-0d9326bbddfe` prüfte jede Korrekturstufe read-only. Das finale Urteil für `74aa718e` lautet: keine offenen P0–P3.
 
 Nicht Teil dieses lokalen Abschlusses sind Push, Aktualisierung von PR #90, neues Staging-Deployment, Liveprüfung oder Produktion.
+
+## REQ-23: Audit Log am 08.11.2026
+
+Der Auftrag verlangte die vollständige Umsetzung von Issue #55 auf der unabhängig akzeptierten REQ-26-Basis, beginnend mit Abnahmematrix und Schreibpfadinventar. Gefordert waren atomare, append-only Anwendungsbelege mit serverseitigem Akteur, Objekt und Felddiff, Elementhistorie, Filter und Cursor, Erhalt beider Legacy-Pfade, echte PostgreSQL-/Mehrprozesstests sowie Backup-, Restore- und Rollbackprobe. Push, PR, Merge, Issue-Schließung und Deployment waren ausdrücklich ausgeschlossen.
+
+Umgesetzt wurden ein gemeinsamer Actor-/Action-/Object-Vertrag, strukturierte Redaction und Größenlimits, die Transaktionsintegration aller Modellschreibpfade, additive Migration mit beweistreuem Legacy-Backfill, tenantgebundene Lese-API und die Audit-/Elementhistorienoberfläche. Der Entwicklungsstand wurde mit isolierter PostgreSQL-14-Instanz, Gesamtgate, Dependency- und Secret-Gate geprüft. Dokumentierte Fehlversuche waren eine lokale Loopback-Sperre, zwei HTTP-504 beim Scannerdownload und eine nicht nutzbare Docker-Platzhalterdatei; daraus wurden keine Produktfehler oder Container-Nachweise abgeleitet.
+
+### Unabhängige Nachkorrektur
+
+Der Exact-Head-Review lehnte `8a9de7a05a84ed6cff49fdd1d843fcc5afd9ba67` mit zwei P1-, einem P2- und einem P3-Befund ab: fehlender DB-seitiger Append-only-Schutz; unbelegte Legacy-Initialisierung und mutierende No-ops; abgeschnittene, nur nach ID gefilterte Elementhistorie; veraltete Basis-/Evidenzangaben. Der Folgeauftrag verlangte DB-Trigger samt Restore/Rollback-Gegenprobe, atomare `system.initialize`-Initialisierung, vollständig stille Legacy-No-ops, typgebundene Cursorhistorien über 20 Einträge und eine commitgebundene Dokuüberarbeitung. Technischer Korrekturhead ist `abff4e90beb91526d759bc645cf4c9e87ece8834`; Push und PR bleiben ausgeschlossen.
+
+Der erste Korrektur-DB-Lauf bestand 38/39: Nach revisionsneutraler Initialisierung war die Importversion gleich statt größer als die vorherige Objektversion. Die Formel wurde auf das Maximum aus nächster Datenrevision und vorheriger Objektversion plus eins korrigiert. Der Wiederholungslauf bestand 39/39 einschließlich Trigger-, No-op-, Pagination-, Backup-/Restore- und Rollbackgegenproben.
+
+### Verbliebener P2 und UI-Nachkorrektur am 09.11.2026
+
+Die unabhängige Kontrolle des Kandidaten `238ca51bc48f55936664aa270807ea48d173cc8b` stellte eine Race-Condition fest: Eine noch laufende zweite Historienseite von Auswahl A konnte nach dem Wechsel zu B auflösen, A-Einträge an B anhängen und B-Cursor sowie B-Ladezustand überschreiben. Der Folgeauftrag beschränkte sich auf einen robusten Schutz für Erst- und Folgeanfragen, einen deterministischen React-Gegenfall, die vier Nachweisdokumente und vollständige lokale Gates; Push, PR, Merge, Issue-Schließung und Deployment blieben ausgeschlossen.
+
+Der technische UI-Korrekturhead `b57d2f42176651fa82c4454fb6ed79693f317dd9` bindet alle asynchronen Zustandsänderungen an eine pro Auswahl fortgeschriebene Anfragegeneration. Der Gegenfall A Seite 1 → A Seite 2 offen → Wechsel B → B Seite 1 → B Seite 2 offen → verspätete A Seite 2 schützt B-Inhalte, B-Cursor und B-Ladezustand. Der gezielte Test bestand 3/3; das vollständige Gate bestand mit 174 Backendtests, 39 erwartungsgemäß übersprungenen DB-Tests und 43 Frontendtests.
+
+### Exact-Head-Freigabe und Draft-PR am 09.11.2026
+
+Die getrennte Kontrollinstanz prüfte den unveränderten Produkthead `b0d7e4b07b4d627cd96f4a09857761c9ed33ee5a` gegen Basis `805b281d4f99f7f4bc0db8c9c66b0d1646ea5926` und erteilte im geprüften Umfang die technische Freigabe ohne offene P0–P3. Sieben von sieben erweiterten Race-Gegenproben für verspätete Erfolge, Fehler, `finally`, Auswahlwechsel und Unmount bestanden. Der Branch wurde anschließend veröffentlicht und Draft-PR #98 gegen `main` angelegt. GitHub bestätigte den exakten Head und die exakte Basis; `Quality and infrastructure`, `Dependency security`, `Secret security`, `CodeQL JavaScript TypeScript` und die CodeQL-PR-Auswertung waren erfolgreich. Menschliches Review, Merge, Issue-Schließung, Staging und Produktion bleiben offen. Der folgende reine Dokumentationscommit wird nicht gepusht.

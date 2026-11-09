@@ -31,7 +31,8 @@ import {
 } from "../persistence/stateOperations.js";
 import { cloneSidebarStateForCompany } from "../persistence/tenantState.js";
 import { currentPrincipal, requireCompanyId } from "../tenant.js";
-import type { AuditEntry, AuditEntryInput } from "../audit/auditTypes.js";
+import type { AuditActorInput, AuditEntryInput, AuditPage, AuditQuery } from "../audit/auditTypes.js";
+import { diffSidebarStates } from "../audit/auditDiff.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.resolve(__dirname, "../data");
@@ -1081,7 +1082,16 @@ export async function readSidebarState(): Promise<SidebarState> {
   }
 
   const initial = buildInitialSidebarStateForCompany(companyId);
-  const stored = await databaseSidebarRepository().write(initial, companyId);
+  const stored = await databaseSidebarRepository().write(initial, companyId, {
+    actor: { type: "system", label: "Systeminitialisierung" },
+    beforeState: null,
+    event: {
+      action: "system.initialize",
+      entityType: "model",
+      entityId: companyId,
+      summary: "Initiales Unternehmensmodell gespeichert."
+    }
+  });
   return structuredClone(stored);
 }
 
@@ -1152,19 +1162,36 @@ export async function importMetamodelDefinition(input: unknown): Promise<Metamod
   };
 }
 
-export async function writeSidebarState(state: SidebarState, audit?: AuditEntryInput): Promise<SidebarState> {
+function authenticatedAuditActor(): AuditActorInput {
+  const principal = currentPrincipal();
+  return principal ? { type: "user", userId: principal.userId } : { type: "system", label: "System" };
+}
+
+export async function writeSidebarState(state: SidebarState, event?: AuditEntryInput): Promise<SidebarState> {
   const companyId = requireCompanyId();
-  const auditWrite = audit ? { ...audit, userId: currentPrincipal()?.userId } : undefined;
-  const stored = await databaseSidebarRepository().write(structuredClone(state), companyId, auditWrite);
+  const repository = databaseSidebarRepository();
+  const persisted = await repository.read(companyId);
+  const beforeState = persisted
+    ? persisted.catalogs === undefined
+      ? normalizeSidebarStateForCompany(persisted, companyId)
+      : persisted as SidebarState
+    : null;
+  if (beforeState && !event && diffSidebarStates(beforeState, state).length === 0) {
+    return structuredClone(beforeState);
+  }
+  const stored = await repository.write(structuredClone(state), companyId, {
+    actor: authenticatedAuditActor(),
+    beforeState: beforeState ? structuredClone(beforeState) : null,
+    event
+  });
   return structuredClone(stored);
 }
 
 // ── Audit log ────────────────────────────────────────────────────────────────
 
-export async function listAuditLog(limit = 200): Promise<AuditEntry[]> {
+export async function listAuditLog(query: AuditQuery): Promise<AuditPage> {
   const companyId = requireCompanyId();
-  const bounded = Math.min(Math.max(Math.trunc(limit) || 200, 1), 500);
-  return databaseSidebarRepository().listAudit(companyId, bounded);
+  return databaseSidebarRepository().listAudit(companyId, query);
 }
 
 // ── Component Types ──────────────────────────────────────────────────────────
@@ -1371,7 +1398,8 @@ export async function addComponentToDiagram(
     { ...comp, version: 1 },
     diagramId,
     position,
-    expectedDiagramVersion
+    expectedDiagramVersion,
+    authenticatedAuditActor()
   );
 }
 
@@ -1380,11 +1408,11 @@ export async function updateComponent(id: string, patch: Partial<ComponentInstan
   const idx = state.components.findIndex((c) => c.id === id);
   if (idx === -1) return null;
   const value = { ...state.components[idx], ...patch, id, version: state.components[idx].version };
-  return databaseSidebarRepository().updateComponent(requireCompanyId(), value, expectedVersion);
+  return databaseSidebarRepository().updateComponent(requireCompanyId(), value, expectedVersion, authenticatedAuditActor());
 }
 
 export async function deleteComponent(id: string, expectedVersion: number): Promise<boolean> {
-  await databaseSidebarRepository().deleteComponent(requireCompanyId(), id, expectedVersion);
+  await databaseSidebarRepository().deleteComponent(requireCompanyId(), id, expectedVersion, authenticatedAuditActor());
   return true;
 }
 
@@ -1421,11 +1449,11 @@ export async function updateConnection(id: string, patch: Partial<ConnectionInst
   const idx = state.connections.findIndex((c) => c.id === id);
   if (idx === -1) return null;
   const value = { ...state.connections[idx], ...patch, id, version: state.connections[idx].version };
-  return databaseSidebarRepository().updateConnection(requireCompanyId(), value, expectedVersion);
+  return databaseSidebarRepository().updateConnection(requireCompanyId(), value, expectedVersion, authenticatedAuditActor());
 }
 
 export async function deleteConnection(id: string, expectedVersion: number): Promise<boolean> {
-  await databaseSidebarRepository().deleteConnection(requireCompanyId(), id, expectedVersion);
+  await databaseSidebarRepository().deleteConnection(requireCompanyId(), id, expectedVersion, authenticatedAuditActor());
   return true;
 }
 
@@ -1456,7 +1484,7 @@ export async function updateDiagram(id: string, patch: Partial<Diagram>, expecte
   const idx = state.diagrams.findIndex((d) => d.id === id);
   if (idx === -1) return null;
   const value = { ...state.diagrams[idx], ...patch, id, version: state.diagrams[idx].version };
-  return databaseSidebarRepository().updateDiagram(requireCompanyId(), value, expectedVersion);
+  return databaseSidebarRepository().updateDiagram(requireCompanyId(), value, expectedVersion, authenticatedAuditActor());
 }
 
 export async function addCatalog(catalog: Catalog): Promise<Catalog> {
@@ -1485,6 +1513,6 @@ export async function deleteCatalog(id: string): Promise<boolean> {
 }
 
 export async function deleteDiagram(id: string, expectedVersion: number): Promise<boolean> {
-  await databaseSidebarRepository().deleteDiagram(requireCompanyId(), id, expectedVersion);
+  await databaseSidebarRepository().deleteDiagram(requireCompanyId(), id, expectedVersion, authenticatedAuditActor());
   return true;
 }
