@@ -20,6 +20,24 @@ const ICON_BY_KEY: Record<string, LucideIcon> = {
   security: Shield
 };
 
+/** Selectable icons in the type editor; "box" means "automatic, derived from the type name". */
+export const ICON_OPTIONS: Array<{ key: string; label: string }> = [
+  { key: "box", label: "Automatisch (nach Name)" },
+  { key: "app", label: "Applikation" },
+  { key: "db", label: "Datenbank" },
+  { key: "server", label: "Server / Technologie" },
+  { key: "proc", label: "Prozess" },
+  { key: "svc", label: "Service" },
+  { key: "interface", label: "Schnittstelle" },
+  { key: "network", label: "Netzwerk" },
+  { key: "security", label: "Sicherheit" },
+  { key: "user", label: "Person / Stakeholder" },
+  { key: "target", label: "Ziel" },
+  { key: "capability", label: "Fähigkeit" },
+  { key: "data", label: "Daten / Dokument" },
+  { key: "org", label: "Organisation" }
+];
+
 /** Fallback for custom types: guess from the type name (German and English). */
 const NAME_RULES: Array<[RegExp, LucideIcon]> = [
   [/(applikation|application|anwendung|\bapp\b|software)/i, AppWindow],
