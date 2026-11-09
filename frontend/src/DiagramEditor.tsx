@@ -15,7 +15,9 @@ import ReactFlow, {
   useEdgesState,
   useNodesState
 } from "reactflow";
-import { GitBranch, MousePointerClick, PanelLeftClose, PanelLeftOpen, Search, SlidersHorizontal, X } from "lucide-react";
+import { CircleCheck, GitBranch, Grid3x3, Maximize, MousePointerClick, PanelLeftClose, PanelLeftOpen, Ruler, Search, SlidersHorizontal, X } from "lucide-react";
+import DiagramCoordinates from "./DiagramCoordinates";
+import { GRID_SIZE as GRID_BG, fallbackPosition, findFreePosition, snapPoint, type Rect } from "./diagramLayout";
 import { sidebarApi } from "./Sidebar/sidebarApi";
 import { runOptimisticMutation } from "./optimisticConflict";
 import { useAccess } from "./access";
@@ -504,7 +506,7 @@ function buildNodes(
     if (!comp) return [];
     const type = componentTypes.find((t) => t.id === comp.componentTypeId);
     const shape = type?.shape ?? "box";
-    const pos = diagram.positions[id] ?? { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 };
+    const pos = diagram.positions[id] ?? fallbackPosition(Math.max(diagram.componentIds.indexOf(id), 0));
     const isPool = shape === "pool";
     const defaults = shapeDefaultSize(shape);
     const width = pos.width ?? defaults.width;
@@ -804,9 +806,13 @@ function DiagramEditorInner({
   const [connectingFrom, dispatchConnectionMode] = useReducer(connectionModeReducer, null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [showRulers, setShowRulers] = useState(true);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const [validationResult, setValidationResult] = useState<DiagramValidationResult | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
   const activeViewpoint = viewpointFilterId ? viewpoints.find((viewpoint) => viewpoint.id === viewpointFilterId) : undefined;
   const sidebarState = useMemo(
     () => ({ metamodel, componentTypes, connectionTypes, connectionRules, viewpointRules, validationRules, viewpoints, components, connections, diagrams: [diagram], catalogs: [] }),
@@ -835,10 +841,38 @@ function DiagramEditorInner({
     [activeVisibleTypeIds, componentTypes]
   );
 
+  // Short confirmation messages disappear on their own.
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 3500);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  const fitDiagram = useCallback(() => {
+    void fitView({ padding: 0.2, maxZoom: 1.2, duration: 250 });
+  }, [fitView]);
+
+  // Center the diagram whenever another diagram is opened.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => { void fitView({ padding: 0.2, maxZoom: 1.2 }); });
+    return () => cancelAnimationFrame(frame);
+  }, [diagram.id, fitView]);
+
+  // Escape leaves the connect mode.
+  useEffect(() => {
+    if (!connectingFrom) return;
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape") dispatchConnectionMode({ type: "cancel" });
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [connectingFrom]);
+
   useEffect(() => {
     setViewpointFilterId(diagram.viewpointId ?? "");
     setValidationResult(null);
     setError("");
+    setNotice("");
   }, [diagram.id, diagram.viewpointId]);
 
   useEffect(() => {
@@ -886,7 +920,7 @@ function DiagramEditorInner({
         (ct.allowedSourceTypeIds.length > 0 ? 1 : 0) + (ct.allowedTargetTypeIds.length > 0 ? 1 : 0);
       const connType = [...allowed].sort((a, b) => specificity(b) - specificity(a))[0];
       if (!connType) {
-        setError("No connection rule allows this source/target combination.");
+        setError("Diese Verbindung ist nicht erlaubt: Für diese Kombination aus Quelle und Ziel gibt es keine Verbindungsregel im Metamodell.");
         return;
       }
 
@@ -902,6 +936,7 @@ function DiagramEditorInner({
         if (result.created) onConnectionCreated(result.connection);
         onDiagramChange(result.diagram);
         setError("");
+        setNotice(`Verbindung „${connType.name}“ von ${srcComp.name} zu ${tgtComp.name} erstellt.`);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Verbindung konnte nicht erstellt werden.");
       }
@@ -948,15 +983,16 @@ function DiagramEditorInner({
     setContextMenu({ visible: true, x: e.clientX, y: e.clientY, nodeId: node.id });
   }, []);
 
-  async function removeFromDiagram(nodeId: string) {
-    if (!canWrite) return;
-    const newCompIds = diagram.componentIds.filter((id) => id !== nodeId);
+  async function removeNodesFromDiagram(nodeIds: string[]) {
+    if (!canWrite || nodeIds.length === 0) return;
+    const removed = new Set(nodeIds);
+    const newCompIds = diagram.componentIds.filter((id) => !removed.has(id));
     const newConnIds = diagram.connectionIds.filter((id) => {
       const conn = connections.find((c) => c.id === id);
-      return conn && conn.sourceComponentId !== nodeId && conn.targetComponentId !== nodeId;
+      return conn && !removed.has(conn.sourceComponentId) && !removed.has(conn.targetComponentId);
     });
     const newPositions = Object.fromEntries(
-      Object.entries(diagram.positions).filter(([componentId]) => componentId !== nodeId)
+      Object.entries(diagram.positions).filter(([componentId]) => !removed.has(componentId))
     );
     try {
       const updated = await updateDiagramWithConflict(diagram, {
@@ -968,12 +1004,57 @@ function DiagramEditorInner({
       onDiagramChange(updated);
       setValidationResult(null);
       setError("");
+      setNotice(nodeIds.length === 1 ? "Aus dem Diagramm entfernt (bleibt im Modell erhalten)." : `${nodeIds.length} Elemente aus dem Diagramm entfernt (bleiben im Modell erhalten).`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Element konnte nicht aus dem Diagramm entfernt werden.");
     } finally {
       setContextMenu((menu) => ({ ...menu, visible: false }));
     }
   }
+
+  const removeFromDiagram = (nodeId: string) => removeNodesFromDiagram([nodeId]);
+
+  async function removeEdgesFromDiagram(edgeIds: string[]) {
+    if (!canWrite || edgeIds.length === 0) return;
+    const removed = new Set(edgeIds);
+    try {
+      const updated = await updateDiagramWithConflict(diagram, {
+        connectionIds: diagram.connectionIds.filter((id) => !removed.has(id))
+      });
+      if (!updated) return;
+      onDiagramChange(updated);
+      setError("");
+      setNotice("Verbindung aus dem Diagramm entfernt (bleibt im Modell erhalten).");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Verbindung konnte nicht aus dem Diagramm entfernt werden.");
+    }
+  }
+
+  // ── Platzierung neuer Elemente ──────────────────────────────────────────────
+
+  const occupiedRects = useCallback((positions: Record<string, DiagramPosition>): Rect[] =>
+    Object.entries(positions).map(([id, pos]) => {
+      const component = components.find((item) => item.id === id);
+      const shape = componentTypes.find((type) => type.id === component?.componentTypeId)?.shape ?? "box";
+      const defaults = shapeDefaultSize(shape);
+      return { x: pos.x, y: pos.y, width: pos.width ?? defaults.width, height: pos.height ?? defaults.height };
+    }), [componentTypes, components]);
+
+  /** Free spot near the middle of what the user currently sees (instead of random or stacked positions). */
+  const placeNewComponent = useCallback((compId: string, positions: Record<string, DiagramPosition>, preferred?: DiagramPosition): DiagramPosition => {
+    const component = components.find((item) => item.id === compId);
+    const shape = componentTypes.find((type) => type.id === component?.componentTypeId)?.shape ?? "box";
+    const size = shapeDefaultSize(shape);
+    let center = preferred;
+    if (!center) {
+      const box = canvasRef.current?.getBoundingClientRect();
+      center = box
+        ? screenToFlowPosition({ x: box.left + box.width / 2, y: box.top + box.height / 2 })
+        : { x: 200, y: 160 };
+      center = { x: center.x - size.width / 2, y: center.y - size.height / 2 };
+    }
+    return findFreePosition(occupiedRects(positions), center, size, { snap: snapEnabled });
+  }, [componentTypes, components, occupiedRects, screenToFlowPosition, snapEnabled]);
 
   // ── Drop aus Sidebar/Palette ────────────────────────────────────────────────
 
@@ -995,7 +1076,7 @@ function DiagramEditorInner({
   function onCanvasDrop(e: React.DragEvent) {
       if (!canWrite) return;
       setIsDragOver(false);
-      const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const position = snapPoint(screenToFlowPosition({ x: e.clientX, y: e.clientY }), snapEnabled);
 
       // Typ gezogen → Dialog zum Erstellen einer neuen Komponente
       const typeId = e.dataTransfer.getData(COMPONENT_TYPE_DRAG_MIME);
@@ -1017,7 +1098,7 @@ function DiagramEditorInner({
     const { typeId, position } = pendingCreate;
     if (activeViewpoint && activeVisibleTypeIds && !activeVisibleTypeIds.has(typeId)) {
       const type = componentTypes.find((item) => item.id === typeId);
-      setError(`${type?.name ?? "This component type"} is not allowed in the selected ${activeViewpoint.name}.`);
+      setError(`${type?.name ?? "Dieser Komponententyp"} ist in der Ansicht „${activeViewpoint.name}“ nicht erlaubt.`);
       return;
     }
     try {
@@ -1041,6 +1122,7 @@ function DiagramEditorInner({
       onDiagramChange(result.value.diagram);
       setPendingCreate(null);
       setError("");
+      setNotice(`Komponente „${name}“ angelegt und im Diagramm platziert.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Komponente konnte nicht erstellt werden.");
     }
@@ -1054,7 +1136,7 @@ function DiagramEditorInner({
     const component = components.find((item) => item.id === compId);
     const componentType = componentTypes.find((type) => type.id === component?.componentTypeId);
     if (activeViewpoint && activeVisibleTypeIds && componentType && !activeVisibleTypeIds.has(componentType.id)) {
-      setError(`${componentType.name} is not allowed in the selected ${activeViewpoint.name}.`);
+      setError(`${componentType.name} ist in der Ansicht „${activeViewpoint.name}“ nicht erlaubt.`);
       return;
     }
 
@@ -1097,13 +1179,12 @@ function DiagramEditorInner({
       ...extraConnIds.filter((id) => !diagram.connectionIds.includes(id))
     ];
     const newPositions = { ...diagram.positions };
-    if (position) {
-      newPositions[compId] = position;
-      // Mit-hinzugefügte Nachbarn fächerförmig neben der Drop-Position platzieren
-      extraCompIds.forEach((id, i) => {
-        if (!newPositions[id]) newPositions[id] = { x: position.x + 260, y: position.y + i * 110 };
-      });
-    }
+    newPositions[compId] = position ?? placeNewComponent(compId, newPositions);
+    const anchor = newPositions[compId];
+    // Mit-hinzugefügte Nachbarn neben dem Element platzieren, ohne dass sie sich überlappen
+    extraCompIds.forEach((id, i) => {
+      if (!newPositions[id]) newPositions[id] = placeNewComponent(id, newPositions, { x: anchor.x + 260, y: anchor.y + i * 110 });
+    });
     const updated = await updateDiagramWithConflict(diagram, {
       componentIds: newCompIds,
       connectionIds: newConnIds,
@@ -1111,6 +1192,8 @@ function DiagramEditorInner({
     });
     if (!updated) return;
     onDiagramChange(updated);
+    setError("");
+    setNotice(`${components.find((item) => item.id === compId)?.name ?? "Komponente"} zum Diagramm hinzugefügt.`);
   }
 
   async function confirmAdd() {
@@ -1214,6 +1297,25 @@ function DiagramEditorInner({
             {applicableViewpoints.map((viewpoint) => <option key={viewpoint.id} value={viewpoint.id}>{viewpoint.name}</option>)}
           </select>
         </label>
+        <button className="diagram-palette-toggle" onClick={fitDiagram} title="Alle Elemente einpassen und zentrieren">
+          <Maximize size={16} /> Ansicht einpassen
+        </button>
+        <button
+          className={`diagram-palette-toggle${showRulers ? " diagram-toggle--on" : ""}`}
+          onClick={() => setShowRulers((v) => !v)}
+          aria-pressed={showRulers}
+          title="Koordinatensystem mit Linealen und Achsen ein-/ausblenden"
+        >
+          <Ruler size={16} /> Koordinaten
+        </button>
+        <button
+          className={`diagram-palette-toggle${snapEnabled ? " diagram-toggle--on" : ""}`}
+          onClick={() => setSnapEnabled((v) => !v)}
+          aria-pressed={snapEnabled}
+          title="Neue Elemente am Raster ausrichten"
+        >
+          <Grid3x3 size={16} /> Raster
+        </button>
         <button className="diagram-palette-toggle" onClick={runDiagramValidation}>
           <SlidersHorizontal size={16} /> Ansicht prüfen
         </button>
@@ -1226,7 +1328,17 @@ function DiagramEditorInner({
         <button className="diagram-close-btn" onClick={onClose} title="Tab schließen"><X size={16} /></button>
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && (
+        <div className="error-banner diagram-error" role="alert">
+          <span>{error}</span>
+          <button type="button" className="diagram-banner-close" onClick={() => setError("")} aria-label="Meldung schließen"><X size={14} /></button>
+        </div>
+      )}
+      {notice && !error && (
+        <div className="diagram-notice" role="status">
+          <CircleCheck size={14} /> {notice}
+        </div>
+      )}
 
       {/* ── Connect mode banner ─────────────────────────────────────────────── */}
       {validationResult && (
@@ -1253,7 +1365,7 @@ function DiagramEditorInner({
         return (
           <div className="diagram-connect-banner">
             <GitBranch size={14} />
-            <span>Verbindung von <strong>{fromComp?.name}</strong> — Klicke auf Ziel-Komponente</span>
+            <span><strong>Verbindungsmodus:</strong> Von <strong>{fromComp?.name}</strong> aus – klicke auf die Ziel-Komponente (Esc zum Abbrechen)</span>
             <button onClick={() => dispatchConnectionMode({ type: "cancel" })}>Abbrechen</button>
           </div>
         );
@@ -1270,7 +1382,8 @@ function DiagramEditorInner({
         )}
 
         <div
-          className={`diagram-canvas${isDragOver ? " diagram-canvas--drop" : ""}`}
+          ref={canvasRef}
+          className={`diagram-canvas${isDragOver ? " diagram-canvas--drop" : ""}${connectingFrom ? " diagram-canvas--connecting" : ""}`}
           onDragOver={canWrite ? onCanvasDragOver : undefined}
           onDragLeave={onCanvasDragLeave}
           onDrop={canWrite ? onCanvasDrop : undefined}
@@ -1282,7 +1395,9 @@ function DiagramEditorInner({
             nodesDraggable={false}
             nodesConnectable={canWrite}
             edgesFocusable={canWrite}
-            deleteKeyCode={canWrite ? "Backspace" : null}
+            deleteKeyCode={canWrite ? ["Backspace", "Delete"] : null}
+            onNodesDelete={canWrite ? (deleted) => { void removeNodesFromDiagram(deleted.map((node) => node.id)); } : undefined}
+            onEdgesDelete={canWrite ? (deleted) => { void removeEdgesFromDiagram(deleted.map((edge) => edge.id)); } : undefined}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={canWrite ? onConnect : undefined}
@@ -1300,10 +1415,14 @@ function DiagramEditorInner({
               }, 120);
             }}
             fitView
+            fitViewOptions={{ padding: 0.2, maxZoom: 1.2 }}
+            minZoom={0.1}
+            maxZoom={2.5}
           >
             <MiniMap nodeStrokeWidth={3} pannable zoomable />
-            <Controls showInteractive={canWrite} />
-            <Background gap={24} />
+            <Controls showInteractive={false} fitViewOptions={{ padding: 0.2, maxZoom: 1.2 }} />
+            <Background gap={GRID_BG} />
+            <DiagramCoordinates showRulers={showRulers} />
           </ReactFlow>
 
           {diagramIsEmpty && (

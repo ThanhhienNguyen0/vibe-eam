@@ -37,7 +37,9 @@ button:hover {
 }
 
 .app-shell {
-  min-height: 100vh;
+  /* Fixed viewport height: sidebar and workspace scroll internally, so a long tree can no longer push the canvas down (BUG-02). */
+  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -990,6 +992,7 @@ tr.attention td {
 .app-body > .workspace {
   flex: 1;
   min-width: 0;
+  overflow-y: auto;
 }
 
 /* ── Sidebar ──────────────────────────────────────────────────────────────── */
@@ -1997,7 +2000,7 @@ tr.attention td {
   position: relative;
   flex: 1;
   min-width: 0;
-  min-height: 500px;
+  min-height: 320px;
 }
 
 /* Sichtbares Feedback beim Ziehen über die Fläche */
@@ -3788,3 +3791,78 @@ tr.attention td {
 
 .conflict-dialog h2 { margin-top: 0; }
 .conflict-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem; }
+
+/* ── Diagram usability (BUG-02): coordinates, feedback, modes ─────────────── */
+
+.diagram-toggle--on {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.diagram-coordinates {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.diagram-coordinates-svg { position: absolute; inset: 0; }
+.diagram-axis { stroke: #2563eb; stroke-opacity: 0.45; stroke-dasharray: 6 4; stroke-width: 1; }
+.diagram-ruler-bg { fill: rgba(248, 250, 252, 0.94); }
+.diagram-ruler-corner { fill: #e2e8f0; }
+.diagram-ruler-tick { stroke: #64748b; stroke-width: 1; }
+.diagram-ruler-label { fill: #475569; font-size: 10px; font-family: ui-monospace, monospace; }
+
+.diagram-readout {
+  position: absolute;
+  top: 28px;
+  right: 10px;
+  padding: 3px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #334155;
+  font: 12px ui-monospace, monospace;
+}
+
+.diagram-canvas .react-flow__controls { left: 32px; bottom: 12px; }
+
+.diagram-canvas--connecting { cursor: crosshair; }
+.diagram-canvas--connecting .react-flow__node { cursor: crosshair; }
+
+.diagram-canvas .react-flow__node.selected {
+  outline: 2px solid #2563eb;
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.diagram-canvas .react-flow__edge.selected .react-flow__edge-path { stroke: #2563eb; stroke-width: 3; }
+
+.diagram-error { display: flex; align-items: center; gap: 8px; }
+.diagram-error span { flex: 1; }
+
+.diagram-banner-close {
+  min-height: 24px;
+  padding: 0 6px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+.diagram-notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: #ecfdf5;
+  border-bottom: 1px solid #a7f3d0;
+  color: #047857;
+  font-size: 13px;
+}
+
+@media (max-width: 768px) {
+  .diagram-readout { display: none; }
+  .diagram-toolbar { gap: 6px; }
+}
