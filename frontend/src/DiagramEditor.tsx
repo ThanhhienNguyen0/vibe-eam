@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import ReactFlow, {
   Background,
@@ -18,6 +19,7 @@ import ReactFlow, {
 } from "reactflow";
 import { CircleCheck, GitBranch, Grid3x3, Maximize, MousePointerClick, PanelLeftClose, PanelLeftOpen, Ruler, Search, SlidersHorizontal, X } from "lucide-react";
 import DiagramCoordinates from "./DiagramCoordinates";
+import ComponentTypeIcon from "./componentIcons";
 import { GRID_SIZE as GRID_BG, fallbackPosition, findFreePosition, snapPoint, type Rect } from "./diagramLayout";
 import { sidebarApi } from "./Sidebar/sidebarApi";
 import { runOptimisticMutation } from "./optimisticConflict";
@@ -178,6 +180,7 @@ const RESIZE_HANDLES: { dir: ResizeDirection; className: string }[] = [
 interface ShapedNodeData {
   name: string;
   typeName: string;
+  typeIcon?: string;
   color: string;
   shape: ComponentShape;
   isSource: boolean;
@@ -385,6 +388,11 @@ function NodeInteractionOverlay({
 
 function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
   const { name, typeName, color, shape, isSource } = data;
+  const typeBadge = (
+    <span className="node-type-badge" style={{ color }} title={typeName}>
+      <ComponentTypeIcon icon={data.typeIcon} typeName={typeName} shape={shape} size={14} />
+    </span>
+  );
   const showOverlay = !!(selected || data.showInteraction);
   const shellClass = (base: string) =>
     `${base}${isSource ? " is-source" : ""}${selected ? " is-node-selected" : ""}${showOverlay ? " is-interaction-visible" : ""}`;
@@ -412,6 +420,7 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
         {interactionOverlay}
         <div className="shape-pool-band" style={{ background: color }}>
           <span>{name}</span>
+          <span className="node-type-badge node-type-badge--inline"><ComponentTypeIcon icon={data.typeIcon} typeName={typeName} shape={shape} size={14} /></span>
         </div>
         <div className="shape-pool-body">
           <span>{typeName}</span>
@@ -458,6 +467,7 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
       <div className={shellClass("shaped-node shape-datastore")} style={{ borderColor: color }}>
         {interactionOverlay}
         <div className="shape-datastore-top" style={{ borderColor: color }} />
+        {typeBadge}
         <strong>{name}</strong>
         <span>{typeName}</span>
         {handles}
@@ -469,6 +479,7 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
     return (
       <div className={shellClass("shaped-node shape-process")} style={{ borderColor: color }}>
         {interactionOverlay}
+        {typeBadge}
         <strong>{name}</strong>
         <span>{typeName}</span>
         {handles}
@@ -482,6 +493,7 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
       style={{ borderColor: color, borderLeftColor: color }}
     >
       {interactionOverlay}
+      {typeBadge}
       <strong>{name}</strong>
       <span>{typeName}</span>
       {handles}
@@ -521,6 +533,7 @@ function buildNodes(
       data: {
         name: comp.name,
         typeName: type?.name ?? "?",
+        typeIcon: type?.icon,
         color: type?.color ?? "#cbd5e1",
         shape,
         isSource: connectingFrom === id,
@@ -612,11 +625,11 @@ function Palette({ components, componentTypes, onAdd }: PaletteProps) {
         {groups.grouped.map(({ type, items }) => (
           <div key={type.id} className="diagram-palette-group">
             <div className="diagram-palette-group-label">
-              <span className="sb-color-dot" style={{ background: type.color }} />
+              <ComponentTypeIcon icon={type.icon} typeName={type.name} shape={type.shape} color={type.color} size={14} />
               {type.name}
             </div>
             {items.map((comp) => (
-              <PaletteItem key={comp.id} comp={comp} color={type.color} shape={type.shape ?? "box"} onAdd={onAdd} />
+              <PaletteItem key={comp.id} comp={comp} color={type.color} shape={type.shape ?? "box"} icon={<ComponentTypeIcon icon={type.icon} typeName={type.name} shape={type.shape} color={type.color} size={14} />} onAdd={onAdd} />
             ))}
           </div>
         ))}
@@ -638,11 +651,13 @@ function PaletteItem({
   comp,
   color,
   shape,
+  icon,
   onAdd
 }: {
   comp: ComponentInstance;
   color: string;
   shape: ComponentShape;
+  icon?: ReactNode;
   onAdd: (id: string) => void;
 }) {
   return (
@@ -657,7 +672,7 @@ function PaletteItem({
       onClick={() => onAdd(comp.id)}
       title="Auf die Fläche ziehen oder klicken zum Hinzufügen"
     >
-      <span className={`shape-glyph shape-glyph--${shape}`} style={{ borderColor: color }} />
+      {icon ?? <span className={`shape-glyph shape-glyph--${shape}`} style={{ borderColor: color }} />}
       <strong>{comp.name}</strong>
     </button>
   );

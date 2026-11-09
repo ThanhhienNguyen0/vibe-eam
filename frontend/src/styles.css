@@ -3866,3 +3866,79 @@ tr.attention td {
   .diagram-readout { display: none; }
   .diagram-toolbar { gap: 6px; }
 }
+
+/* ── Resizable side panels ───────────────────────────────────────────────── */
+
+.panel-resizable {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  width: var(--panel-width);
+  min-height: 0;
+}
+
+.panel-resizable > .sidebar,
+.panel-resizable > .sidebar-detail-area {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+}
+
+.panel-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  z-index: 20;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.panel-resizable--left > .panel-resize-handle { right: -4px; }
+.panel-resizable--right > .panel-resize-handle { left: -4px; }
+
+.panel-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background 0.12s;
+}
+
+.panel-resize-handle:hover::after,
+.panel-resize-handle:focus-visible::after,
+.panel-resizable.is-dragging .panel-resize-handle::after { background: #2563eb; }
+
+.panel-resizable.is-dragging { user-select: none; }
+
+@media (max-width: 768px) {
+  .panel-resizable { width: 100%; }
+  .panel-resize-handle { display: none; }
+}
+
+/* ── Type icons ──────────────────────────────────────────────────────────── */
+
+.node-type-badge {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  display: inline-flex;
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.node-type-badge--inline {
+  position: static;
+  margin-left: auto;
+  color: #fff;
+}
+
+.shape-pool-band { display: flex; align-items: center; gap: 6px; }
+
+.sb-row-icon { display: inline-flex; align-items: center; flex-shrink: 0; }
+
+.diagram-palette-group-label { display: flex; align-items: center; gap: 6px; }
+.diagram-palette-item > svg { flex-shrink: 0; }
