@@ -22,6 +22,19 @@ import { COMPONENT_DRAG_MIME, COMPONENT_TYPE_DRAG_MIME, DEFAULT_TYPE_CATEGORY } 
 import type { ComponentType, SidebarState } from "./sidebarTypes";
 import { useAccess } from "../access";
 import ComponentTypeIcon from "../componentIcons";
+import { useConfirm } from "../ConfirmDialog";
+import {
+  findDuplicateComponents,
+  findDuplicatesByName,
+  findSameNameInOtherTypes,
+  deleteComponentConfirmation,
+  deleteConnectionConfirmation,
+  removeComponentFromState,
+  simpleDeleteConfirmation,
+  removeConnectionFromState,
+  uniqueComponentName,
+  uniqueName
+} from "./repositoryReferences";
 
 export type SidebarSelection =
   | { kind: "componentTypes" }
@@ -111,6 +124,10 @@ function Folder({ label, icon, open, onToggle, onAdd, addTitle, active, count, c
   );
 }
 
+function duplicateHint(duplicates: Array<{ name: string }>): string | null {
+  return duplicates.length > 0 ? `Mögliches Duplikat: „${duplicates[0].name}“ gibt es bereits.` : null;
+}
+
 interface RowProps {
   structural?: boolean;
   label: string;
@@ -120,6 +137,7 @@ interface RowProps {
   onClick: () => void;
   onDoubleClick?: () => void;
   onDelete?: () => void;
+  deleteTitle?: string;
   onOpen?: () => void;
   openTitle?: string;
   onContextMenu?: (e: React.MouseEvent) => void;
@@ -127,35 +145,21 @@ interface RowProps {
   onDragStart?: (e: React.DragEvent) => void;
   dragHint?: string;
   renaming?: boolean;
+  /** REQ-02: returns a warning for the typed name, e.g. a possible duplicate. */
+  renameWarning?: (name: string) => string | null;
   onRenameSubmit?: (name: string) => void;
   onRenameCancel?: () => void;
 }
 
 function Row({
   structural,
-  label, icon, color, active, onClick, onDoubleClick, onDelete, onOpen, openTitle,
-  onContextMenu, draggable, onDragStart, dragHint, renaming, onRenameSubmit, onRenameCancel
+  label, icon, color, active, onClick, onDoubleClick, onDelete, deleteTitle, onOpen, openTitle,
+  onContextMenu, draggable, onDragStart, dragHint, renaming, renameWarning, onRenameSubmit, onRenameCancel
 }: RowProps) {
   const { canWrite, canManageMetamodel } = useAccess();
   const canEdit = structural ? canManageMetamodel : canWrite;
   if (renaming) {
-    return (
-      <div className={`sb-row sb-row--renaming${active ? " sb-active" : ""}`}>
-        {icon && color ? <span className="sb-row-icon" style={{ color }}>{icon}</span> : color && <span className="sb-color-dot" style={{ background: color }} />}
-        {!color && icon && <span className="sb-row-icon">{icon}</span>}
-        <input
-          className="sb-rename-input"
-          autoFocus
-          defaultValue={label}
-          onFocus={(e) => e.target.select()}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") onRenameSubmit?.((e.target as HTMLInputElement).value);
-            if (e.key === "Escape") onRenameCancel?.();
-          }}
-          onBlur={(e) => onRenameSubmit?.(e.target.value)}
-        />
-      </div>
-    );
+    return <RenameRow label={label} icon={icon} color={color} active={active} warning={renameWarning} onSubmit={onRenameSubmit} onCancel={onRenameCancel} />;
   }
 
   return (
@@ -186,12 +190,49 @@ function Row({
       {canEdit && onDelete && (
         <button
           className="sb-delete-btn"
-          title="Löschen"
+          title={deleteTitle ?? "Löschen"}
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
         >
           <Trash2 size={12} />
         </button>
       )}
+    </div>
+  );
+}
+
+function RenameRow({
+  label, icon, color, active, warning, onSubmit, onCancel
+}: {
+  label: string;
+  icon?: React.ReactNode;
+  color?: string;
+  active: boolean;
+  warning?: (name: string) => string | null;
+  onSubmit?: (name: string) => void;
+  onCancel?: () => void;
+}) {
+  const [value, setValue] = useState(label);
+  const message = warning?.(value) ?? null;
+  return (
+    <div className={`sb-row sb-row--renaming${active ? " sb-active" : ""}`}>
+      {icon && color ? <span className="sb-row-icon" style={{ color }}>{icon}</span> : color && <span className="sb-color-dot" style={{ background: color }} />}
+      {!color && icon && <span className="sb-row-icon">{icon}</span>}
+      <div className="sb-rename-field">
+        <input
+          className={`sb-rename-input${message ? " sb-rename-input--warning" : ""}`}
+          autoFocus
+          value={value}
+          aria-invalid={message ? true : undefined}
+          onChange={(e) => setValue(e.target.value)}
+          onFocus={(e) => e.target.select()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onSubmit?.(value);
+            if (e.key === "Escape") onCancel?.();
+          }}
+          onBlur={() => onSubmit?.(value)}
+        />
+        {message && <span className="sb-rename-warning" role="status">{message}</span>}
+      </div>
     </div>
   );
 }
@@ -212,6 +253,7 @@ function EmptyHint({ text, actionLabel, onAction }: { text: string; actionLabel?
 export default function Sidebar({ onSelect, selection, sidebarState, onStateChange, onOpenDiagram, activeDiagramId, onOpenCatalog, activeCatalogId, defaultOpen = false }: Props) {
   const { canWrite, canManageMetamodel } = useAccess();
   const { componentTypes, connectionTypes, connectionRules, viewpoints, components, connections, diagrams, catalogs } = sidebarState;
+  const confirm = useConfirm();
 
   const [open, setOpen] = useState({
     rules: defaultOpen,
@@ -318,7 +360,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
 
   async function addComponentType() {
     const ct = await sidebarApi.createComponentType({
-      name: "Neuer Typ",
+      name: uniqueName(componentTypes, "Neuer Typ"),
       color: "#475569",
       icon: "box",
       description: "",
@@ -331,7 +373,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
 
   async function addConnectionType() {
     const ct = await sidebarApi.createConnectionType({
-      name: "Neuer Verbindungstyp",
+      name: uniqueName(connectionTypes, "Neuer Verbindungstyp"),
       color: "#475569",
       lineStyle: "solid",
       allowedSourceTypeIds: [],
@@ -379,7 +421,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
   async function addComponent() {
     if (componentTypes.length === 0) return;
     const comp = await sidebarApi.createComponent({
-      name: "Neue Komponente",
+      name: uniqueComponentName(components, "Neue Komponente", componentTypes[0].id),
       componentTypeId: componentTypes[0].id,
       properties: {},
       description: ""
@@ -488,21 +530,21 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
 
   async function deleteComponentType(id: string) {
     const name = componentTypes.find((c) => c.id === id)?.name ?? "Typ";
-    if (!window.confirm(`Komponenten-Typ „${name}“ wirklich löschen?`)) return;
+    if (!await confirm(simpleDeleteConfirmation("Komponenten-Typ", name))) return;
     await sidebarApi.deleteComponentType(id);
     onStateChange({ ...sidebarState, componentTypes: componentTypes.filter((c) => c.id !== id) });
   }
 
   async function deleteConnectionType(id: string) {
     const name = connectionTypes.find((c) => c.id === id)?.name ?? "Typ";
-    if (!window.confirm(`Verbindungs-Typ „${name}“ wirklich löschen?`)) return;
+    if (!await confirm(simpleDeleteConfirmation("Verbindungs-Typ", name))) return;
     await sidebarApi.deleteConnectionType(id);
     onStateChange({ ...sidebarState, connectionTypes: connectionTypes.filter((c) => c.id !== id) });
   }
 
   async function deleteViewpoint(id: string) {
     const name = viewpoints.find((v) => v.id === id)?.name ?? "Viewpoint";
-    if (!window.confirm(`Viewpoint "${name}" wirklich loeschen?`)) return;
+    if (!await confirm(simpleDeleteConfirmation("Viewpoint", name, "Diagramme mit diesem Viewpoint behalten ihren Inhalt, verlieren aber die Viewpoint-Zuordnung."))) return;
     await sidebarApi.deleteViewpoint(id);
     onStateChange({
       ...sidebarState,
@@ -514,47 +556,41 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
   async function deleteConnectionRule(id: string) {
     const rule = connectionRules.find((item) => item.id === id);
     const name = rule ? connectionTypes.find((type) => type.id === rule.connectionTypeId)?.name ?? "Connection Rule" : "Connection Rule";
-    if (!window.confirm(`Connection Rule "${name}" wirklich loeschen?`)) return;
+    if (!await confirm(simpleDeleteConfirmation("Connection Rule", name))) return;
     await sidebarApi.deleteConnectionRule(id);
     onStateChange({ ...sidebarState, connectionRules: connectionRules.filter((ruleItem) => ruleItem.id !== id) });
   }
 
   async function deleteComponent(id: string) {
     const component = components.find((c) => c.id === id);
-    const name = component?.name ?? "Komponente";
-    if (!window.confirm(`Komponente „${name}“ löschen? Zugehörige Verbindungen werden mit entfernt.`)) return;
     if (!component) return;
+    if (!await confirm(deleteComponentConfirmation(component, diagrams, connections))) return;
     const result = await runOptimisticMutation(
       component.version ?? 1,
       (version) => sidebarApi.deleteComponent(id, version),
       async () => onStateChange(await sidebarApi.getAll())
     );
     if (!result.applied) return;
-    onStateChange({
-      ...sidebarState,
-      components: components.filter((c) => c.id !== id),
-      connections: connections.filter((c) => c.sourceComponentId !== id && c.targetComponentId !== id)
-    });
+    onStateChange(removeComponentFromState(sidebarState, id));
   }
 
   async function deleteConnection(id: string) {
-    if (!window.confirm(`Verbindung „${connectionLabel(id)}“ wirklich löschen?`)) return;
     const connection = connections.find((item) => item.id === id);
     if (!connection) return;
+    if (!await confirm(deleteConnectionConfirmation(connectionLabel(id), id, diagrams))) return;
     const result = await runOptimisticMutation(
       connection.version ?? 1,
       (version) => sidebarApi.deleteConnection(id, version),
       async () => onStateChange(await sidebarApi.getAll())
     );
     if (!result.applied) return;
-    onStateChange({ ...sidebarState, connections: connections.filter((c) => c.id !== id) });
+    onStateChange(removeConnectionFromState(sidebarState, id));
   }
 
   async function deleteDiagram(id: string) {
     const diagram = diagrams.find((d) => d.id === id);
-    const name = diagram?.name ?? "Diagramm";
-    if (!window.confirm(`Diagramm „${name}“ wirklich löschen?`)) return;
     if (!diagram) return;
+    if (!await confirm(simpleDeleteConfirmation("Diagramm", diagram.name, "Nur die Ansicht wird gelöscht. Die enthaltenen Komponenten und Verbindungen bleiben im Repository und in anderen Diagrammen erhalten."))) return;
     const result = await runOptimisticMutation(
       diagram.version ?? 1,
       (version) => sidebarApi.deleteDiagram(id, version),
@@ -566,7 +602,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
 
   async function deleteCatalog(id: string) {
     const name = catalogs.find((c) => c.id === id)?.name ?? "Katalog";
-    if (!window.confirm(`Katalog „${name}“ wirklich löschen?`)) return;
+    if (!await confirm(simpleDeleteConfirmation("Katalog", name))) return;
     await sidebarApi.deleteCatalog(id);
     onStateChange({ ...sidebarState, catalogs: catalogs.filter((c) => c.id !== id) });
   }
@@ -703,6 +739,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               }}
               dragHint="In ein offenes Diagramm ziehen, um eine neue Komponente dieses Typs zu erstellen"
               renaming={isRenaming("componentType", ct.id)}
+              renameWarning={(name) => duplicateHint(findDuplicatesByName(componentTypes, name, ct.id))}
               onRenameSubmit={(name) => renameItem("componentType", ct.id, name)}
               onRenameCancel={() => setRenaming(null)}
             />
@@ -776,6 +813,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               onDelete={() => deleteConnectionType(ct.id)}
               onContextMenu={(e) => openContextMenu(e, "connectionType", ct.id, ct.name)}
               renaming={isRenaming("connectionType", ct.id)}
+              renameWarning={(name) => duplicateHint(findDuplicatesByName(connectionTypes, name, ct.id))}
               onRenameSubmit={(name) => renameItem("connectionType", ct.id, name)}
               onRenameCancel={() => setRenaming(null)}
             />
@@ -924,6 +962,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               active={isActive({ kind: "component", id: comp.id })}
               onClick={() => onSelect({ kind: "component", id: comp.id })}
               onDelete={() => deleteComponent(comp.id)}
+              deleteTitle="Aus Repository löschen"
               onContextMenu={(e) => openContextMenu(e, "component", comp.id, comp.name)}
               draggable
               onDragStart={(e) => {
@@ -932,6 +971,13 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               }}
               dragHint="In ein offenes Diagramm ziehen, um sie hinzuzufügen"
               renaming={isRenaming("component", comp.id)}
+              renameWarning={(name) => {
+                const sameType = duplicateHint(findDuplicateComponents(components, { name, componentTypeId: comp.componentTypeId }, comp.id));
+                if (sameType) return sameType;
+                const other = findSameNameInOtherTypes(components, { name, componentTypeId: comp.componentTypeId }, comp.id)[0];
+                const otherType = other && componentTypes.find((type) => type.id === other.componentTypeId)?.name;
+                return other ? `„${other.name}“ gibt es bereits als ${otherType ?? "anderen Typ"}.` : null;
+              }}
               onRenameSubmit={(name) => renameItem("component", comp.id, name)}
               onRenameCancel={() => setRenaming(null)}
             />
@@ -998,6 +1044,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               active={isActive({ kind: "connection", id: conn.id })}
               onClick={() => onSelect({ kind: "connection", id: conn.id })}
               onDelete={() => deleteConnection(conn.id)}
+              deleteTitle="Aus Repository löschen"
               onContextMenu={(e) => openContextMenu(e, "connection", conn.id, label)}
               renaming={isRenaming("connection", conn.id)}
               onRenameSubmit={(name) => renameItem("connection", conn.id, name)}
@@ -1177,7 +1224,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
           </button>
           <div className="diagram-context-separator" />
           <button className="diagram-context-item danger" onClick={() => contextDelete(contextMenu)}>
-            <Trash2 size={14} /> Löschen
+            <Trash2 size={14} /> {contextMenu.kind === "component" || contextMenu.kind === "connection" ? "Aus Repository löschen" : "Löschen"}
           </button>
         </div>
       )}

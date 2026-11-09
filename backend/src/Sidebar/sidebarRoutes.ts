@@ -1,8 +1,16 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
-import type { Catalog, ComponentShape, SidebarState } from "./sidebarTypes.js";
+import type { Catalog, ComponentShape, ComponentType, ConnectionType, SidebarState } from "./sidebarTypes.js";
 import { catalogColumnKeys } from "../catalog/catalogModel.js";
 import { validateConnectionInstance, validateDiagram } from "./metamodelRules.js";
 import { OptimisticLockError, ResourceNotFoundError } from "../persistence/databaseSidebarRepository.js";
+import {
+  duplicateAuditEvent,
+  duplicateComponentWarnings,
+  duplicateWarnings,
+  findDuplicateComponents,
+  findDuplicatesByName,
+  type DuplicateWarningCode
+} from "./componentDuplicates.js";
 import {
   addComponent,
   addComponentToDiagram,
@@ -47,6 +55,32 @@ import {
 const router = Router();
 
 const MAX_EXTERNAL_ID_LENGTH = 200;
+
+/** REQ-02 for metamodel types: warn and audit (REQ-23 event in the same write), but never block. */
+function checkTypeNameDuplicates(
+  code: DuplicateWarningCode,
+  entityType: "component-type" | "connection-type",
+  existing: Array<{ id: string; name: string }>,
+  candidateName: string,
+  excludeId?: string
+) {
+  const duplicates = findDuplicatesByName(existing, candidateName, excludeId);
+  return {
+    warnings: duplicateWarnings(code, duplicates),
+    event: (verb: "created" | "updated", item: { id: string; name: string }, acknowledged: boolean) =>
+      duplicateAuditEvent(entityType, verb, item, duplicates, acknowledged)
+  };
+}
+
+/** Name and type of a component after applying a PATCH body; null when neither changes. */
+function changedComponentIdentity(
+  existing: { name: string; componentTypeId: string },
+  patch: Record<string, unknown>
+): { name: string; componentTypeId: string } | null {
+  const name = typeof patch.name === "string" ? patch.name : existing.name;
+  const componentTypeId = typeof patch.componentTypeId === "string" ? patch.componentTypeId : existing.componentTypeId;
+  return name !== existing.name || componentTypeId !== existing.componentTypeId ? { name, componentTypeId } : null;
+}
 
 class PreconditionError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -196,7 +230,8 @@ router.get("/component-types", async (_req, res, next) => {
 
 router.post("/component-types", async (req, res, next) => {
   try {
-    const { name, color, icon, description, customPropertyKeys, shape, category, layer, isRequiredInViewpoint, allowedInViewpointIds } = req.body as {
+    const { name, color, icon, description, customPropertyKeys, shape, category, layer, isRequiredInViewpoint, allowedInViewpointIds, acknowledgeDuplicate } = req.body as {
+      acknowledgeDuplicate?: boolean;
       name?: string;
       color?: string;
       icon?: string;
@@ -209,8 +244,10 @@ router.post("/component-types", async (req, res, next) => {
       allowedInViewpointIds?: string[];
     };
     if (!name?.trim()) return res.status(400).json({ error: "name is required." });
+    const check = checkTypeNameDuplicates("DUPLICATE_COMPONENT_TYPE", "component-type", await getComponentTypes(), name);
+    const id = crypto.randomUUID();
     const ct = await addComponentType({
-      id: crypto.randomUUID(),
+      id,
       name: name.trim(),
       color: color ?? "#475569",
       icon: icon ?? "box",
@@ -221,8 +258,8 @@ router.post("/component-types", async (req, res, next) => {
       layer: layer?.trim() || category?.trim() || "Business",
       isRequiredInViewpoint: Boolean(isRequiredInViewpoint),
       allowedInViewpointIds: allowedInViewpointIds ?? []
-    });
-    res.status(201).json(ct);
+    }, check.event("created", { id, name: name.trim() }, acknowledgeDuplicate === true));
+    res.status(201).json({ ...ct, warnings: check.warnings });
   } catch (err) {
     next(err);
   }
@@ -230,9 +267,16 @@ router.post("/component-types", async (req, res, next) => {
 
 router.patch("/component-types/:id", async (req, res, next) => {
   try {
-    const updated = await updateComponentType(req.params.id, req.body);
+    const { acknowledgeDuplicate, ...patch } = req.body as Partial<ComponentType> & { acknowledgeDuplicate?: boolean };
+    const types = await getComponentTypes();
+    const existing = types.find((type) => type.id === req.params.id);
+    if (!existing) return res.status(404).json({ error: "Component type not found." });
+    const renamed = typeof patch.name === "string" && patch.name !== existing.name;
+    const check = checkTypeNameDuplicates("DUPLICATE_COMPONENT_TYPE", "component-type", renamed ? types : [], patch.name ?? "", existing.id);
+    const updated = await updateComponentType(req.params.id, patch,
+      check.event("updated", { id: existing.id, name: patch.name ?? existing.name }, acknowledgeDuplicate === true));
     if (!updated) return res.status(404).json({ error: "Component type not found." });
-    res.json(updated);
+    res.json({ ...updated, warnings: check.warnings });
   } catch (err) {
     next(err);
   }
@@ -270,8 +314,10 @@ router.post("/connection-types", async (req, res, next) => {
       category,
       requiredForSourceTypes,
       requiredForTargetTypes,
-      directionDescription
+      directionDescription,
+      acknowledgeDuplicate
     } = req.body as {
+      acknowledgeDuplicate?: boolean;
       name?: string;
       color?: string;
       lineStyle?: string;
@@ -284,8 +330,10 @@ router.post("/connection-types", async (req, res, next) => {
       directionDescription?: string;
     };
     if (!name?.trim()) return res.status(400).json({ error: "name is required." });
+    const check = checkTypeNameDuplicates("DUPLICATE_CONNECTION_TYPE", "connection-type", await getConnectionTypes(), name);
+    const id = crypto.randomUUID();
     const ct = await addConnectionType({
-      id: crypto.randomUUID(),
+      id,
       name: name.trim(),
       color: color ?? "#475569",
       lineStyle: (lineStyle as "solid" | "dashed" | "dotted") ?? "solid",
@@ -296,8 +344,8 @@ router.post("/connection-types", async (req, res, next) => {
       requiredForSourceTypes: requiredForSourceTypes ?? [],
       requiredForTargetTypes: requiredForTargetTypes ?? [],
       directionDescription: directionDescription ?? ""
-    });
-    res.status(201).json(ct);
+    }, check.event("created", { id, name: name.trim() }, acknowledgeDuplicate === true));
+    res.status(201).json({ ...ct, warnings: check.warnings });
   } catch (err) {
     next(err);
   }
@@ -305,9 +353,16 @@ router.post("/connection-types", async (req, res, next) => {
 
 router.patch("/connection-types/:id", async (req, res, next) => {
   try {
-    const updated = await updateConnectionType(req.params.id, req.body);
+    const { acknowledgeDuplicate, ...patch } = req.body as Partial<ConnectionType> & { acknowledgeDuplicate?: boolean };
+    const types = await getConnectionTypes();
+    const existing = types.find((type) => type.id === req.params.id);
+    if (!existing) return res.status(404).json({ error: "Connection type not found." });
+    const renamed = typeof patch.name === "string" && patch.name !== existing.name;
+    const check = checkTypeNameDuplicates("DUPLICATE_CONNECTION_TYPE", "connection-type", renamed ? types : [], patch.name ?? "", existing.id);
+    const updated = await updateConnectionType(req.params.id, patch,
+      check.event("updated", { id: existing.id, name: patch.name ?? existing.name }, acknowledgeDuplicate === true));
     if (!updated) return res.status(404).json({ error: "Connection type not found." });
-    res.json(updated);
+    res.json({ ...updated, warnings: check.warnings });
   } catch (err) {
     next(err);
   }
@@ -471,30 +526,34 @@ router.get("/components", async (_req, res, next) => {
 
 router.post("/components", async (req, res, next) => {
   try {
-    const { name, componentTypeId, properties, description, externalId } = req.body as {
+    const { name, componentTypeId, properties, description, externalId, acknowledgeDuplicate } = req.body as {
       name?: string;
       componentTypeId?: string;
       properties?: Record<string, string>;
       description?: string;
       externalId?: unknown;
+      acknowledgeDuplicate?: boolean;
     };
     if (!name?.trim()) return res.status(400).json({ error: "name is required." });
     if (!componentTypeId) return res.status(400).json({ error: "componentTypeId is required." });
     const external = parseExternalId(externalId);
     if (external.error) return res.status(400).json({ error: external.error });
-    if (external.value && (await getComponents()).some((item) => item.externalId === external.value)) {
+    const components = await getComponents();
+    if (external.value && components.some((item) => item.externalId === external.value)) {
       return res.status(409).json({ error: "Diese Externe ID wird bereits von einer anderen Komponente verwendet." });
     }
+    const duplicates = findDuplicateComponents(components, { name, componentTypeId });
+    const id = crypto.randomUUID();
     const comp = await addComponent({
-      id: crypto.randomUUID(),
+      id,
       version: 1,
       name: name.trim(),
       componentTypeId,
       properties: properties ?? {},
       description: description ?? "",
       ...(external.value ? { externalId: external.value } : {})
-    });
-    res.status(201).json(comp);
+    }, duplicateAuditEvent("component", "created", { id, name: name.trim() }, duplicates, acknowledgeDuplicate === true));
+    res.status(201).json({ ...comp, warnings: duplicateComponentWarnings(duplicates) });
   } catch (err) {
     next(err);
   }
@@ -503,18 +562,25 @@ router.post("/components", async (req, res, next) => {
 router.patch("/components/:id", async (req, res, next) => {
   try {
     const version = expectedVersion(req.header("if-match"));
-    const patch = { ...req.body } as Record<string, unknown>;
+    const { acknowledgeDuplicate, ...patch } = { ...req.body } as Record<string, unknown>;
+    const components = await getComponents();
     if ("externalId" in patch) {
       const external = parseExternalId(patch.externalId);
       if (external.error) return res.status(400).json({ error: external.error });
-      if (external.value && (await getComponents()).some((item) => item.externalId === external.value && item.id !== req.params.id)) {
+      if (external.value && components.some((item) => item.externalId === external.value && item.id !== req.params.id)) {
         return res.status(409).json({ error: "Diese Externe ID wird bereits von einer anderen Komponente verwendet." });
       }
       patch.externalId = external.value;
     }
-    const updated = await updateComponent(req.params.id, patch, version);
+    const existing = components.find((item) => item.id === req.params.id);
+    const identity = existing ? changedComponentIdentity(existing, patch) : null;
+    const duplicates = existing && identity ? findDuplicateComponents(components, identity, existing.id) : [];
+    const event = existing && identity
+      ? duplicateAuditEvent("component", "updated", { id: existing.id, name: identity.name }, duplicates, acknowledgeDuplicate === true)
+      : undefined;
+    const updated = await updateComponent(req.params.id, patch, version, event);
     if (!updated) return res.status(404).json({ error: "Component not found." });
-    res.json(updated);
+    res.json({ ...updated, warnings: duplicateComponentWarnings(duplicates) });
   } catch (err) {
     next(err);
   }
@@ -651,13 +717,14 @@ router.post("/diagrams", async (req, res, next) => {
 router.post("/diagrams/:id/components", async (req, res, next) => {
   try {
     const version = expectedVersion(req.header("if-match"));
-    const { name, componentTypeId, properties, description, externalId, position } = req.body as {
+    const { name, componentTypeId, properties, description, externalId, position, acknowledgeDuplicate } = req.body as {
       name?: string;
       componentTypeId?: string;
       properties?: Record<string, string>;
       description?: string;
       externalId?: unknown;
       position?: { x?: unknown; y?: unknown };
+      acknowledgeDuplicate?: boolean;
     };
     if (!name?.trim()) return res.status(400).json({ error: "name is required." });
     if (!componentTypeId) return res.status(400).json({ error: "componentTypeId is required." });
@@ -676,16 +743,19 @@ router.post("/diagrams/:id/components", async (req, res, next) => {
     if (external.value && state.components.some((item) => item.externalId === external.value)) {
       return res.status(409).json({ error: "Diese Externe ID wird bereits von einer anderen Komponente verwendet." });
     }
+    const duplicates = findDuplicateComponents(state.components, { name, componentTypeId });
+    const id = crypto.randomUUID();
     const result = await addComponentToDiagram({
-      id: crypto.randomUUID(),
+      id,
       version: 1,
       name: name.trim(),
       componentTypeId,
       properties: properties ?? {},
       description: description ?? "",
       ...(external.value ? { externalId: external.value } : {})
-    }, diagram.id, { x: position.x, y: position.y }, version);
-    res.status(201).json(result);
+    }, diagram.id, { x: position.x, y: position.y }, version,
+    duplicateAuditEvent("component", "created", { id, name: name.trim() }, duplicates, acknowledgeDuplicate === true));
+    res.status(201).json({ ...result, warnings: duplicateComponentWarnings(duplicates) });
   } catch (err) {
     next(err);
   }

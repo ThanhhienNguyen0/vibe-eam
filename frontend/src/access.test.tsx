@@ -28,7 +28,7 @@ describe("role-aware rendering", () => {
     spy.mockRestore();
     expect(html.includes("Nutzerverwaltung")).toBe(role === "Admin");
     expect(html.includes("Neues Diagramm")).toBe(role === "Admin" || role === "Architect");
-    expect(html.includes('title="Löschen"')).toBe(role === "Admin" || role === "Architect");
+    expect(/title="(Aus Repository )?[Ll]öschen"/.test(html)).toBe(role === "Admin" || role === "Architect");
     expect(html.includes('title="Neuer Komponenten-Typ"')).toBe(role === "Admin");
     if (role === "Admin") {
       expect(html).toContain("Nur Admins können Nutzer anlegen und Rollen");
