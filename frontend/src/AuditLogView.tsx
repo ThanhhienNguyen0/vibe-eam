@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RefreshCw, Search } from "lucide-react";
 import { transferApi, type AuditEntry, type AuditFilters } from "./transferApi";
 
@@ -39,35 +39,47 @@ export function ElementAuditHistory({ entityId, entityType }: { entityId: string
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const requestGeneration = useRef(0);
   useEffect(() => {
-    let active = true;
+    const generation = ++requestGeneration.current;
     setEntries(null);
     setNextCursor(null);
     setLoading(true);
     setError("");
     transferApi.auditLog({ entityId, entityType, limit: 20 })
       .then((page) => {
-        if (!active) return;
+        if (requestGeneration.current !== generation) return;
         setEntries(page.items);
         setNextCursor(page.nextCursor);
       })
-      .catch((cause: unknown) => { if (active) setError(cause instanceof Error ? cause.message : "Historie konnte nicht geladen werden."); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+      .catch((cause: unknown) => {
+        if (requestGeneration.current === generation) {
+          setError(cause instanceof Error ? cause.message : "Historie konnte nicht geladen werden.");
+        }
+      })
+      .finally(() => {
+        if (requestGeneration.current === generation) setLoading(false);
+      });
+    return () => {
+      if (requestGeneration.current === generation) requestGeneration.current += 1;
+    };
   }, [entityId, entityType]);
 
   async function loadMore() {
     if (!nextCursor || loading) return;
+    const generation = requestGeneration.current;
     setLoading(true);
     setError("");
     try {
       const page = await transferApi.auditLog({ entityId, entityType, limit: 20, cursor: nextCursor });
+      if (requestGeneration.current !== generation) return;
       setEntries((current) => [...(current ?? []), ...page.items]);
       setNextCursor(page.nextCursor);
     } catch (cause) {
+      if (requestGeneration.current !== generation) return;
       setError(cause instanceof Error ? cause.message : "Weitere Historie konnte nicht geladen werden.");
     } finally {
-      setLoading(false);
+      if (requestGeneration.current === generation) setLoading(false);
     }
   }
   return (

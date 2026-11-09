@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AuditEntry } from "./transferApi";
+import type { AuditEntry, AuditPage } from "./transferApi";
 
 const mocked = vi.hoisted(() => ({ auditLog: vi.fn() }));
 vi.mock("./transferApi", async (original) => {
@@ -27,6 +27,12 @@ const entry: AuditEntry = {
   details: {},
   batchId: null
 };
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((complete) => { resolve = complete; });
+  return { promise, resolve };
+}
 
 beforeEach(() => mocked.auditLog.mockReset());
 
@@ -66,5 +72,69 @@ describe("REQ-23 audit UI", () => {
     const rendered = JSON.stringify(renderer!.toJSON());
     expect(rendered).toContain("Komponentenänderung 1");
     expect(rendered).toContain("Komponentenänderung 21");
+  });
+
+  it("ignores a late page from the previously selected entity", async () => {
+    const lateA = deferred<AuditPage>();
+    const pendingB = deferred<AuditPage>();
+    const aFirst = { ...entry, id: "a-1", entityId: "entity-a", summary: "A Seite 1" };
+    const aSecond = { ...entry, id: "a-2", entityId: "entity-a", summary: "A Seite 2 verspätet" };
+    const bFirst = { ...entry, id: "b-1", entityId: "entity-b", summary: "B Seite 1" };
+    const bSecond = { ...entry, id: "b-2", entityId: "entity-b", summary: "B Seite 2" };
+    mocked.auditLog
+      .mockResolvedValueOnce({ items: [aFirst], nextCursor: "a-next" })
+      .mockReturnValueOnce(lateA.promise)
+      .mockResolvedValueOnce({ items: [bFirst], nextCursor: "b-next" })
+      .mockReturnValueOnce(pendingB.promise);
+
+    let renderer: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(<ElementAuditHistory entityId="entity-a" entityType="component" />);
+      await Promise.resolve();
+    });
+    const aButton = renderer!.root.findByType("button");
+    act(() => { void aButton.props.onClick(); });
+    expect(mocked.auditLog).toHaveBeenNthCalledWith(2, {
+      entityId: "entity-a",
+      entityType: "component",
+      limit: 20,
+      cursor: "a-next"
+    });
+
+    await act(async () => {
+      renderer!.update(<ElementAuditHistory entityId="entity-b" entityType="component" />);
+      await Promise.resolve();
+    });
+    expect(JSON.stringify(renderer!.toJSON())).toContain("B Seite 1");
+    const bButton = renderer!.root.findByType("button");
+    act(() => { void bButton.props.onClick(); });
+    expect(mocked.auditLog).toHaveBeenNthCalledWith(4, {
+      entityId: "entity-b",
+      entityType: "component",
+      limit: 20,
+      cursor: "b-next"
+    });
+    expect(renderer!.root.findByType("button").props.disabled).toBe(true);
+
+    await act(async () => {
+      lateA.resolve({ items: [aSecond], nextCursor: "a-after" });
+      await lateA.promise;
+      await Promise.resolve();
+    });
+    const afterLateA = JSON.stringify(renderer!.toJSON());
+    expect(afterLateA).toContain("B Seite 1");
+    expect(afterLateA).not.toContain("A Seite 1");
+    expect(afterLateA).not.toContain("A Seite 2 verspätet");
+    expect(renderer!.root.findByType("button").props.disabled).toBe(true);
+
+    await act(async () => {
+      pendingB.resolve({ items: [bSecond], nextCursor: null });
+      await pendingB.promise;
+      await Promise.resolve();
+    });
+    const finalRendered = JSON.stringify(renderer!.toJSON());
+    expect(finalRendered).toContain("B Seite 1");
+    expect(finalRendered).toContain("B Seite 2");
+    expect(finalRendered).not.toContain("A Seite 2 verspätet");
   });
 });
