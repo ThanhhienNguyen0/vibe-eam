@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import ReactFlow, {
   Background,
+  BackgroundVariant,
   Controls,
   Handle,
   MarkerType,
@@ -767,6 +768,7 @@ function DiagramEditorInner({
   const diagramRef = useRef(diagram);
   diagramRef.current = diagram;
   const hoverLeaveTimer = useRef<number>();
+  const snapRef = useRef(true);
   const activeNodeIdRef = useRef<string | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
@@ -783,7 +785,10 @@ function DiagramEditorInner({
       if (!canWrite) return;
       setActiveNodeId(null);
       const current = diagramRef.current;
-      const updatedPositions = { ...current.positions, [nodeId]: pos };
+      const snapped = snapRef.current
+        ? { ...pos, ...snapPoint(pos, true) }
+        : pos;
+      const updatedPositions = { ...current.positions, [nodeId]: snapped };
       const updated = await updateDiagramWithConflict(current, { positions: updatedPositions });
       if (!updated) return;
       onDiagramChange(updated);
@@ -809,6 +814,7 @@ function DiagramEditorInner({
   const [notice, setNotice] = useState("");
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [showRulers, setShowRulers] = useState(true);
+  snapRef.current = snapEnabled;
   const canvasRef = useRef<HTMLDivElement>(null);
   const [validationResult, setValidationResult] = useState<DiagramValidationResult | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -1312,7 +1318,7 @@ function DiagramEditorInner({
           className={`diagram-palette-toggle${snapEnabled ? " diagram-toggle--on" : ""}`}
           onClick={() => setSnapEnabled((v) => !v)}
           aria-pressed={snapEnabled}
-          title="Neue Elemente am Raster ausrichten"
+          title="Raster: sichtbare Rasterlinien, Elemente rasten beim Platzieren, Verschieben und Skalieren ein"
         >
           <Grid3x3 size={16} /> Raster
         </button>
@@ -1421,7 +1427,7 @@ function DiagramEditorInner({
           >
             <MiniMap nodeStrokeWidth={3} pannable zoomable />
             <Controls showInteractive={false} fitViewOptions={{ padding: 0.2, maxZoom: 1.2 }} />
-            <Background gap={GRID_BG} />
+            {snapEnabled ? <Background variant={BackgroundVariant.Lines} gap={GRID_BG} color="#dbe3ee" /> : <Background variant={BackgroundVariant.Dots} gap={GRID_BG * 2} size={1} />}
             <DiagramCoordinates showRulers={showRulers} />
           </ReactFlow>
 
