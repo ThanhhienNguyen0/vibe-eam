@@ -21,6 +21,7 @@ import { runOptimisticMutation } from "../optimisticConflict";
 import { COMPONENT_DRAG_MIME, COMPONENT_TYPE_DRAG_MIME, DEFAULT_TYPE_CATEGORY } from "./sidebarTypes";
 import type { ComponentType, SidebarState } from "./sidebarTypes";
 import { useAccess } from "../access";
+import ComponentTypeIcon from "../componentIcons";
 
 export type SidebarSelection =
   | { kind: "componentTypes" }
@@ -140,7 +141,7 @@ function Row({
   if (renaming) {
     return (
       <div className={`sb-row sb-row--renaming${active ? " sb-active" : ""}`}>
-        {color && <span className="sb-color-dot" style={{ background: color }} />}
+        {icon && color ? <span className="sb-row-icon" style={{ color }}>{icon}</span> : color && <span className="sb-color-dot" style={{ background: color }} />}
         {!color && icon && <span className="sb-row-icon">{icon}</span>}
         <input
           className="sb-rename-input"
@@ -170,7 +171,7 @@ function Row({
       onDragStart={canWrite ? onDragStart : undefined}
       title={dragHint}
     >
-      {color && <span className="sb-color-dot" style={{ background: color }} />}
+      {icon && color ? <span className="sb-row-icon" style={{ color }}>{icon}</span> : color && <span className="sb-color-dot" style={{ background: color }} />}
       {!color && icon && <span className="sb-row-icon">{icon}</span>}
       <span className="sb-row-label">{label}</span>
       {onOpen && (
@@ -689,6 +690,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               key={ct.id}
               label={ct.name}
               color={ct.color}
+              icon={<ComponentTypeIcon icon={ct.icon} typeName={ct.name} shape={ct.shape} size={14} />}
               active={isActive({ kind: "componentType", id: ct.id })}
               onClick={() => onSelect({ kind: "componentType", id: ct.id })}
               structural
@@ -911,10 +913,14 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
             .map((ct) => ({ type: ct, items: visibleComponents.filter((c) => c.componentTypeId === ct.id) }));
           const ungrouped = visibleComponents.filter((c) => !componentTypes.find((t) => t.id === c.componentTypeId));
 
-          const renderComponentRow = (comp: (typeof components)[number]) => (
+          const renderComponentRow = (comp: (typeof components)[number]) => {
+            const compType = componentTypes.find((t) => t.id === comp.componentTypeId);
+            return (
             <Row
               key={comp.id}
               label={comp.name}
+              color={compType?.color}
+              icon={compType ? <ComponentTypeIcon icon={compType.icon} typeName={compType.name} shape={compType.shape} size={14} /> : undefined}
               active={isActive({ kind: "component", id: comp.id })}
               onClick={() => onSelect({ kind: "component", id: comp.id })}
               onDelete={() => deleteComponent(comp.id)}
@@ -929,7 +935,8 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               onRenameSubmit={(name) => renameItem("component", comp.id, name)}
               onRenameCancel={() => setRenaming(null)}
             />
-          );
+            );
+          };
 
           return (
             <>

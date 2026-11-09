@@ -4,6 +4,7 @@ import { sidebarApi } from "./sidebarApi";
 import type { SidebarSelection } from "./Sidebar";
 import { COMPONENT_SHAPES } from "./sidebarTypes";
 import { useAccess } from "../access";
+import ComponentTypeIcon, { ICON_OPTIONS } from "../componentIcons";
 import { runOptimisticMutation, type ConflictResolution } from "../optimisticConflict";
 import CatalogEditor from "./CatalogEditor";
 import { ElementAuditHistory } from "../AuditLogView";
@@ -120,7 +121,7 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
         <div className="sb-type-grid">
           {componentTypes.map((ct) => (
             <div key={ct.id} className="sb-type-card" style={{ borderLeftColor: ct.color }}>
-              <strong>{ct.name}</strong>
+              <strong className="sb-type-card-title"><ComponentTypeIcon icon={ct.icon} typeName={ct.name} shape={ct.shape} color={ct.color} size={15} /> {ct.name}</strong>
               <span className="muted">{ct.description || "Keine Beschreibung"}</span>
               <span className="sb-badge" style={{ background: ct.color }}>{ct.customPropertyKeys.length} Eigenschaften</span>
             </div>
@@ -622,6 +623,33 @@ function ComponentTypeEditor({
             ))}
           </select>
         </label>
+      </div>
+      <div className="sb-icon-picker" role="radiogroup" aria-label="Icon des Typs">
+        <span className="muted">Icon (Baum, Palette und Diagramm)</span>
+        <div className="sb-icon-grid">
+          {ICON_OPTIONS.map((option) => {
+            const selected = (draft.icon || "box") === option.key;
+            return (
+              <button
+                key={option.key}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                className={`sb-icon-option${selected ? " is-selected" : ""}`}
+                title={option.label}
+                onClick={() => set("icon", option.key)}
+              >
+                <ComponentTypeIcon
+                  icon={option.key}
+                  typeName={option.key === "box" ? draft.name : option.label}
+                  shape={draft.shape}
+                  color={selected ? draft.color : undefined}
+                  size={18}
+                />
+              </button>
+            );
+          })}
+        </div>
       </div>
       <div className="sb-shape-preview-row">
         <span className={`shape-glyph shape-glyph--lg shape-glyph--${draft.shape ?? "box"}`} style={{ borderColor: draft.color }} />

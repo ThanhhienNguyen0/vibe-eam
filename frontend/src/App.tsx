@@ -1,3 +1,4 @@
+import ResizablePanel from "./ResizablePanel";
 import { useEffect, useState } from "react";
 import { GitBranch, LayoutDashboard, LogOut, Plus, ScrollText, Table2 } from "lucide-react";
 import Sidebar, { type SidebarSelection } from "./Sidebar/Sidebar";
@@ -183,6 +184,7 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
       </header>
 
       <div className="app-body">
+        <ResizablePanel side="left" storageKey="eam.panel.sidebar" defaultWidth={240} minWidth={180} maxWidth={520} label="Navigationsbaum">
         <Sidebar
           selection={sidebarSelection}
           onSelect={(next) => setSidebarSelection((prev) => {
@@ -198,6 +200,7 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
           onOpenCatalog={openCatalog}
           activeCatalogId={activeCatalog?.id ?? null}
         />
+        </ResizablePanel>
 
         <main className="workspace workspace--full">
           {error && <div className="error-banner">{error}</div>}
@@ -261,6 +264,7 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
         </main>
 
         {sidebarSelection && (
+          <ResizablePanel side="right" storageKey="eam.panel.details" defaultWidth={380} minWidth={300} maxWidth={760} label="Eigenschaften">
           <div className="sidebar-detail-area sidebar-detail-area--right">
             <SidebarPanels
               selection={sidebarSelection}
@@ -272,6 +276,7 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
               onClose={() => setSidebarSelection(null)}
             />
           </div>
+          </ResizablePanel>
         )}
       </div>
     </div>
