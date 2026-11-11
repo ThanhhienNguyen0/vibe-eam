@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
+import CopyLinkButton from "../CopyLinkButton";
 import { ArrowRight, GitBranch, LayoutDashboard, Plus, Trash2, X } from "lucide-react";
 import { sidebarApi } from "./sidebarApi";
 import type { SidebarSelection } from "./Sidebar";
@@ -31,13 +32,20 @@ interface Props {
   onOpenCatalog: (id: string) => void;
   onClose: () => void;
   chooseConflictResolution?: (message: string) => Promise<ConflictResolution>;
+  /** REQ-12: teilbarer Link für die aktuelle Auswahl (Element/Diagramm), sonst null. */
+  linkFor?: (selection: SidebarSelection) => string | null;
 }
 
+/** Link der aktuell angezeigten Auswahl – jeder Panel-Kopf zeigt dafür „Link kopieren“. */
+const PanelLinkContext = createContext<string | null>(null);
+
 function DetailWrapper({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  const link = useContext(PanelLinkContext);
   return (
     <div className="sb-detail-wrapper">
       <div className="sb-detail-topbar">
         <span className="sb-detail-title">{title}</span>
+        {link && <CopyLinkButton link={link} iconOnly className="sb-close-btn sb-link-btn" title="Link kopieren – führt direkt hierher" />}
         <button className="sb-close-btn" onClick={onClose} title="Panel schließen"><X size={15} /></button>
       </div>
       <div className="sb-detail-body">{children}</div>
@@ -45,7 +53,16 @@ function DetailWrapper({ title, onClose, children }: { title: string; onClose: (
   );
 }
 
-export default function SidebarPanels({ selection, sidebarState, onStateChange, onSelect, onOpenDiagram, onOpenCatalog, onClose, chooseConflictResolution }: Props) {
+export default function SidebarPanels(props: Props) {
+  const link = props.selection && props.linkFor ? props.linkFor(props.selection) : null;
+  return (
+    <PanelLinkContext.Provider value={link}>
+      <SidebarPanelsContent {...props} />
+    </PanelLinkContext.Provider>
+  );
+}
+
+function SidebarPanelsContent({ selection, sidebarState, onStateChange, onSelect, onOpenDiagram, onOpenCatalog, onClose, chooseConflictResolution }: Props) {
   const { canWrite, canManageMetamodel } = useAccess();
   if (!selection) return null;
 

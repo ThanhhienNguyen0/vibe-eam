@@ -1,6 +1,16 @@
 import ResizablePanel from "./ResizablePanel";
-import { useEffect, useState } from "react";
-import { GitBranch, LayoutDashboard, LogOut, Plus, ScrollText, Table2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertTriangle, GitBranch, Info, LayoutDashboard, LogOut, Plus, ScrollText, Table2, X } from "lucide-react";
+import {
+  absoluteLink,
+  buildDeepLinkPath,
+  filterIdFromView,
+  parseDeepLink,
+  resolveDeepLink,
+  viewParam,
+  type DeepLink,
+  type FocusTarget
+} from "./deepLink";
 import Sidebar, { type SidebarSelection } from "./Sidebar/Sidebar";
 import SidebarPanels from "./Sidebar/SidebarPanels";
 import DiagramEditor from "./DiagramEditor";
@@ -86,9 +96,119 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
   const activeDiagram = sidebarState.diagrams.find((d) => d.id === activeDiagramId) ?? null;
   const activeCatalog = sidebarState.catalogs.find((c) => c.id === activeCatalogId) ?? null;
 
+  /* ── REQ-12: Deep Links ──────────────────────────────────────────────────── */
+  const [loaded, setLoaded] = useState(false);
+  /** Erst nach dem Auswerten des Start-Links wird die Adresszeile synchronisiert (sonst würde sie überschrieben). */
+  const [linkReady, setLinkReady] = useState(false);
+  /** Aktueller Ansichtsfilter im offenen Diagramm („“ = Alle Inhalte), gemeldet vom Editor. */
+  const [currentFilterId, setCurrentFilterId] = useState("");
+  const [focusRequest, setFocusRequest] = useState<{ target: FocusTarget; nonce: number } | null>(null);
+  const [viewRequest, setViewRequest] = useState<{ filterId: string; nonce: number } | null>(null);
+  const [linkMessage, setLinkMessage] = useState<{ kind: "error" | "notice"; text: string } | null>(null);
+  const stateRef = useRef(sidebarState);
+  stateRef.current = sidebarState;
+
   useEffect(() => {
-    sidebarApi.getAll().then(setSidebarState).catch((e) => setError(e instanceof Error ? e.message : "Daten konnten nicht geladen werden."));
+    sidebarApi.getAll()
+      .then((state) => { setSidebarState(state); setLoaded(true); })
+      .catch((e) => setError(e instanceof Error ? e.message : "Daten konnten nicht geladen werden."));
   }, []);
+
+  /** Öffnet, was ein Link beschreibt – oder erklärt verständlich, warum das nicht geht. */
+  const applyLink = useCallback((link: DeepLink) => {
+    const state = stateRef.current;
+    const result = resolveDeepLink(link, state);
+    const nonce = Date.now();
+    setActiveCatalogId(null);
+    setWorkspaceView("diagrams");
+    if (result.error) {
+      setActiveDiagramId(null);
+      setSidebarSelection(null);
+      setFocusRequest(null);
+      setViewRequest(null);
+      setLinkMessage({ kind: "error", text: `${result.error} Du siehst jetzt die Diagrammübersicht.` });
+      // Den kaputten Link nicht in der Adresszeile stehen lassen.
+      window.history.replaceState(null, "", "/");
+      return;
+    }
+    setLinkMessage(result.notice ? { kind: "notice", text: result.notice } : null);
+    const selection = result.focus ? { kind: result.focus.kind, id: result.focus.id } as SidebarSelection : null;
+    if (result.diagramId) {
+      const diagram = state.diagrams.find((d) => d.id === result.diagramId);
+      const filterId = filterIdFromView(result.viewId, diagram?.viewpointId);
+      setActiveDiagramId(result.diagramId);
+      setCurrentFilterId(filterId);
+      setViewRequest({ filterId, nonce });
+      setFocusRequest(result.focus ? { target: result.focus, nonce } : null);
+    } else {
+      setActiveDiagramId(null);
+      setFocusRequest(null);
+      setViewRequest(null);
+    }
+    setSidebarSelection(selection);
+  }, []);
+
+  // Start-Link auswerten, sobald die Daten da sind (auch nach dem Login: die Adresse bleibt erhalten).
+  useEffect(() => {
+    if (!loaded || linkReady) return;
+    applyLink(parseDeepLink(window.location.pathname, window.location.search));
+    setLinkReady(true);
+  }, [applyLink, linkReady, loaded]);
+
+  // Zurück/Vorwärts im Browser führt wieder an die vorherige Stelle.
+  useEffect(() => {
+    const onPop = () => applyLink(parseDeepLink(window.location.pathname, window.location.search));
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [applyLink]);
+
+  const isInDiagram = (diagramId: string | null, selection: SidebarSelection | null): selection is { kind: "component" | "connection"; id: string } => {
+    const diagram = sidebarState.diagrams.find((d) => d.id === diagramId);
+    if (!diagram || !selection) return false;
+    if (selection.kind === "component") return diagram.componentIds.includes(selection.id);
+    if (selection.kind === "connection") return diagram.connectionIds.includes(selection.id);
+    return false;
+  };
+
+  /** Was gerade zu sehen ist, als Link – Grundlage für Adresszeile und „Link kopieren“. */
+  function currentLink(): DeepLink {
+    if (activeDiagram) {
+      return {
+        kind: "diagram",
+        diagramId: activeDiagram.id,
+        viewId: viewParam(currentFilterId, activeDiagram.viewpointId),
+        ...(isInDiagram(activeDiagram.id, sidebarSelection) ? { selectId: sidebarSelection.id } : {})
+      };
+    }
+    if (!activeCatalog && workspaceView === "diagrams" && (sidebarSelection?.kind === "component" || sidebarSelection?.kind === "connection")) {
+      return { kind: sidebarSelection.kind, id: sidebarSelection.id };
+    }
+    return { kind: "home" };
+  }
+
+  // Adresszeile mitführen: neuer Verlaufseintrag nur beim Wechsel des Diagramms, sonst ersetzen.
+  const desiredPath = linkReady ? buildDeepLinkPath(currentLink()) : null;
+  useEffect(() => {
+    if (!desiredPath) return;
+    const { pathname, search } = window.location;
+    if (desiredPath === pathname + search) return;
+    const diagramOf = (link: DeepLink) => (link.kind === "diagram" ? link.diagramId : null);
+    const [nextPath, nextQuery = ""] = desiredPath.split("?");
+    const switchesDiagram = diagramOf(parseDeepLink(pathname, search)) !== diagramOf(parseDeepLink(nextPath, nextQuery ? `?${nextQuery}` : ""));
+    if (switchesDiagram) window.history.pushState(null, "", desiredPath);
+    else window.history.replaceState(null, "", desiredPath);
+  }, [desiredPath]);
+
+  /** Link für das Eigenschaftenpanel: Element im offenen Diagramm, sonst direkt auf das Element. */
+  function linkForSelection(selection: SidebarSelection): string | null {
+    const origin = window.location.origin;
+    if (selection.kind === "diagram") return absoluteLink({ kind: "diagram", diagramId: selection.id }, origin);
+    if (selection.kind !== "component" && selection.kind !== "connection") return null;
+    if (activeDiagram && isInDiagram(activeDiagram.id, selection)) {
+      return absoluteLink({ kind: "diagram", diagramId: activeDiagram.id, viewId: viewParam(currentFilterId, activeDiagram.viewpointId), selectId: selection.id }, origin);
+    }
+    return absoluteLink({ kind: selection.kind, id: selection.id }, origin);
+  }
 
   function openCatalog(id: string) {
     setActiveDiagramId(null);
@@ -103,16 +223,22 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
     openCatalog(created.id);
   }
 
-  function openDiagram(id: string) {
+  function openDiagram(id: string, known?: { viewpointId?: string }) {
+    const diagram = known ?? sidebarState.diagrams.find((d) => d.id === id);
     setActiveCatalogId(null);
     setActiveDiagramId(id);
     setWorkspaceView("diagrams");
+    // Normales Öffnen: keine Link-Aufträge eines früheren Links wiederverwenden.
+    setFocusRequest(null);
+    setViewRequest(null);
+    setCurrentFilterId(diagram?.viewpointId ?? "");
+    setLinkMessage(null);
   }
 
   async function createDiagram() {
     const d = await sidebarApi.createDiagram({ name: "Neues Diagramm", description: "" });
     setSidebarState((s) => ({ ...s, diagrams: [...s.diagrams, d] }));
-    setActiveDiagramId(d.id);
+    openDiagram(d.id, d);
   }
 
   return (
@@ -205,6 +331,13 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
 
         <main className="workspace workspace--full">
           {error && <div className="error-banner">{error}</div>}
+          {linkMessage && (
+            <div className={`link-banner${linkMessage.kind === "error" ? " link-banner--error" : ""}`} role={linkMessage.kind === "error" ? "alert" : "status"}>
+              {linkMessage.kind === "error" ? <AlertTriangle size={16} /> : <Info size={16} />}
+              <span>{linkMessage.text}</span>
+              <button type="button" className="sb-close-btn" onClick={() => setLinkMessage(null)} aria-label="Hinweis schließen" title="Hinweis schließen"><X size={14} /></button>
+            </div>
+          )}
 
           {activeDiagram ? (
             <DiagramEditor
@@ -235,6 +368,9 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
               onSelectComponent={(id) => setSidebarSelection({ kind: "component", id })}
               onSelectConnection={(id) => setSidebarSelection({ kind: "connection", id })}
               onClose={() => setActiveDiagramId(null)}
+              focusRequest={focusRequest}
+              viewRequest={viewRequest}
+              onViewChange={setCurrentFilterId}
             />
           ) : activeCatalog && workspaceView === "diagrams" ? (
             <CatalogView
@@ -280,6 +416,7 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
               onOpenDiagram={(id) => { openDiagram(id); setSidebarSelection(null); }}
               onOpenCatalog={openCatalog}
               onClose={() => setSidebarSelection(null)}
+              linkFor={linkForSelection}
             />
           </div>
           </ResizablePanel>
