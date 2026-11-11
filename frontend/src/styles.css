@@ -3961,3 +3961,91 @@ tr.attention td {
 .sb-icon-option:hover { border-color: #94a3b8; }
 .sb-icon-option.is-selected { border-color: #2563eb; box-shadow: 0 0 0 2px #bfdbfe; background: #eff6ff; }
 .sb-type-card-title { display: flex; align-items: center; gap: 6px; }
+
+/* ── REQ-11: Export-Dialog (kompakt: Beschriftung links, Auswahl rechts) ─────── */
+.export-dialog { max-width: 500px; gap: 12px; padding: 16px 20px; }
+.export-form { display: grid; grid-template-columns: auto 1fr; column-gap: 14px; row-gap: 10px; align-items: center; }
+.export-label { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: #475569; white-space: nowrap; }
+.export-segments { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; min-width: 0; }
+.export-segments--3 { grid-template-columns: repeat(3, 1fr); }
+.export-segment {
+  position: relative;
+  display: grid;
+  gap: 1px;
+  padding: 6px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  cursor: pointer;
+  min-width: 0;
+  transition: border-color 0.15s, background 0.15s;
+}
+.export-segment:hover { border-color: #94a3b8; }
+.export-segment.is-active { border-color: #2563eb; background: #eff6ff; box-shadow: 0 0 0 1px #2563eb; }
+.export-segment input { position: absolute; opacity: 0; pointer-events: none; }
+.export-segment:has(input:focus-visible) { outline: 2px solid #2563eb; outline-offset: 2px; }
+.export-segment strong { font-size: 13px; }
+.export-segment.is-active strong { color: #1d4ed8; }
+.export-segment small { font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.export-check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.export-check input { margin: 0; accent-color: #2563eb; cursor: pointer; }
+.export-file { display: flex; align-items: stretch; min-width: 0; border: 1px solid #cbd5e1; border-radius: 6px; background: #ffffff; overflow: hidden; }
+.export-file:focus-within { border-color: #2563eb; box-shadow: 0 0 0 1px #2563eb; }
+.export-file input { flex: 1; min-width: 0; border: 0; outline: 0; padding: 6px 8px; font-size: 13px; background: transparent; }
+.export-file-ext { display: flex; align-items: center; padding: 0 8px; background: #f8fafc; border-left: 1px solid #e2e8f0; color: #64748b; font-size: 13px; }
+.export-hint { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; font-size: 12px; line-height: 1.4; }
+.export-hint svg { flex-shrink: 0; }
+.export-hint--warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.export-actions { justify-content: flex-end; }
+.export-submit { width: auto; margin: 0; padding: 0 14px; }
+@media (max-width: 520px) {
+  .export-form { grid-template-columns: 1fr; row-gap: 4px; }
+  .export-segments--3 { grid-template-columns: 1fr; }
+}
+/* ⓘ-Erklärung neben den Überschriften im Export-Dialog */
+.export-info { position: relative; display: inline-flex; }
+.export-info-btn { min-height: 0; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #94a3b8; }
+.export-info-btn:hover, .export-info-btn:focus-visible { color: #2563eb; background: #eff6ff; }
+.export-info-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+.export-info-tip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: -8px;
+  z-index: 20;
+  width: 290px;
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #172033;
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  white-space: normal;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.25);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-2px);
+  transition: opacity 0.12s, transform 0.12s, visibility 0.12s;
+  pointer-events: none;
+}
+.export-info-tip strong { color: #ffffff; }
+.export-info:hover .export-info-tip,
+.export-info:focus-within .export-info-tip { opacity: 1; visibility: visible; transform: none; }
+.export-segment { align-content: center; min-height: 34px; }
+/* Vorschau im Export-Dialog: volle Breite, Bild eingepasst, Rahmen zeigt die Bildkante */
+.export-preview {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: repeating-conic-gradient(#f1f5f9 0% 25%, #f8fafc 0% 50%) 50% / 16px 16px;
+  font-size: 12px;
+}
+.export-preview img { max-width: 100%; max-height: 100%; object-fit: contain; background: #ffffff; box-shadow: 0 1px 4px rgba(15, 23, 42, 0.15); transition: opacity 0.15s; }
+.export-preview img.is-updating { opacity: 0.5; }

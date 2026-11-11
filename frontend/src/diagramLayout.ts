@@ -1,6 +1,27 @@
 /** Pure layout helpers for the diagram editor (BUG-02): grid, rulers and placement of new elements. */
 
+import type { ComponentShape } from "./Sidebar/sidebarTypes";
+
 export const GRID_SIZE = 20;
+
+/** Default node size per shape; shared by the canvas and the image export (REQ-11). */
+export const SHAPE_DEFAULTS: Record<ComponentShape, { width: number; height: number }> = {
+  box: { width: 160, height: 72 },
+  process: { width: 160, height: 72 },
+  datastore: { width: 140, height: 80 },
+  event: { width: 110, height: 110 },
+  "event-start": { width: 110, height: 110 },
+  "event-end": { width: 110, height: 110 },
+  gateway: { width: 120, height: 100 },
+  "gateway-xor": { width: 120, height: 100 },
+  "gateway-and": { width: 120, height: 100 },
+  "gateway-or": { width: 120, height: 100 },
+  pool: { width: 480, height: 260 }
+};
+
+export function shapeDefaultSize(shape: ComponentShape) {
+  return SHAPE_DEFAULTS[shape] ?? SHAPE_DEFAULTS.box;
+}
 
 export interface Rect { x: number; y: number; width: number; height: number }
 export interface Point { x: number; y: number }
