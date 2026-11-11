@@ -4049,3 +4049,62 @@ tr.attention td {
 }
 .export-preview img { max-width: 100%; max-height: 100%; object-fit: contain; background: #ffffff; box-shadow: 0 1px 4px rgba(15, 23, 42, 0.15); transition: opacity 0.15s; }
 .export-preview img.is-updating { opacity: 0.5; }
+
+/* ── REQ-12: Deep Links ─────────────────────────────────────────────────────── */
+.copy-link { position: relative; display: inline-flex; }
+.copy-link--done, .copy-link--done:hover { color: #047857; border-color: #a7f3d0; background: #ecfdf5; }
+.sb-detail-topbar .copy-link { margin-left: auto; }
+.sb-link-btn:hover { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+.copy-link-toast {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 30;
+  padding: 4px 8px; border-radius: 6px; background: #047857; color: #ffffff;
+  font-size: 12px; white-space: nowrap; box-shadow: 0 6px 14px rgba(15, 23, 42, 0.18);
+}
+.copy-link-fallback {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 30;
+  display: grid; gap: 6px; width: 320px; padding: 10px;
+  border: 1px solid #d8dee8; border-radius: 8px; background: #ffffff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18); font-size: 12px;
+}
+.copy-link-fallback-head { display: flex; align-items: center; justify-content: space-between; }
+.copy-link-fallback input { width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; }
+
+/* Per Link angesprungenes Element: deutlicher Ring, der kurz pulsiert */
+@keyframes link-target-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.55); }
+  70% { box-shadow: 0 0 0 14px rgba(37, 99, 235, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+}
+.react-flow__node.is-link-target { border-radius: 10px; outline: 3px solid #2563eb; outline-offset: 4px; animation: link-target-pulse 1.2s ease-out 3; }
+.react-flow__edge.is-link-target .react-flow__edge-path { filter: drop-shadow(0 0 4px rgba(37, 99, 235, 0.8)); }
+
+/* Hinweise beim Öffnen eines Links */
+.link-banner { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #bfdbfe; background: #eff6ff; color: #1e3a8a; font-size: 13px; }
+.link-banner--error { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+.link-banner > span { flex: 1; }
+.link-banner button { min-height: 30px; padding: 0 10px; font-size: 13px; }
+
+/* „Teilen“-Menü in der Diagramm-Toolbar (Bild exportieren + Link kopieren) */
+.share-menu { position: relative; display: inline-flex; }
+.share-menu-caret { margin-left: -2px; opacity: 0.7; }
+.share-menu-list {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+  display: grid; gap: 2px; width: 290px; padding: 6px;
+  border: 1px solid #d8dee8; border-radius: 10px; background: #ffffff;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.16);
+}
+.share-menu-item {
+  justify-content: flex-start; align-items: flex-start; gap: 10px;
+  min-height: 0; padding: 8px 10px; border: 0; border-radius: 6px;
+  background: transparent; text-align: left;
+}
+.share-menu-item > svg { flex-shrink: 0; margin-top: 2px; color: #2563eb; }
+.share-menu-item span { display: grid; gap: 1px; }
+.share-menu-item strong { font-size: 13px; }
+.share-menu-item small { font-size: 12px; color: #64748b; line-height: 1.35; }
+.share-menu-item:hover:not(:disabled), .share-menu-item:focus-visible { background: #eff6ff; outline: none; }
+.share-menu-item:disabled { opacity: 0.55; cursor: not-allowed; }
+.share-menu-item.is-done, .share-menu-item.is-done:hover { background: #ecfdf5; }
+.share-menu-item.is-done > svg, .share-menu-item.is-done strong { color: #047857; }
+.share-menu-fallback { display: grid; gap: 4px; padding: 8px 10px 4px; border-top: 1px solid #e2e8f0; font-size: 12px; }
+.share-menu-fallback input { width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; }

@@ -17,9 +17,12 @@ import ReactFlow, {
   useEdgesState,
   useNodesState
 } from "reactflow";
-import { CircleCheck, Download, GitBranch, Grid3x3, Maximize, MousePointerClick, PanelLeftClose, PanelLeftOpen, Ruler, Search, SlidersHorizontal, X } from "lucide-react";
+import { CircleCheck, GitBranch, Link2, Grid3x3, Maximize, MousePointerClick, PanelLeftClose, PanelLeftOpen, Ruler, Search, SlidersHorizontal, X } from "lucide-react";
 import DiagramCoordinates from "./DiagramCoordinates";
 import DiagramExportDialog, { type ExportChoice } from "./DiagramExportDialog";
+import { copyText } from "./CopyLinkButton";
+import ShareMenu from "./ShareMenu";
+import { absoluteLink, viewParam, type FocusTarget } from "./deepLink";
 import {
   buildExportScene,
   clampPngScale,
@@ -81,6 +84,12 @@ interface Props {
   onSelectComponent: (id: string) => void;
   onSelectConnection: (id: string) => void;
   onClose: () => void;
+  /** REQ-12: Element aus einem Link markieren, zentrieren und kurz hervorheben (nonce = neuer Auftrag). */
+  focusRequest?: { target: FocusTarget; nonce: number } | null;
+  /** REQ-12: Ansichtsfilter aus einem Link setzen (Filter-ID, „“ = Alle Inhalte). */
+  viewRequest?: { filterId: string; nonce: number } | null;
+  /** Meldet den aktuell gewählten Ansichtsfilter, damit die Adresszeile ihn mitführt. */
+  onViewChange?: (filterId: string) => void;
 }
 
 interface Suggestion {
@@ -508,7 +517,8 @@ function buildNodes(
   activeNodeId: string | null,
   onInteractionStart: ShapedNodeData["onInteractionStart"],
   onTransformEnd: ShapedNodeData["onTransformEnd"],
-  canEdit: boolean
+  canEdit: boolean,
+  highlightId: string | null = null
 ): Node[] {
   return diagram.componentIds.flatMap((id) => {
     const comp = components.find((c) => c.id === id);
@@ -539,6 +549,8 @@ function buildNodes(
       } satisfies ShapedNodeData,
       style: { width, height },
       draggable: false,
+      // REQ-12: per Link angesprungenes Element pulsiert kurz, damit man es sofort findet.
+      ...(id === highlightId ? { className: "is-link-target", selected: true } : {}),
       ...(isPool ? { zIndex: -1 } : {})
     };
     return [node];
@@ -548,16 +560,19 @@ function buildNodes(
 function buildEdges(
   diagram: Diagram,
   connections: ConnectionInstance[],
-  connectionTypes: ConnectionType[]
+  connectionTypes: ConnectionType[],
+  highlightId: string | null = null
 ): Edge[] {
   return diagram.connectionIds.flatMap((id) => {
     const conn = connections.find((c) => c.id === id);
     if (!conn) return [];
     if (!diagram.componentIds.includes(conn.sourceComponentId) || !diagram.componentIds.includes(conn.targetComponentId)) return [];
     const type = connectionTypes.find((t) => t.id === conn.connectionTypeId);
+    const highlighted = id === highlightId;
     return [
       {
         id: conn.id,
+        ...(highlighted ? { className: "is-link-target", animated: true, selected: true } : {}),
         source: conn.sourceComponentId,
         target: conn.targetComponentId,
         label: conn.name || type?.name || "",
@@ -568,7 +583,7 @@ function buildEdges(
         markerEnd: { type: MarkerType.ArrowClosed, color: type?.color ?? "#475569" },
         style: {
           stroke: type?.color ?? "#475569",
-          strokeWidth: 2,
+          strokeWidth: highlighted ? 4 : 2,
           strokeDasharray: lineStyleDash[type?.lineStyle ?? "solid"]
         }
       }
@@ -753,7 +768,10 @@ function DiagramEditorInner({
   onComponentCreated,
   onSelectComponent,
   onSelectConnection,
-  onClose
+  onClose,
+  focusRequest,
+  viewRequest,
+  onViewChange
 }: Props) {
   const { canWrite: roleCanWrite } = useAccess();
   const [viewpointFilterId, setViewpointFilterId] = useState(diagram.viewpointId ?? "");
@@ -829,7 +847,8 @@ function DiagramEditorInner({
   const canvasRef = useRef<HTMLDivElement>(null);
   const [validationResult, setValidationResult] = useState<DiagramValidationResult | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, fitView, getViewport } = useReactFlow();
+  const { screenToFlowPosition, fitView, getViewport, setCenter, getZoom } = useReactFlow();
+  const [linkHighlightId, setLinkHighlightId] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const activeViewpoint = viewpointFilterId ? viewpoints.find((viewpoint) => viewpoint.id === viewpointFilterId) : undefined;
   const sidebarState = useMemo(
@@ -893,6 +912,16 @@ function DiagramEditorInner({
     setNotice("");
   }, [diagram.id, diagram.viewpointId]);
 
+  // REQ-12: Ansicht aus einem Link übernehmen (läuft nach dem Zurücksetzen oben).
+  useEffect(() => {
+    if (viewRequest) setViewpointFilterId(viewRequest.filterId);
+  }, [viewRequest]);
+
+  // Die Adresszeile führt den gewählten Filter mit, damit „Link kopieren“ aus dem Browser auch passt.
+  useEffect(() => {
+    onViewChange?.(viewpointFilterId);
+  }, [onViewChange, viewpointFilterId]);
+
   useEffect(() => {
     if (!localPreviewActive) return;
     setPendingAdd(null);
@@ -903,9 +932,9 @@ function DiagramEditorInner({
   }, [localPreviewActive]);
 
   useEffect(() => {
-    setNodes(buildNodes(displayedDiagram, components, componentTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, canWrite));
-    setEdges(buildEdges(displayedDiagram, connections, connectionTypes));
-  }, [canWrite, displayedDiagram, components, componentTypes, connections, connectionTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, setNodes, setEdges]);
+    setNodes(buildNodes(displayedDiagram, components, componentTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, canWrite, linkHighlightId));
+    setEdges(buildEdges(displayedDiagram, connections, connectionTypes, linkHighlightId));
+  }, [canWrite, displayedDiagram, components, componentTypes, connections, connectionTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, setNodes, setEdges, linkHighlightId]);
 
   useEffect(() => () => window.clearTimeout(hoverLeaveTimer.current), []);
 
@@ -1273,6 +1302,62 @@ function DiagramEditorInner({
   const exportFullArea = useMemo(() => sceneBounds(exportScene), [exportScene]);
   const [exportViewArea, setExportViewArea] = useState<Rect | null>(null);
 
+  /* ── REQ-12: per Link angesprungenes Element zentrieren und hervorheben ──── */
+  const handledFocusNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (!focusRequest || handledFocusNonce.current === focusRequest.nonce) return;
+    const { target } = focusRequest;
+    const rect = (id: string) => exportScene.nodes.find((n) => n.id === id);
+    let center: { x: number; y: number } | null = null;
+    if (target.kind === "component") {
+      const node = rect(target.id);
+      if (node) center = { x: node.x + node.width / 2, y: node.y + node.height / 2 };
+    } else {
+      const edge = exportScene.edges.find((e) => e.id === target.id);
+      const source = edge && rect(edge.sourceId);
+      const goal = edge && rect(edge.targetId);
+      if (source && goal) {
+        center = {
+          x: (source.x + source.width / 2 + goal.x + goal.width / 2) / 2,
+          y: (source.y + source.height / 2 + goal.y + goal.height / 2) / 2
+        };
+      }
+    }
+    // Erst wenn das Element sichtbar im Diagramm liegt (z. B. nachdem der Link-Filter gesetzt ist).
+    if (!center) return;
+    handledFocusNonce.current = focusRequest.nonce;
+    const point = center;
+    // Nach dem automatischen Einpassen beim Öffnen ausführen (React Flow passt nach dem Vermessen
+    // der Knoten ein), sonst würde das Zentrieren überschrieben. Die Animation zeigt dabei, wohin es geht.
+    const timer = window.setTimeout(() => {
+      void setCenter(point.x, point.y, { zoom: Math.max(getZoom(), 1), duration: 600 });
+      setLinkHighlightId(target.id);
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [focusRequest, exportScene, setCenter, getZoom]);
+
+  // Hervorhebung nach ein paar Sekunden wieder entfernen.
+  useEffect(() => {
+    if (!linkHighlightId) return;
+    const timer = window.setTimeout(() => setLinkHighlightId(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [linkHighlightId]);
+
+  /** Teilbarer Link auf dieses Diagramm mit aktuellem Ansichtsfilter, optional auf ein Element. */
+  const diagramLink = useCallback((selectId?: string) => absoluteLink({
+    kind: "diagram",
+    diagramId: diagram.id,
+    viewId: viewParam(viewpointFilterId, diagram.viewpointId),
+    ...(selectId ? { selectId } : {})
+  }, window.location.origin), [diagram.id, diagram.viewpointId, viewpointFilterId]);
+
+  async function copyElementLink(elementId: string, name: string) {
+    setContextMenu((m) => ({ ...m, visible: false }));
+    const url = diagramLink(elementId);
+    if (await copyText(url)) setNotice(`Link zu „${name}“ kopiert`);
+    else setError(`Kopieren nicht möglich – bitte manuell kopieren: ${url}`);
+  }
+
   function openExportDialog() {
     const canvas = canvasRef.current;
     setExportViewArea(canvas ? viewportArea(getViewport(), { width: canvas.clientWidth, height: canvas.clientHeight }) : null);
@@ -1364,14 +1449,12 @@ function DiagramEditorInner({
         <button className="diagram-palette-toggle" onClick={fitDiagram} title="Alle Elemente einpassen und zentrieren">
           <Maximize size={16} /> Ansicht einpassen
         </button>
-        <button
+        <ShareMenu
           className="diagram-palette-toggle"
-          onClick={openExportDialog}
-          disabled={!exportFullArea}
-          title={exportFullArea ? "Diagramm als PNG oder SVG herunterladen" : "Das Diagramm ist leer – füge zuerst Elemente hinzu"}
-        >
-          <Download size={16} /> Exportieren
-        </button>
+          onExportImage={openExportDialog}
+          exportDisabledReason={exportFullArea ? undefined : "Das Diagramm ist leer – füge zuerst Elemente hinzu"}
+          getLink={() => diagramLink()}
+        />
         <button
           className={`diagram-palette-toggle${showRulers ? " diagram-toggle--on" : ""}`}
           onClick={() => setShowRulers((v) => !v)}
@@ -1596,6 +1679,12 @@ function DiagramEditorInner({
             }}
           >
             <SlidersHorizontal size={14} /> Eigenschaften anzeigen
+          </button>
+          <button
+            className="diagram-context-item"
+            onClick={() => void copyElementLink(contextMenu.nodeId, contextComp?.name ?? "Element")}
+          >
+            <Link2 size={14} /> Link zu diesem Element kopieren
           </button>
           <button
             className="diagram-context-item"
