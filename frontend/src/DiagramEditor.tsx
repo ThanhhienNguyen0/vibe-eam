@@ -17,10 +17,24 @@ import ReactFlow, {
   useEdgesState,
   useNodesState
 } from "reactflow";
-import { CircleCheck, GitBranch, Grid3x3, Maximize, MousePointerClick, PanelLeftClose, PanelLeftOpen, Ruler, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { CircleCheck, Download, GitBranch, Grid3x3, Maximize, MousePointerClick, PanelLeftClose, PanelLeftOpen, Ruler, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import DiagramCoordinates from "./DiagramCoordinates";
+import DiagramExportDialog, { type ExportChoice } from "./DiagramExportDialog";
+import {
+  buildExportScene,
+  clampPngScale,
+  cropScene,
+  downloadBlob,
+  exportSize,
+  renderDiagramSvg,
+  renderIconMarkup,
+  sceneBounds,
+  sceneIcons,
+  svgToPngBlob,
+  viewportArea
+} from "./diagramExport";
 import ComponentTypeIcon from "./componentIcons";
-import { GRID_SIZE as GRID_BG, fallbackPosition, findFreePosition, snapPoint, type Rect } from "./diagramLayout";
+import { GRID_SIZE as GRID_BG, fallbackPosition, findFreePosition, shapeDefaultSize, snapPoint, type Rect } from "./diagramLayout";
 import { sidebarApi } from "./Sidebar/sidebarApi";
 import { runOptimisticMutation } from "./optimisticConflict";
 import DuplicateHint from "./Sidebar/DuplicateHint";
@@ -138,20 +152,6 @@ const lineStyleDash: Record<string, string | undefined> = {
 
 /* ── Custom Node: rendert Komponenten je nach Form (BPMN-angelehnt) ─────────── */
 
-const SHAPE_DEFAULTS: Record<ComponentShape, { width: number; height: number }> = {
-  box: { width: 160, height: 72 },
-  process: { width: 160, height: 72 },
-  datastore: { width: 140, height: 80 },
-  event: { width: 110, height: 110 },
-  "event-start": { width: 110, height: 110 },
-  "event-end": { width: 110, height: 110 },
-  gateway: { width: 120, height: 100 },
-  "gateway-xor": { width: 120, height: 100 },
-  "gateway-and": { width: 120, height: 100 },
-  "gateway-or": { width: 120, height: 100 },
-  pool: { width: 480, height: 260 }
-};
-
 const SHAPE_MIN_SIZES: Record<ComponentShape, { width: number; height: number }> = {
   box: { width: 80, height: 48 },
   process: { width: 80, height: 48 },
@@ -165,10 +165,6 @@ const SHAPE_MIN_SIZES: Record<ComponentShape, { width: number; height: number }>
   "gateway-or": { width: 72, height: 72 },
   pool: { width: 240, height: 140 }
 };
-
-function shapeDefaultSize(shape: ComponentShape) {
-  return SHAPE_DEFAULTS[shape] ?? SHAPE_DEFAULTS.box;
-}
 
 type ResizeDirection = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
@@ -864,7 +860,8 @@ function DiagramEditorInner({
   const canvasRef = useRef<HTMLDivElement>(null);
   const [validationResult, setValidationResult] = useState<DiagramValidationResult | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, fitView } = useReactFlow();
+  const { screenToFlowPosition, fitView, getViewport } = useReactFlow();
+  const [exportOpen, setExportOpen] = useState(false);
   const activeViewpoint = viewpointFilterId ? viewpoints.find((viewpoint) => viewpoint.id === viewpointFilterId) : undefined;
   const sidebarState = useMemo(
     () => ({ metamodel, componentTypes, connectionTypes, connectionRules, viewpointRules, validationRules, viewpoints, components, connections, diagrams: [diagram], catalogs: [] }),
@@ -1334,6 +1331,52 @@ function DiagramEditorInner({
     }
   }
 
+  /* ── REQ-11: Export als PNG/SVG ────────────────────────────────────────── */
+  // Grundlage ist das gefilterte Diagramm: ein aktiver Ansichtsfilter gilt auch im Export.
+  const exportScene = useMemo(
+    () => buildExportScene(displayedDiagram, components, componentTypes, connections, connectionTypes),
+    [displayedDiagram, components, componentTypes, connections, connectionTypes]
+  );
+  const exportFullArea = useMemo(() => sceneBounds(exportScene), [exportScene]);
+  const [exportViewArea, setExportViewArea] = useState<Rect | null>(null);
+
+  function openExportDialog() {
+    const canvas = canvasRef.current;
+    setExportViewArea(canvas ? viewportArea(getViewport(), { width: canvas.clientWidth, height: canvas.clientHeight }) : null);
+    setExportOpen(true);
+  }
+
+  function exportTarget(area: ExportChoice["area"]) {
+    const target = area === "viewport" ? exportViewArea : exportFullArea;
+    if (!target) return null;
+    return { target, scene: area === "viewport" ? cropScene(exportScene, target) : exportScene };
+  }
+
+  function measureExport(area: ExportChoice["area"], legend: boolean) {
+    const resolved = exportTarget(area);
+    return resolved ? exportSize(resolved.scene, resolved.target, legend) : null;
+  }
+
+  /** Ein SVG für Export und Vorschau – die Vorschau zeigt damit exakt das spätere Ergebnis. */
+  async function buildExportSvg(area: ExportChoice["area"], legend: boolean) {
+    const resolved = exportTarget(area);
+    if (!resolved) throw new Error("Es gibt nichts zu exportieren.");
+    const icons = await renderIconMarkup(sceneIcons(resolved.scene));
+    return renderDiagramSvg(resolved.scene, resolved.target, diagram.name, { icons, legend });
+  }
+
+  async function exportDiagram({ format, area, scale, legend, fileName }: ExportChoice) {
+    const { svg, width, height } = await buildExportSvg(area, legend);
+    if (format === "svg") {
+      downloadBlob(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }), fileName);
+    } else {
+      const size = { width, height };
+      const { scale: safeScale } = clampPngScale(size, scale);
+      downloadBlob(await svgToPngBlob(svg, size, safeScale), fileName);
+    }
+    setNotice(`Exportiert als ${fileName}`);
+  }
+
   const visibleComponentTypeIds = new Set(visibleComponentTypes.map((type) => type.id));
   const availableComponents = components.filter((c) => !diagram.componentIds.includes(c.id) && visibleComponentTypeIds.has(c.componentTypeId));
   const contextComp = components.find((c) => c.id === contextMenu.nodeId);
@@ -1387,6 +1430,14 @@ function DiagramEditorInner({
         </label>
         <button className="diagram-palette-toggle" onClick={fitDiagram} title="Alle Elemente einpassen und zentrieren">
           <Maximize size={16} /> Ansicht einpassen
+        </button>
+        <button
+          className="diagram-palette-toggle"
+          onClick={openExportDialog}
+          disabled={!exportFullArea}
+          title={exportFullArea ? "Diagramm als PNG oder SVG herunterladen" : "Das Diagramm ist leer – füge zuerst Elemente hinzu"}
+        >
+          <Download size={16} /> Exportieren
         </button>
         <button
           className={`diagram-palette-toggle${showRulers ? " diagram-toggle--on" : ""}`}
@@ -1522,6 +1573,17 @@ function DiagramEditorInner({
           )}
         </div>
       </div>
+
+      {exportOpen && (
+        <DiagramExportDialog
+          diagramName={diagram.name}
+          activeViewName={activeViewpoint?.name}
+          measure={measureExport}
+          renderPreview={async (area, legend) => (await buildExportSvg(area, legend)).svg}
+          onExport={exportDiagram}
+          onClose={() => setExportOpen(false)}
+        />
+      )}
 
       {/* ── Dialog: neue Komponente aus gezogenem Typ ───────────────────────── */}
       {pendingCreate && (() => {
