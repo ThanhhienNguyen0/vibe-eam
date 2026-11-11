@@ -129,6 +129,20 @@ export function connectionModeReducer(state: string | null, action: ConnectionMo
   return action.localPreviewActive ? null : state;
 }
 
+export function mergeSmartAddMemberships(
+  diagram: Pick<Diagram, "componentIds" | "connectionIds">,
+  componentId: string,
+  extraComponentIds: string[],
+  extraConnectionIds: string[]
+): { componentIds: string[]; connectionIds: string[]; newComponentIds: string[] } {
+  const existingComponentIds = new Set([...diagram.componentIds, componentId]);
+  const componentIds = [...new Set([...diagram.componentIds, componentId, ...extraComponentIds])];
+  const connectionIds = [...new Set([...diagram.connectionIds, ...extraConnectionIds])];
+  const newComponentIds = [...new Set(extraComponentIds)].filter((id) => !existingComponentIds.has(id));
+
+  return { componentIds, connectionIds, newComponentIds };
+}
+
 export async function handleDiagramNodeClick({
   connectingFrom,
   targetId,
@@ -1284,24 +1298,17 @@ function DiagramEditorInner({
 
   async function doAdd(compId: string, extraCompIds: string[], extraConnIds: string[], position?: DiagramPosition) {
     if (!canWrite) return;
-    const newCompIds = [
-      ...diagram.componentIds, compId,
-      ...extraCompIds.filter((id) => !diagram.componentIds.includes(id))
-    ];
-    const newConnIds = [
-      ...diagram.connectionIds,
-      ...extraConnIds.filter((id) => !diagram.connectionIds.includes(id))
-    ];
+    const memberships = mergeSmartAddMemberships(diagram, compId, extraCompIds, extraConnIds);
     const newPositions = { ...diagram.positions };
     newPositions[compId] = position ?? placeNewComponent(compId, newPositions);
     const anchor = newPositions[compId];
     // Mit-hinzugefügte Nachbarn neben dem Element platzieren, ohne dass sie sich überlappen
-    extraCompIds.forEach((id, i) => {
+    memberships.newComponentIds.forEach((id, i) => {
       if (!newPositions[id]) newPositions[id] = placeNewComponent(id, newPositions, { x: anchor.x + 260, y: anchor.y + i * 110 });
     });
     const updated = await updateDiagramWithConflict(diagram, {
-      componentIds: newCompIds,
-      connectionIds: newConnIds,
+      componentIds: memberships.componentIds,
+      connectionIds: memberships.connectionIds,
       positions: newPositions
     });
     if (!updated) return;
@@ -1696,7 +1703,7 @@ function DiagramEditorInner({
               </div>
               <p className="muted">
                 <strong style={{ color: "#172033" }}>{comp?.name}</strong> hat bestehende Verbindungen.
-                Sollen diese auch ins Diagramm?
+                Sollen diese auch ins Diagramm? Jede Zeile steht für eine Verbindung; dieselbe Komponente wird nur einmal hinzugefügt.
               </p>
               <div className="diagram-suggestion-list">
                 {pendingAdd.suggestions.map((s, i) => {
@@ -1705,13 +1712,23 @@ function DiagramEditorInner({
                   const otherComp = components.find((c) => c.id === otherId);
                   const otherType = componentTypes.find((t) => t.id === otherComp?.componentTypeId);
                   const direction = s.conn.sourceComponentId === pendingAdd.compId ? "→" : "←";
+                  const sameTargetSuggestions = pendingAdd.suggestions.filter((candidate) => {
+                    const candidateOtherId = candidate.conn.sourceComponentId === pendingAdd.compId
+                      ? candidate.conn.targetComponentId
+                      : candidate.conn.sourceComponentId;
+                    return candidateOtherId === otherId;
+                  });
+                  const relationIndex = sameTargetSuggestions.findIndex((candidate) => candidate.conn.id === s.conn.id) + 1;
                   return (
                     <label key={s.conn.id} className="diagram-suggestion-row">
                       <input type="checkbox" checked={s.selected} onChange={() => toggleSuggestion(i)} />
                       <span className="sb-color-dot" style={{ background: otherType?.color ?? "#cbd5e1" }} />
                       <span className="diagram-suggestion-label">
                         <strong>{otherComp?.name ?? "?"}</strong>
-                        <span className="muted">{direction} via {connType?.name ?? "?"}</span>
+                        <span className="muted">
+                          {direction} via {connType?.name ?? "?"}
+                          {sameTargetSuggestions.length > 1 && ` · Beziehung ${relationIndex} von ${sameTargetSuggestions.length}`}
+                        </span>
                         {s.isCompAlreadyInDiagram && (
                           <span className="diagram-suggestion-hint">Verbindung hinzufügen (Komponente bereits im Diagramm)</span>
                         )}
