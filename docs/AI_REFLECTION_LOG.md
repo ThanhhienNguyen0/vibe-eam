@@ -506,3 +506,19 @@ Stakeholder wurden bewusst als normale Diagrammelemente erhalten. Ein Stakeholde
 - Grüne Unit-Tests haben drei UI-Zeitfehler nicht gefunden (Selbsttreffer während des Speicherns, veralteter Entwurfszustand, Typwahl erst nach dem Anlegen). Statisches Rendering prüft nur Momentaufnahmen; ohne Browser-Testumgebung bleibt der manuelle Test hier notwendig.
 - „Funktioniert nicht“ hatte zunächst eine Umgebungsursache (veraltetes Docker-Image, teilweise überschriebene Dateien), keine Codeursache. Vor der Fehlersuche im Code zuerst prüfen, welcher Stand tatsächlich ausgeliefert wird.
 - Der Hinweis „Gleicher Name bei anderem Typ“ geht bewusst über das Akzeptanzkriterium hinaus, ist aber nur informativ und erzeugt keinen Audit-Eintrag.
+
+## BUG-03: Smart-Add und Diagrammmitgliedschaften (11.11.2026)
+
+### Ursache und Entscheidung
+
+- Der Dialog bildet Beziehungen ab, nicht eindeutige Nachbarkomponenten. Diese Semantik ist fachlich sinnvoll, weil mehrere Verbindungsinstanzen zwischen denselben Elementen erlaubt sind. Der Fehler lag deshalb nicht in den mehrfachen Zeilen, sondern darin, dass deren Ziel-Komponenten unverändert als Diagrammmitgliedschaften gespeichert wurden.
+- Die Korrektur dedupliziert beide ID-Listen unmittelbar vor dem PATCH. Dadurch bleibt die Auswahl aller Beziehungen erhalten, während jede Komponente und jede Verbindung höchstens einmal Mitglied des Diagramms wird. Nur die deduplizierten neuen Komponenten erhalten eine automatische Position.
+- Der Dialog erklärt die Zeilensemantik und nummeriert mehrere Beziehungen zum gleichen Ziel. Eine automatische Zusammenfassung zu einer Zeile wäre ungeeignet, weil dann einzelne Verbindungsinstanzen nicht mehr separat auswählbar wären.
+- Die verbindliche Backend-Validierung bleibt zusätzlich erforderlich: Ein direkter oder veralteter Client darf ungültige Mitgliedschaften nicht bis zur eindeutigen Datenbank-Constraint und damit zu HTTP 500 durchreichen. Die gleiche Regel im Frontend hält lokale und serverseitige Diagrammvalidierung konsistent.
+
+### Grenzen und Prüfbeobachtungen
+
+- Bestehende doppelte Verbindungsinstanzen im Repository werden weder zusammengeführt noch gelöscht; nur doppelte IDs innerhalb einer Diagrammmitgliedschaft sind ungültig.
+- Der Fix enthält keine Schema- oder Datenmigration. Er verändert weder Authentifizierung noch Company-Isolation oder Optimistic Locking.
+- Die gezielten und vollständigen automatisierten Prüfungen bestanden. Der erste vollständige Lauf wurde nicht als Produktfehler gewertet: Der isoliert wiederholte RBAC-Test bestand 14/14, nachdem die lokale Loopback-Sperre aufgehoben war; der vollständige Wiederholungslauf bestand ebenfalls.
+- Eine visuelle Browser-E2E-Reproduktion und eine echte PostgreSQL-Persistenzprobe wurden nicht durchgeführt. Remote-CI, CodeQL, unabhängige Kontrolle und menschliches Review bleiben PR-Gates.
