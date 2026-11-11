@@ -676,7 +676,8 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
     companyId: string,
     value: ComponentInstance,
     expectedVersion: number,
-    actor: AuditActorInput = { type: "system", label: "System" }
+    actor: AuditActorInput = { type: "system", label: "System" },
+    event?: AuditWrite["event"]
   ): Promise<ComponentInstance> {
     return this.withLockedCompany(companyId, async (tx) => {
       const current = await tx.componentInstance.findFirst({ where: { id: value.id, companyId } });
@@ -708,7 +709,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         throw new OptimisticLockError(currentValue);
       }
       await tx.company.update({ where: { id: companyId }, data: { dataRevision: { increment: 1 } } });
-      await this.appendAuditEntries(tx, companyId, actor, [mutation]);
+      await this.appendAuditEntries(tx, companyId, actor, [mutation], event);
       return { ...value, version: expectedVersion + 1 };
     }, async () => (await this.prisma.componentInstance.findFirst({
       where: { id: value.id, companyId }, select: { id: true, version: true, name: true }
@@ -800,7 +801,8 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
     diagramId: string,
     position: { x: number; y: number },
     expectedDiagramVersion: number,
-    actor: AuditActorInput = { type: "system", label: "System" }
+    actor: AuditActorInput = { type: "system", label: "System" },
+    event?: AuditWrite["event"]
   ): Promise<{ component: ComponentInstance; diagram: Diagram }> {
     return this.withLockedCompany(companyId, async (tx) => {
       const beforeDiagram = await tx.diagram.findFirst({
@@ -862,7 +864,7 @@ export class PrismaSidebarStateRepository implements SidebarStateRepository {
         })),
         auditMutation("diagram", diagram.id, "Diagramm", diagramValue(beforeDiagram), diagramValue(diagram))
       ].filter((item): item is AuditMutationInput => item !== null);
-      await this.appendAuditEntries(tx, companyId, actor, mutations);
+      await this.appendAuditEntries(tx, companyId, actor, mutations, event);
       return {
         component: {
           id: stored.id,

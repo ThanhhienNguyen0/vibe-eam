@@ -8,6 +8,8 @@ import ComponentTypeIcon, { ICON_OPTIONS } from "../componentIcons";
 import { runOptimisticMutation, type ConflictResolution } from "../optimisticConflict";
 import CatalogEditor from "./CatalogEditor";
 import { ElementAuditHistory } from "../AuditLogView";
+import DuplicateHint from "./DuplicateHint";
+import { attachedConnections, diagramsUsingComponent, findDuplicateComponents, findDuplicatesByName, findSameNameInOtherTypes, removeComponentFromState } from "./repositoryReferences";
 import type {
   ComponentInstance,
   ComponentShape,
@@ -142,8 +144,10 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
           ct={ct}
           viewpoints={viewpoints}
           existingCategories={[...new Set(componentTypes.map((t) => t.category?.trim() || "Standard"))]}
-          onSave={async (patch) => {
-            const updated = await sidebarApi.updateComponentType(ct.id, patch);
+          existingTypes={componentTypes}
+          onOpenType={(id) => onSelect({ kind: "componentType", id })}
+          onSave={async (patch, acknowledgeDuplicate) => {
+            const updated = await sidebarApi.updateComponentType(ct.id, patch, { acknowledgeDuplicate });
             onStateChange({ ...sidebarState, componentTypes: componentTypes.map((c) => (c.id === ct.id ? updated : c)) });
           }}
         />
@@ -180,8 +184,10 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
           componentTypes={componentTypes}
           viewpoints={viewpoints}
           existingCategories={[...new Set(connectionTypes.map((t) => t.category?.trim() || "Standard"))]}
-          onSave={async (patch) => {
-            const updated = await sidebarApi.updateConnectionType(ct.id, patch);
+          existingTypes={connectionTypes}
+          onOpenType={(id) => onSelect({ kind: "connectionType", id })}
+          onSave={async (patch, acknowledgeDuplicate) => {
+            const updated = await sidebarApi.updateConnectionType(ct.id, patch, { acknowledgeDuplicate });
             onStateChange({ ...sidebarState, connectionTypes: connectionTypes.map((c) => (c.id === ct.id ? updated : c)) });
           }}
         />
@@ -308,14 +314,28 @@ export default function SidebarPanels({ selection, sidebarState, onStateChange, 
           diagrams={diagrams}
           onSelect={onSelect}
           onOpenDiagram={onOpenDiagram}
-          onSave={async (patch) => {
+          onSave={async (patch, acknowledgeDuplicate) => {
             const result = await runOptimisticMutation(
               comp.version ?? 1,
-              (version) => sidebarApi.updateComponent(comp.id, patch, version),
+              // The flag only matters for the REQ-02 audit event, so it is sent only when a duplicate was accepted.
+              (version) => acknowledgeDuplicate
+                ? sidebarApi.updateComponent(comp.id, patch, version, { acknowledgeDuplicate })
+                : sidebarApi.updateComponent(comp.id, patch, version),
               async () => onStateChange(await sidebarApi.getAll()),
               chooseConflictResolution
             );
             if (result.applied) onStateChange({ ...sidebarState, components: components.map((c) => (c.id === comp.id ? result.value : c)) });
+          }}
+          onUseExisting={async (existingId) => {
+            // Only offered while the new element is still unused, so nothing but the element itself is removed.
+            const result = await runOptimisticMutation(
+              comp.version ?? 1,
+              (version) => sidebarApi.deleteComponent(comp.id, version),
+              async () => onStateChange(await sidebarApi.getAll())
+            );
+            if (!result.applied) return;
+            onStateChange(removeComponentFromState(sidebarState, comp.id));
+            onSelect({ kind: "component", id: existingId });
           }}
         />
       </DetailWrapper>
@@ -545,8 +565,8 @@ function LinkedDiagrams({
 
   return (
     <>
-      <h3>In Diagrammen <span className="sb-count-badge">{included.length}</span></h3>
-      {included.length === 0 && <p className="muted sb-custom-hint">In keinem Diagramm enthalten.</p>}
+      <h3>Verwendet in <span className="sb-count-badge">{included.length}</span></h3>
+      {included.length === 0 && <p className="muted sb-custom-hint">In keinem Diagramm verwendet.</p>}
       <div className="sb-link-list">
         {included.map((d) => (
           <button key={d.id} className="sb-link-row" onClick={() => onOpenDiagram(d.id)} title="Diagramm öffnen">
@@ -566,16 +586,27 @@ function ComponentTypeEditor({
   ct,
   viewpoints,
   existingCategories,
+  existingTypes,
+  onOpenType,
   onSave
 }: {
   ct: ComponentType;
   viewpoints: Viewpoint[];
   existingCategories: string[];
-  onSave: (p: Partial<ComponentType>) => Promise<void>;
+  existingTypes: ComponentType[];
+  onOpenType: (id: string) => void;
+  onSave: (p: Partial<ComponentType>, acknowledgeDuplicate: boolean) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(ct);
+  // Follow changes made elsewhere (e.g. inline rename in the sidebar) as long as nothing was edited here.
+  const [base, setBase] = useState(ct);
+  if (ct !== base) {
+    setBase(ct);
+    if (JSON.stringify(draft) === JSON.stringify(base)) setDraft(ct);
+  }
   const [newKey, setNewKey] = useState("");
   const dirty = JSON.stringify(draft) !== JSON.stringify(ct);
+  const duplicates = findDuplicatesByName(existingTypes, draft.name, ct.id);
 
   function set<K extends keyof ComponentType>(key: K, val: ComponentType[K]) {
     setDraft((prev) => ({ ...prev, [key]: val }));
@@ -599,6 +630,7 @@ function ComponentTypeEditor({
   return (
     <div className="sb-form">
       <label>Name<input value={draft.name} onChange={(e) => set("name", e.target.value)} /></label>
+      <DuplicateHint duplicates={duplicates} onOpen={onOpenType} note="Speichern behält beide Typen; das wird im Audit Log vermerkt. Besser: den vorhandenen Typ verwenden oder umbenennen." />
       <label>Layer
         <input value={draft.layer ?? ""} placeholder="Business, Application, Data, Technology" onChange={(e) => set("layer", e.target.value)} />
       </label>
@@ -680,7 +712,7 @@ function ComponentTypeEditor({
         <input placeholder="Neuer Schlüssel" value={newKey} onChange={(e) => setNewKey(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addKey()} />
         <button onClick={addKey}>Hinzufügen</button>
       </div>
-      <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft)}>Speichern</button>
+      <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft, duplicates.length > 0)}>Speichern</button>
     </div>
   );
 }
@@ -692,16 +724,27 @@ function ConnectionTypeEditor({
   componentTypes,
   viewpoints,
   existingCategories,
+  existingTypes,
+  onOpenType,
   onSave
 }: {
   ct: ConnectionType;
   componentTypes: ComponentType[];
   viewpoints: Viewpoint[];
   existingCategories: string[];
-  onSave: (p: Partial<ConnectionType>) => Promise<void>;
+  existingTypes: ConnectionType[];
+  onOpenType: (id: string) => void;
+  onSave: (p: Partial<ConnectionType>, acknowledgeDuplicate: boolean) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(ct);
+  // Follow changes made elsewhere (e.g. inline rename in the sidebar) as long as nothing was edited here.
+  const [base, setBase] = useState(ct);
+  if (ct !== base) {
+    setBase(ct);
+    if (JSON.stringify(draft) === JSON.stringify(base)) setDraft(ct);
+  }
   const dirty = JSON.stringify(draft) !== JSON.stringify(ct);
+  const duplicates = findDuplicatesByName(existingTypes, draft.name, ct.id);
 
   function set<K extends keyof ConnectionType>(key: K, val: ConnectionType[K]) {
     setDraft((prev) => ({ ...prev, [key]: val }));
@@ -716,6 +759,7 @@ function ConnectionTypeEditor({
   return (
     <div className="sb-form">
       <label>Name<input value={draft.name} onChange={(e) => set("name", e.target.value)} /></label>
+      <DuplicateHint duplicates={duplicates} onOpen={onOpenType} note="Speichern behält beide Typen; das wird im Audit Log vermerkt. Besser: den vorhandenen Typ verwenden oder umbenennen." />
       <p className="muted sb-custom-hint">Allowed source/target combinations are managed via Connection Rules. The fields below are legacy compatibility fields.</p>
       <label>Kategorie <span className="muted">(Unterordner in der Sidebar)</span>
         <input
@@ -786,7 +830,7 @@ function ConnectionTypeEditor({
       {viewpoints.length > 0 && (
         <p className="muted sb-custom-hint">Viewpoint-Zuordnung wird im Viewpoint-Editor gepflegt.</p>
       )}
-      <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft)}>Speichern</button>
+      <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft, duplicates.length > 0)}>Speichern</button>
     </div>
   );
 }
@@ -1155,7 +1199,8 @@ function ComponentEditor({
   diagrams,
   onSelect,
   onOpenDiagram,
-  onSave
+  onSave,
+  onUseExisting
 }: {
   comp: ComponentInstance;
   componentTypes: ComponentType[];
@@ -1165,12 +1210,20 @@ function ComponentEditor({
   diagrams: Diagram[];
   onSelect: (sel: SidebarSelection) => void;
   onOpenDiagram: (id: string) => void;
-  onSave: (p: Partial<ComponentInstance>) => Promise<void>;
+  onSave: (p: Partial<ComponentInstance>, acknowledgeDuplicate: boolean) => Promise<void>;
+  onUseExisting: (existingId: string) => Promise<void>;
 }) {
   const { canReadAudit } = useAccess();
   const [draft, setDraft] = useState(comp);
   const [saveError, setSaveError] = useState("");
   const dirty = JSON.stringify(draft) !== JSON.stringify(comp);
+  const duplicates = findDuplicateComponents(components, draft, comp.id);
+  const unused = diagramsUsingComponent(diagrams, comp.id).length === 0 && attachedConnections(connections, comp.id).length === 0;
+  const typeName = (typeId: string) => componentTypes.find((type) => type.id === typeId)?.name ?? "unbekannter Typ";
+  // Only for fresh elements: the sidebar "+" creates with the first type, so the real type may not be chosen yet.
+  const sameNameOtherTypes = duplicates.length === 0 && unused
+    ? findSameNameInOtherTypes(components, draft, comp.id).map((item) => ({ id: item.id, name: `${item.name} (${typeName(item.componentTypeId)})` }))
+    : [];
 
   function set<K extends keyof ComponentInstance>(key: K, val: ComponentInstance[K]) {
     setDraft((prev) => ({ ...prev, [key]: val }));
@@ -1179,7 +1232,7 @@ function ComponentEditor({
   async function save() {
     setSaveError("");
     try {
-      await onSave(draft);
+      await onSave(draft, duplicates.length > 0);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
     }
@@ -1196,6 +1249,23 @@ function ComponentEditor({
           {componentTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </label>
+      <DuplicateHint
+        duplicates={duplicates}
+        typeName={selectedType?.name}
+        onOpen={(id) => onSelect({ kind: "component", id })}
+        onUseExisting={unused ? onUseExisting : undefined}
+        note={unused
+          ? "„Vorhandenes Element verwenden“ verwirft dieses neue Element. Speichern behält beide; das wird im Audit Log vermerkt."
+          : "Speichern behält beide Elemente; das wird im Audit Log vermerkt."}
+      />
+      <DuplicateHint
+        duplicates={sameNameOtherTypes}
+        title="Gleicher Name bei anderem Typ"
+        intro="Ein Element mit diesem Namen gibt es bereits, aber mit anderem Typ:"
+        onOpen={(id) => onSelect({ kind: "component", id })}
+        onUseExisting={onUseExisting}
+        note="Meintest du das vorhandene Element? „Vorhandenes Element verwenden“ verwirft dieses neue. Sonst bitte oben den richtigen Typ wählen."
+      />
       <label>Externe ID (optional)<input value={draft.externalId ?? ""} maxLength={200} onChange={(e) => set("externalId", e.target.value)} /></label>
       <label>Beschreibung<textarea value={draft.description} onChange={(e) => set("description", e.target.value)} /></label>
 

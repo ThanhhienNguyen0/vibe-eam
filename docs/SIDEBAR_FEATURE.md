@@ -82,6 +82,20 @@ Ein Diagramm enthält eine Auswahl von Komponenten und Verbindungen. Positionen 
 je Diagramm gespeichert, sodass dieselbe Komponente in verschiedenen Diagrammen
 unterschiedlich platziert sein kann.
 
+### Single Source of Truth (REQ-03)
+
+Diagramme speichern ausschließlich Referenzen (`componentIds`, `connectionIds`) und je Diagramm eigene
+Positionen; in PostgreSQL sind das die Join-Tabellen `DiagramComponentMembership` und
+`DiagramConnectionMembership` (REQ-28). Dasselbe Element kann daher in beliebig vielen Diagrammen
+liegen, und Attributänderungen erscheinen sofort überall.
+
+- **Aus Diagramm entfernen** (Kontextmenü im Diagramm): entfernt nur die Referenz in diesem Diagramm.
+- **Aus Repository löschen** (Kontextmenü im Diagramm, Sidebar-Zeile und Sidebar-Kontextmenü): löscht
+  das Element samt zugehöriger Verbindungen. Der Bestätigungsdialog listet alle Diagramme, in denen
+  es noch verwendet wird.
+- Das Eigenschaftenpanel zeigt **„Verwendet in“** mit Links auf alle Diagramme, die das Element enthalten.
+- Duplikatwarnung beim Anlegen: siehe `docs/VALIDATION_RULES.md` (REQ-02).
+
 ---
 
 ## REST-API

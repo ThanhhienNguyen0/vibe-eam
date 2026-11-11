@@ -484,3 +484,25 @@ Stakeholder wurden bewusst als normale Diagrammelemente erhalten. Ein Stakeholde
 - Eine Cursor-API allein verhindert keine UI-Vermischung: Eine verspätete Folgeantwort der vorherigen Auswahl kann nach einem Auswahlwechsel sowohl Daten als auch Steuerzustände überschreiben. Der zunächst lokal grüne Kandidat `238ca51bc48f55936664aa270807ea48d173cc8b` blieb deshalb mit einem unabhängigen P2 ohne Freigabe. Der Korrekturhead `b57d2f42176651fa82c4454fb6ed79693f317dd9` bindet Erfolg, Fehler und Abschluss von Erst- und Folgeanfragen an eine Auswahlgeneration; der deterministische React-Test hält zugleich die aktuelle B-Folgeanfrage offen und belegt, dass eine verspätete A-Antwort weder B-Inhalte noch den B-Ladezustand verändert.
 - Der Secret-Scan war erst nach Wiederverwendung eines lokal vorhandenen, weiterhin hashgeprüften Scannerarchivs möglich. Zwei HTTP-504 sind Infrastrukturbelege, keine Rechtfertigung, das Gate auszulassen.
 - Lokale Entwicklerprüfung und unabhängige Freigabe blieben getrennt: Erst die separate Exact-Head-Kontrolle gab `b0d7e4b07b4d627cd96f4a09857761c9ed33ee5a` nach sieben von sieben erweiterten Race-Gegenproben technisch ohne offene P0–P3 frei. Draft-PR #98 bindet denselben Head an Basis `805b281d4f99f7f4bc0db8c9c66b0d1646ea5926`; Quality-/Infrastructure-, Dependency-, Secret-, CodeQL-JavaScript/TypeScript- und CodeQL-PR-Auswertung waren erfolgreich. Das belegt weder menschliches Review noch Merge, Issue-Schließung, Staging oder Produktion.
+
+## REQ-03 / REQ-02 (01.11.2026)
+
+### Entscheidungen
+
+- REQ-03 war zum größten Teil schon durch das Datenmodell erfüllt. Statt eines neuen Usage-Endpoints wird „Verwendet in“ aus dem bereits geladenen Sidebar-State berechnet; ein eigener Endpoint wäre erst für externe API-Konsumenten nötig.
+- Die Duplikatprüfung läuft doppelt: Im Frontend für den sofortigen Hinweis, im Backend für die verbindliche API-Warnung und den Audit-Eintrag. Ein Paritätstest stellt sicher, dass beide Normalisierungen gleich bleiben.
+- Normalisiert wird bewusst grob (alle Leerzeichen entfernt). Da es nur eine Warnung ist, wurden Fehltreffer gegenüber übersehenen Duplikaten als kleineres Übel gewertet.
+- Das bestehende Audit Log des Legacy-Modells wird mitbenutzt; ein revisionssicheres Audit Log ist REQ-23. `DELETE /components/:id` bleibt unverändert; die Warnung vor dem Löschen ist eine UI-Bestätigung.
+- „Vorhandenes Element verwenden“ wird im Panel nur angeboten, solange das neue Element noch unbenutzt ist, damit dabei keine Diagrammreferenzen oder Verbindungen verloren gehen.
+
+### Grenzen
+
+- Kein Fuzzy-Matching (Tippfehler, Abkürzungen).
+- Keine Live-Aktualisierung bei mehreren gleichzeitig arbeitenden Nutzern (REQ-27).
+- Kein Browser-E2E-Test; DB-Integrationstests werden lokal ohne Postgres übersprungen. Eine unabhängige Kontrolle laut CONTRIBUTING steht noch aus.
+
+### Lernpunkte aus dem manuellen Test (02.11.2026)
+
+- Grüne Unit-Tests haben drei UI-Zeitfehler nicht gefunden (Selbsttreffer während des Speicherns, veralteter Entwurfszustand, Typwahl erst nach dem Anlegen). Statisches Rendering prüft nur Momentaufnahmen; ohne Browser-Testumgebung bleibt der manuelle Test hier notwendig.
+- „Funktioniert nicht“ hatte zunächst eine Umgebungsursache (veraltetes Docker-Image, teilweise überschriebene Dateien), keine Codeursache. Vor der Fehlersuche im Code zuerst prüfen, welcher Stand tatsächlich ausgeliefert wird.
+- Der Hinweis „Gleicher Name bei anderem Typ“ geht bewusst über das Akzeptanzkriterium hinaus, ist aber nur informativ und erzeugt keinen Audit-Eintrag.

@@ -17,12 +17,15 @@ import ReactFlow, {
   useEdgesState,
   useNodesState
 } from "reactflow";
-import { CircleCheck, GitBranch, Grid3x3, Maximize, MousePointerClick, PanelLeftClose, PanelLeftOpen, Ruler, Search, SlidersHorizontal, X } from "lucide-react";
+import { CircleCheck, GitBranch, Grid3x3, Maximize, MousePointerClick, PanelLeftClose, PanelLeftOpen, Ruler, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import DiagramCoordinates from "./DiagramCoordinates";
 import ComponentTypeIcon from "./componentIcons";
 import { GRID_SIZE as GRID_BG, fallbackPosition, findFreePosition, snapPoint, type Rect } from "./diagramLayout";
 import { sidebarApi } from "./Sidebar/sidebarApi";
 import { runOptimisticMutation } from "./optimisticConflict";
+import DuplicateHint from "./Sidebar/DuplicateHint";
+import { deleteComponentConfirmation, findDuplicateComponents } from "./Sidebar/repositoryReferences";
+import { useConfirm } from "./ConfirmDialog";
 import { useAccess } from "./access";
 import {
   getAllowedConnectionTypes,
@@ -52,6 +55,8 @@ import type {
 
 interface Props {
   diagram: Diagram;
+  /** All diagrams, needed to warn about other usages before deleting from the repository. */
+  diagrams: Diagram[];
   metamodel: Metamodel;
   componentTypes: ComponentType[];
   connectionTypes: ConnectionType[];
@@ -64,6 +69,7 @@ interface Props {
   onDiagramChange: (updated: Diagram) => void;
   onConnectionCreated: (conn: ConnectionInstance) => void;
   onComponentCreated: (comp: ComponentInstance) => void;
+  onComponentDeleted: (id: string) => void;
   onSelectComponent: (id: string) => void;
   onSelectConnection: (id: string) => void;
   onClose: () => void;
@@ -682,19 +688,34 @@ function PaletteItem({
 
 function CreateComponentDialog({
   type,
+  components,
   onConfirm,
+  onUseExisting,
+  onShowExisting,
   onCancel
 }: {
   type: ComponentType;
-  onConfirm: (name: string, properties: Record<string, string>) => void;
+  components: ComponentInstance[];
+  onConfirm: (name: string, properties: Record<string, string>, acknowledgeDuplicate: boolean) => Promise<void>;
+  onUseExisting: (id: string) => void;
+  onShowExisting: (id: string) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState("");
   const [properties, setProperties] = useState<Record<string, string>>({});
-  const canConfirm = name.trim().length > 0;
+  // While saving, the new element is already in `components` and would match itself.
+  const [saving, setSaving] = useState(false);
+  const canConfirm = name.trim().length > 0 && !saving;
+  const duplicates = saving ? [] : findDuplicateComponents(components, { name, componentTypeId: type.id });
 
-  function confirm() {
-    if (canConfirm) onConfirm(name.trim(), properties);
+  async function confirm() {
+    if (!canConfirm) return;
+    setSaving(true);
+    try {
+      await onConfirm(name.trim(), properties, duplicates.length > 0);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -728,9 +749,16 @@ function CreateComponentDialog({
             </label>
           ))}
         </div>
+        <DuplicateHint
+          duplicates={duplicates}
+          typeName={type.name}
+          onOpen={onShowExisting}
+          onUseExisting={onUseExisting}
+          note="„Trotzdem neu anlegen“ erzeugt ein zweites Element; das wird im Audit Log vermerkt."
+        />
         <div className="diagram-suggestion-actions">
           <button className="sb-save-btn" style={{ margin: 0 }} disabled={!canConfirm} onClick={confirm}>
-            Erstellen & einfügen
+            {duplicates.length > 0 ? "Trotzdem neu anlegen" : "Erstellen & einfügen"}
           </button>
           <button onClick={onCancel}>Abbrechen</button>
         </div>
@@ -743,6 +771,7 @@ function CreateComponentDialog({
 
 function DiagramEditorInner({
   diagram,
+  diagrams,
   metamodel,
   componentTypes,
   connectionTypes,
@@ -755,11 +784,13 @@ function DiagramEditorInner({
   onDiagramChange,
   onConnectionCreated,
   onComponentCreated,
+  onComponentDeleted,
   onSelectComponent,
   onSelectConnection,
   onClose
 }: Props) {
   const { canWrite: roleCanWrite } = useAccess();
+  const confirm = useConfirm();
   const [viewpointFilterId, setViewpointFilterId] = useState(diagram.viewpointId ?? "");
   const localPreviewActive = isLocalViewpointPreview(diagram, viewpointFilterId || undefined);
   const canWrite = roleCanWrite && !localPreviewActive;
@@ -1004,6 +1035,31 @@ function DiagramEditorInner({
     setContextMenu({ visible: true, x: e.clientX, y: e.clientY, nodeId: node.id });
   }, []);
 
+  async function deleteFromRepository(nodeId: string) {
+    setContextMenu((menu) => ({ ...menu, visible: false }));
+    const component = components.find((item) => item.id === nodeId);
+    if (!canWrite || !component) return;
+    if (!await confirm(deleteComponentConfirmation(component, diagrams, connections))) return;
+    try {
+      const result = await runMutation(() => runOptimisticMutation(
+        component.version ?? 1,
+        (version) => sidebarApi.deleteComponent(nodeId, version),
+        async () => {
+          const fresh = await sidebarApi.getAll();
+          const reloaded = fresh.diagrams.find((item) => item.id === diagram.id);
+          if (reloaded) onDiagramChange(reloaded);
+        }
+      ));
+      if (!result?.applied) return;
+      onComponentDeleted(nodeId);
+      setValidationResult(null);
+      setError("");
+      setNotice("Aus dem Repository gelöscht (auch aus allen anderen Diagrammen entfernt).");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Element konnte nicht aus dem Repository gelöscht werden.");
+    }
+  }
+
   async function removeNodesFromDiagram(nodeIds: string[]) {
     if (!canWrite || nodeIds.length === 0) return;
     const removed = new Set(nodeIds);
@@ -1114,7 +1170,7 @@ function DiagramEditorInner({
       startAddComponent(compId, position);
   }
 
-  async function createAndPlaceComponent(name: string, properties: Record<string, string>) {
+  async function createAndPlaceComponent(name: string, properties: Record<string, string>, acknowledgeDuplicate: boolean) {
     if (!canWrite || !pendingCreate) return;
     const { typeId, position } = pendingCreate;
     if (activeViewpoint && activeVisibleTypeIds && !activeVisibleTypeIds.has(typeId)) {
@@ -1131,7 +1187,7 @@ function DiagramEditorInner({
           properties,
           description: "",
           position
-        }, version),
+        }, version, { acknowledgeDuplicate }),
         async () => {
           const fresh = await sidebarApi.getAll();
           const reloaded = fresh.diagrams.find((item) => item.id === diagram.id);
@@ -1147,6 +1203,17 @@ function DiagramEditorInner({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Komponente konnte nicht erstellt werden.");
     }
+  }
+
+  function placeExistingInsteadOfCreating(compId: string) {
+    const position = pendingCreate?.position;
+    setPendingCreate(null);
+    if (diagram.componentIds.includes(compId)) {
+      // Already placed here: show it instead of creating a second element.
+      onSelectComponent(compId);
+      return;
+    }
+    void startAddComponent(compId, position);
   }
 
   // ── Smart add ───────────────────────────────────────────────────────────────
@@ -1463,7 +1530,10 @@ function DiagramEditorInner({
         return (
           <CreateComponentDialog
             type={type}
+            components={components}
             onConfirm={createAndPlaceComponent}
+            onUseExisting={placeExistingInsteadOfCreating}
+            onShowExisting={onSelectComponent}
             onCancel={() => setPendingCreate(null)}
           />
         );
@@ -1547,9 +1617,17 @@ function DiagramEditorInner({
           <div className="diagram-context-separator" />
           <button
             className="diagram-context-item danger"
+            title="Nur aus diesem Diagramm entfernen; das Element bleibt im Repository und in anderen Diagrammen erhalten."
             onClick={() => removeFromDiagram(contextMenu.nodeId)}
           >
             <X size={14} /> Aus Diagramm entfernen
+          </button>
+          <button
+            className="diagram-context-item danger"
+            title="Element endgültig löschen; es verschwindet aus allen Diagrammen."
+            onClick={() => deleteFromRepository(contextMenu.nodeId)}
+          >
+            <Trash2 size={14} /> Aus Repository löschen…
           </button>
         </div>
       )}

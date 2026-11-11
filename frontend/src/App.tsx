@@ -4,6 +4,7 @@ import { GitBranch, LayoutDashboard, LogOut, Plus, ScrollText, Table2 } from "lu
 import Sidebar, { type SidebarSelection } from "./Sidebar/Sidebar";
 import SidebarPanels from "./Sidebar/SidebarPanels";
 import DiagramEditor from "./DiagramEditor";
+import { removeComponentFromState } from "./Sidebar/repositoryReferences";
 import MetamodelView from "./MetamodelView";
 import { sidebarApi } from "./Sidebar/sidebarApi";
 import type { SidebarState } from "./Sidebar/sidebarTypes";
@@ -208,6 +209,7 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
           {activeDiagram ? (
             <DiagramEditor
               diagram={activeDiagram}
+              diagrams={sidebarState.diagrams}
               metamodel={sidebarState.metamodel}
               componentTypes={sidebarState.componentTypes}
               connectionTypes={sidebarState.connectionTypes}
@@ -226,6 +228,10 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
               onComponentCreated={(comp) =>
                 setSidebarState((s) => ({ ...s, components: [...s.components, comp] }))
               }
+              onComponentDeleted={(id) => {
+                setSidebarState((s) => removeComponentFromState(s, id));
+                setSidebarSelection((selection) => (selection?.kind === "component" && selection.id === id ? null : selection));
+              }}
               onSelectComponent={(id) => setSidebarSelection({ kind: "component", id })}
               onSelectConnection={(id) => setSidebarSelection({ kind: "connection", id })}
               onClose={() => setActiveDiagramId(null)}

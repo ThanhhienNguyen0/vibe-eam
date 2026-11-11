@@ -13,7 +13,8 @@ vi.mock("../Sidebar/sidebarStore.js", async (original) => ({
   ...await original<typeof import("../Sidebar/sidebarStore.js")>(),
   getComponents: vi.fn(async () => []),
   addComponent: vi.fn(async (input: unknown) => input),
-  addComponentType: vi.fn(async (input: unknown) => input)
+  addComponentType: vi.fn(async (input: unknown) => input),
+  getComponentTypes: vi.fn(async () => [])
 }));
 
 const secret = "req24-test-only-signing-secret-at-least-32-characters";
