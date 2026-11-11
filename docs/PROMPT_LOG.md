@@ -338,3 +338,34 @@ Der technische UI-Korrekturhead `b57d2f42176651fa82c4454fb6ed79693f317dd9` binde
 ### Exact-Head-Freigabe und Draft-PR am 09.11.2026
 
 Die getrennte Kontrollinstanz prüfte den unveränderten Produkthead `b0d7e4b07b4d627cd96f4a09857761c9ed33ee5a` gegen Basis `805b281d4f99f7f4bc0db8c9c66b0d1646ea5926` und erteilte im geprüften Umfang die technische Freigabe ohne offene P0–P3. Sieben von sieben erweiterten Race-Gegenproben für verspätete Erfolge, Fehler, `finally`, Auswahlwechsel und Unmount bestanden. Der Branch wurde anschließend veröffentlicht und Draft-PR #98 gegen `main` angelegt. GitHub bestätigte den exakten Head und die exakte Basis; `Quality and infrastructure`, `Dependency security`, `Secret security`, `CodeQL JavaScript TypeScript` und die CodeQL-PR-Auswertung waren erfolgreich. Menschliches Review, Merge, Issue-Schließung, Staging und Produktion bleiben offen. Der folgende reine Dokumentationscommit wird nicht gepusht.
+
+## REQ-03 und REQ-02 am 01.11.2026
+
+Auftrag: Issue #35 (REQ-03, Mehrere Views auf ein gemeinsames Repository) lesen, prüfen, was der Sidebar-/Diagramm-Pfad bereits abdeckt, und zusammen mit Issue #34 (REQ-02, Duplikaterkennung) umsetzen. REQ-28 (Persistenz auf PostgreSQL) war bereits erledigt.
+
+Bestandsaufnahme vor der Umsetzung: Diagramme referenzierten Elemente bereits per ID (Join-Tabellen aus REQ-28); „Aus Diagramm entfernen“ und eine Diagrammliste im Eigenschaftenpanel existierten. Es fehlten die Lösch-Warnung mit betroffenen Diagrammen, eine klar benannte Repository-Löschung im Diagramm und jede Form der Duplikaterkennung. Beim Löschen aus der Sidebar blieben außerdem die gelöschten IDs im Frontend-State der Diagramme stehen, bis neu geladen wurde.
+
+Umgesetzt wurde:
+
+- Backend `componentDuplicates.ts`: Namensnormalisierung, Duplikatsuche je Komponententyp, `warnings` im Response von POST/PATCH `/api/sidebar/components` und Audit-Log-Eintrag bei Duplikat (`recordAuditEvent` im bestehenden Audit Log).
+- Frontend `repositoryReferences.ts`: identische Normalisierung, „Verwendet in“-Abfragen, State-Bereinigung beim Löschen und Bestätigungstexte. `DuplicateHint.tsx` wird im Canvas-Anlegedialog und im Eigenschaftenpanel verwendet.
+- Diagramm-Kontextmenü: neue Aktion „Aus Repository löschen…“ neben „Aus Diagramm entfernen“. In der Sidebar heißt die Löschaktion für Komponenten und Verbindungen nun ebenfalls „Aus Repository löschen“.
+- Panelüberschrift „Verwendet in“; eindeutige Standardnamen („Neue Komponente 2“) für die Schnellanlage.
+- Tests: 6 Backendtests (Regeln und API inklusive Audit) und 9 Frontendtests (Regeln, Parität mit dem Backend, Rendering, Lösch-Warnung). Eine bestehende Rollen-Assertion wurde an den neuen Button-Titel angepasst, ohne die geprüfte Aussage zu ändern.
+
+### Nachkorrekturen nach manuellem Test (01.–02.11.2026)
+
+- Duplikatprüfung zusätzlich für Komponenten- und Verbindungstypen (Warnung, Audit, Hinweis im Typ-Editor, eindeutige Standardnamen).
+- Alle Lösch-Abfragen als eigenes Popup (`ConfirmDialog.tsx`) statt `window.confirm`; Fokus standardmäßig auf „Abbrechen“.
+- Ursache „Änderungen nicht sichtbar“: Getestet wurde der Docker-Stack, der erst nach `docker compose up -d --build` den neuen Code enthält; zusätzlich waren einzelne Dateien durch einen Editor-Speichervorgang auf einen älteren Stand zurückgefallen und wurden wiederhergestellt.
+- Fehler aus dem Test behoben: kurzes Aufblitzen des Hinweises beim normalen Anlegen (neues Element fand sich selbst), veralteter Panel-Entwurf nach Umbenennung in der Sidebar, fehlender Hinweis direkt beim Umbenennen in der Sidebar-Zeile, fehlender Hinweis bei gleichem Namen mit anderem Typ für frisch angelegte Elemente.
+- Manueller Test durch die Nutzerin/den Nutzer am 02.11.2026: REQ-02-Tests 1–8 und REQ-03-Tests bestanden.
+
+### Re-Integration auf aktuellem main am 09.11.2026
+
+PR #92 wurde gemergt, bevor der REQ-03/REQ-02-Code gepusht war; er enthielt nur einen Merge von `main` (Lockfiles). Issues #35 und #34 wurden dadurch automatisch geschlossen, obwohl der Code fehlte. Der lokale Commit wurde auf einen neuen Branch vom aktuellen `main` übertragen und mit REQ-23, REQ-26, REQ-31 und BUG-02 zusammengeführt:
+
+- Duplikat-Audit nutzt jetzt das REQ-23-Business-Event `duplicate.accepted` in derselben Transaktion statt des Legacy-Audit-Logs; `store.ts` bleibt unverändert gegenüber `main`.
+- Duplikatprüfung auch im neuen Anlegepfad `POST /diagrams/:id/components`.
+- Alle Lösch- und Speicheraktionen behalten das Optimistic Locking aus REQ-26 (`If-Match`, Konfliktdialog); „Aus Repository löschen…“ und „Vorhandenes Element verwenden“ senden die Objektversion.
+- Popup auch für die neue Katalog-Löschung aus REQ-31; Umbenennungsfeld zeigt die Typ-Icons aus BUG-02.

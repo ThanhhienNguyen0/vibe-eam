@@ -1200,19 +1200,19 @@ export async function getComponentTypes(): Promise<ComponentType[]> {
   return (await readSidebarState()).componentTypes;
 }
 
-export async function addComponentType(ct: ComponentType): Promise<ComponentType> {
+export async function addComponentType(ct: ComponentType, event?: AuditEntryInput): Promise<ComponentType> {
   const state = await readSidebarState();
   state.componentTypes.push(ct);
-  await writeSidebarState(state);
+  await writeSidebarState(state, event);
   return ct;
 }
 
-export async function updateComponentType(id: string, patch: Partial<ComponentType>): Promise<ComponentType | null> {
+export async function updateComponentType(id: string, patch: Partial<ComponentType>, event?: AuditEntryInput): Promise<ComponentType | null> {
   const state = await readSidebarState();
   const idx = state.componentTypes.findIndex((c) => c.id === id);
   if (idx === -1) return null;
   state.componentTypes[idx] = { ...state.componentTypes[idx], ...patch, id };
-  await writeSidebarState(state);
+  await writeSidebarState(state, event);
   return state.componentTypes[idx];
 }
 
@@ -1256,19 +1256,19 @@ export async function getConnectionTypes(): Promise<ConnectionType[]> {
   return (await readSidebarState()).connectionTypes;
 }
 
-export async function addConnectionType(ct: ConnectionType): Promise<ConnectionType> {
+export async function addConnectionType(ct: ConnectionType, event?: AuditEntryInput): Promise<ConnectionType> {
   const state = await readSidebarState();
   state.connectionTypes.push(ct);
-  await writeSidebarState(state);
+  await writeSidebarState(state, event);
   return ct;
 }
 
-export async function updateConnectionType(id: string, patch: Partial<ConnectionType>): Promise<ConnectionType | null> {
+export async function updateConnectionType(id: string, patch: Partial<ConnectionType>, event?: AuditEntryInput): Promise<ConnectionType | null> {
   const state = await readSidebarState();
   const idx = state.connectionTypes.findIndex((c) => c.id === id);
   if (idx === -1) return null;
   state.connectionTypes[idx] = { ...state.connectionTypes[idx], ...patch, id };
-  await writeSidebarState(state);
+  await writeSidebarState(state, event);
   return state.connectionTypes[idx];
 }
 
@@ -1379,11 +1379,11 @@ export async function getComponents(): Promise<ComponentInstance[]> {
   return (await readSidebarState()).components;
 }
 
-export async function addComponent(comp: ComponentInstance): Promise<ComponentInstance> {
+export async function addComponent(comp: ComponentInstance, event?: AuditEntryInput): Promise<ComponentInstance> {
   const state = await readSidebarState();
   comp = { ...comp, version: 1 };
   state.components.push(comp);
-  await writeSidebarState(state);
+  await writeSidebarState(state, event);
   return comp;
 }
 
@@ -1391,7 +1391,8 @@ export async function addComponentToDiagram(
   comp: ComponentInstance,
   diagramId: string,
   position: DiagramPosition,
-  expectedDiagramVersion: number
+  expectedDiagramVersion: number,
+  event?: AuditEntryInput
 ): Promise<{ component: ComponentInstance; diagram: Diagram }> {
   return databaseSidebarRepository().createComponentInDiagram(
     requireCompanyId(),
@@ -1399,16 +1400,22 @@ export async function addComponentToDiagram(
     diagramId,
     position,
     expectedDiagramVersion,
-    authenticatedAuditActor()
+    authenticatedAuditActor(),
+    event
   );
 }
 
-export async function updateComponent(id: string, patch: Partial<ComponentInstance>, expectedVersion: number): Promise<ComponentInstance | null> {
+export async function updateComponent(
+  id: string,
+  patch: Partial<ComponentInstance>,
+  expectedVersion: number,
+  event?: AuditEntryInput
+): Promise<ComponentInstance | null> {
   const state = await readSidebarState();
   const idx = state.components.findIndex((c) => c.id === id);
   if (idx === -1) return null;
   const value = { ...state.components[idx], ...patch, id, version: state.components[idx].version };
-  return databaseSidebarRepository().updateComponent(requireCompanyId(), value, expectedVersion, authenticatedAuditActor());
+  return databaseSidebarRepository().updateComponent(requireCompanyId(), value, expectedVersion, authenticatedAuditActor(), event);
 }
 
 export async function deleteComponent(id: string, expectedVersion: number): Promise<boolean> {
