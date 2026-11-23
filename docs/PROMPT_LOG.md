@@ -369,3 +369,16 @@ PR #92 wurde gemergt, bevor der REQ-03/REQ-02-Code gepusht war; er enthielt nur 
 - Duplikatprüfung auch im neuen Anlegepfad `POST /diagrams/:id/components`.
 - Alle Lösch- und Speicheraktionen behalten das Optimistic Locking aus REQ-26 (`If-Match`, Konfliktdialog); „Aus Repository löschen…“ und „Vorhandenes Element verwenden“ senden die Objektversion.
 - Popup auch für die neue Katalog-Löschung aus REQ-31; Umbenennungsfeld zeigt die Typ-Icons aus BUG-02.
+
+## BUG-03: doppelte Smart-Add-Mitgliedschaften am 11.11.2026
+
+Ausgangsstand war `main` auf `5dd4195fea20ea0e49801e13473bc46ddc851670`, dokumentiert in GitHub-Issue #104. Beim Hinzufügen von „ERP System“ zeigte der Smart-Add-Dialog mehrere auswählbare Beziehungen zu denselben Komponenten. „Mit Auswahl hinzufügen“ übernahm die Ziel-Komponenten pro ausgewählter Beziehung ungefiltert in `componentIds`. Die PostgreSQL-Join-Tabelle erlaubt dagegen jede Diagramm-Komponenten-Zuordnung nur einmal; der daraus entstehende Persistenzfehler erreichte den generischen HTTP-500-Handler. Abgewählte Zeilen konnten bei einem erneuten Versuch wieder erscheinen, weil der fehlgeschlagene Request keine Diagrammänderung gespeichert hatte und die Vorschläge aus dem unveränderten Repository neu berechnet wurden.
+
+Umgesetzt wurden:
+
+- eine zentrale, getestete Zusammenführung, die Komponenten- und Verbindungsmitgliedschaften vor dem PATCH stabil dedupliziert und nur tatsächlich neue Nachbarn positioniert;
+- eine Erklärung im Dialog, dass jede Zeile eine Beziehung darstellt, sowie eine Nummerierung mehrerer Beziehungen zur gleichen Komponente;
+- identische Frontend-/Backend-Validierungsfehler für doppelte Komponenten- und Verbindungs-IDs, sodass ungültige direkte API-Payloads vor der Persistenz als fachlicher HTTP-400-Fehler abgelehnt werden;
+- Regressionstests für mehrere Beziehungen zum selben Nachbarn, „Nur Komponente“, bestehende Mitgliedschaften und die API-Grenzvalidierung.
+
+Nachweise: gezielt 5/5 Frontend- und 22/22 Backend-Regeltests; vollständiges `npm run check` mit 184 bestandenen und 39 übersprungenen Backendtests, 104 bestandenen Frontendtests, Lint, Typechecks, Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen; drei reale Compose-`config --quiet`-Läufe; Dependency-Scan ohne hohe/kritische Befunde bei 10 weiter dokumentierten moderaten Befunden; vollständiger Secret-Scan ohne Fund. Ein erster Check scheiterte am gesperrten Prisma-Download, der nächste an einem einmaligen Vitest-Workerabbruch in `rbac.test.ts`; der isolierte Rollentest bestand anschließend 14/14 und der vollständige Wiederholungslauf bestand. Nicht belegt sind Browser-E2E, Image-Build, PostgreSQL-Integration, unabhängiges Review, Remote-CI, Merge oder Deployment.
