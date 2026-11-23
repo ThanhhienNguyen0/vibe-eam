@@ -1025,10 +1025,18 @@ function DiagramEditorInner({
           description: ""
         }));
         if (!result) return;
+        const wasInDiagram = diagram.connectionIds.includes(result.connection.id);
         if (result.created) onConnectionCreated(result.connection);
         onDiagramChange(result.diagram);
         setError("");
-        setNotice(`Verbindung „${connType.name}“ von ${srcComp.name} zu ${tgtComp.name} erstellt.`);
+        const label = `„${connType.name}“ von ${srcComp.name} zu ${tgtComp.name}`;
+        setNotice(
+          result.created
+            ? `Verbindung ${label} erstellt.`
+            : wasInDiagram
+              ? `Diese Verbindung ${label} gibt es bereits – es wurde keine neue angelegt.`
+              : `Bestehende Verbindung ${label} zum Diagramm hinzugefügt.`
+        );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Verbindung konnte nicht erstellt werden.");
       }
