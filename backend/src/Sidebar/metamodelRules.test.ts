@@ -213,6 +213,23 @@ describe("Sidebar metamodel connection rules", () => {
     expect(second.valid).toBe(true);
   });
 
+  it("rejects duplicate diagram memberships before persistence", () => {
+    const result = validateDiagram({
+      id: "duplicate-memberships",
+      name: "Duplicate memberships",
+      description: "",
+      componentIds: ["app", "proc", "app"],
+      connectionIds: ["app-serves-proc", "app-serves-proc"],
+      positions: {}
+    }, state, { includeRequiredRules: false });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.map((item) => item.code)).toEqual(expect.arrayContaining([
+      "DIAGRAM_COMPONENT_DUPLICATE",
+      "DIAGRAM_CONNECTION_DUPLICATE"
+    ]));
+  });
+
   it("rejects Data Object --serves--> Business Capability", () => {
     const result = validateConnectionInstance(state.connections[1], state);
     expect(result.valid).toBe(false);

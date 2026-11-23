@@ -94,7 +94,7 @@ Status:
 | Relationen | 3 | Tatsaechlich funktional | Relation Create/Delete API-getestet; Relationstypen werden jetzt semantisch gegen das EAM-Metamodell validiert. |
 | Canvas | 2 | Teilweise funktional | React Flow ist implementiert; Sichtbarkeit/Interaktion wurde nicht per Browser-E2E automatisiert geprueft. |
 | Eigenschaftenpanel | 2 | Teilweise funktional | Codepfad fuer Bearbeitung vorhanden; API-Patch getestet, aber keine automatisierte UI-Bedienpruefung. |
-| Validierung | 3 | Tatsaechlich funktional | Selbstrelation, fehlende Importarrays und fachlich ungueltige Relationen werden abgelehnt. Keine vollstaendige ArchiMate-Semantik. |
+| Validierung | 3 | Tatsaechlich funktional | Selbstrelation, fehlende Importarrays, doppelte Diagrammmitgliedschaften und fachlich ungueltige Relationen werden vor der Persistenz abgelehnt. Keine vollstaendige ArchiMate-Semantik. |
 | Impact-Analyse | 3 | Tatsaechlich funktional | Zwei Modi: Downstream Business Impact und Upstream Dependencies, rekursiv, mit Pfad, Level und Zyklusvermeidung. |
 | Impact Score | 3 | Tatsaechlich funktional | Downstream Impact wird je Element berechnet, nach Elementtyp gewichtet und dedupliziert getestet. |
 | Heatmap und Filter | 2 | Teilweise funktional | Code zeigt unabhaengige Filter- und Heatmap-State-Pfade; nicht per visueller E2E-Pruefung validiert. |

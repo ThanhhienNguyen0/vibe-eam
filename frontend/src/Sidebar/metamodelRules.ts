@@ -413,6 +413,9 @@ export function validateDiagram(diagram: Diagram, state: SidebarState, options: 
   if (diagram.metamodelId && diagram.metamodelId !== state.metamodel.id) add(result, message("error", "METAMODEL_MISMATCH", `Diagram violates Metamodel: expected '${state.metamodel.name}' but references '${diagram.metamodelId}'.`, diagram.id, state.metamodel.id, "metamodel"));
   if (diagram.viewpointId && !viewpoint) add(result, message("error", "VIEWPOINT_MISSING", `Viewpoint '${diagram.viewpointId}' does not exist.`, diagram.id, undefined, "viewpoint"));
 
+  for (const id of new Set(diagram.componentIds.filter((componentId, index, ids) => ids.indexOf(componentId) !== index))) add(result, message("error", "DIAGRAM_COMPONENT_DUPLICATE", `Diagram references component '${id}' more than once.`, diagram.id, undefined, "diagram"));
+  for (const id of new Set(diagram.connectionIds.filter((connectionId, index, ids) => ids.indexOf(connectionId) !== index))) add(result, message("error", "DIAGRAM_CONNECTION_DUPLICATE", `Diagram references connection '${id}' more than once.`, diagram.id, undefined, "diagram"));
+
   for (const id of diagram.componentIds.filter((componentId) => !state.components.some((component) => component.id === componentId))) add(result, message("error", "DIAGRAM_COMPONENT_MISSING", `Diagram references missing component '${id}'.`, diagram.id, undefined, "diagram"));
 
   const diagramConnections = diagram.connectionIds
