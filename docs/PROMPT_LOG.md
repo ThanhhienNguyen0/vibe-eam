@@ -431,3 +431,21 @@ Umgesetzt wurde:
 - Tests: 8 Tests in `contextMenuPosition.test.ts` (alle vier Ränder, Ecke, Umklappen, Menü größer als Fenster, Idempotenz).
 
 Nachweise vom 25.11.2026: Lint, Typechecks, 184 bestandene und 39 übersprungene Backendtests, 112 bestandene Frontendtests, Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfiguration, jeweils Exit 0. `db:generate` scheiterte lokal mit EPERM, weil der laufende Dev-Server die Prisma-Engine-DLL gesperrt hielt; das Prisma-Schema ist unverändert, die übrigen Schritte von `npm run check` wurden einzeln ausgeführt. Nicht belegt: Browser-E2E, manueller Test, unabhängige Kontrolle, Remote-CI, Review und Merge.
+
+## #117: Speicherstatus und fehlgeschlagene Speicherung sichtbar machen am 25.11.2026
+
+Auftrag: Issue #117 umsetzen. Nutzer konnten nicht erkennen, ob Änderungen gespeichert sind oder ein Speichern fehlgeschlagen ist. Ausgangsstand war `main` auf `9a669217c6d43ac78dcd5ff818b5b6edab30465a`, Branch `codex/eam/feedback-117-speicherstatus` (getrennt von #122, siehe dort).
+
+Befund vor der Umsetzung: Es gab keine zentrale Speicheranzeige. Einzelne Formulare zeigten „Speichere…“ am eigenen Button; Fehler erschienen nur dort, wo der Aufrufer sie abfing. Das Verschieben von Knoten speicherte ohne jede Rückmeldung, ein Fehler dabei blieb unsichtbar. Alle Schreibzugriffe auf das Repository laufen über `sidebarApi` und damit über eine Stelle.
+
+Umgesetzt wurde:
+
+- `saveTracker.ts`: zählt jeden schreibenden Request von `sidebarApi` (alles außer GET). Zustände „Alles gespeichert“, „Speichern läuft …“, „Speichern fehlgeschlagen“. Gespeichert gilt erst nach einer 2xx-Antwort; die Routen antworten erst nach dem Datenbankschreiben.
+- Vorübergehende Fehler (keine Antwort, 408, 429, 5xx) werden festgehalten: Der Aufrufer wartet weiter, „Erneut versuchen“ sendet den identischen Request in der ursprünglichen Reihenfolge erneut. Bei Erfolg läuft der Aufrufer normal weiter, sein Zustand bleibt konsistent. „Verwerfen“ gibt dem Aufrufer den ursprünglichen Fehler und lädt den gespeicherten Stand neu.
+- Endgültige Antworten (4xx: Validierung, Konflikt, Berechtigung) gehen sofort an den Aufrufer wie bisher. Die Anzeige bleibt auf „fehlgeschlagen“ mit dem Servergrund, bis der nächste Schreibvorgang startet oder die Meldung geschlossen wird.
+- `SaveStatus.tsx`: Statusanzeige im Kopfbereich (`role="status"`) und ein Fehlerbanner (`role="alert"`) mit Grund und Aktionen. Das Banner liegt über allen Dialogen, weil ein Dialog auf den festgehaltenen Request warten kann.
+- Beim Schließen oder Neuladen des Tabs fragt der Browser nach, solange etwas läuft oder nicht gespeichert ist.
+- Beim Abmelden und bei abgelaufener Anmeldung (401) wird der Tracker zurückgesetzt. Festgehaltene Requests werden verworfen und nie mit einer anderen Anmeldung erneut gesendet.
+- Tests: 26 Tests in `saveTracker.test.ts` (Zustände, Wiederholung, Reihenfolge, Verwerfen, Ablehnung, Abmelden, Fehlerklassifikation, Integration mit `sidebarApi` über gemocktes `fetch`) und 8 Tests in `SaveStatus.test.tsx` (Anzeige und Banner-Aktionen).
+
+Nachweise vom 25.11.2026: Lint, Typechecks, 184 bestandene und 39 übersprungene Backendtests, 138 bestandene Frontendtests, Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfiguration, jeweils Exit 0. `db:generate` wurde wie bei #122 wegen der vom laufenden Dev-Server gesperrten Prisma-Engine-DLL ausgelassen; das Prisma-Schema ist unverändert. Ein erster Testlauf scheiterte, weil `saveStatus.ts` und `SaveStatus.tsx` auf Windows kollidierten (umbenannt in `saveTracker.ts`), ein zweiter an einer Testhilfe, die Icon-Knoten serialisieren wollte. Nicht belegt: Browser-E2E, manueller Test, unabhängige Kontrolle, Remote-CI, Review und Merge.

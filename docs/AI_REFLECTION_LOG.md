@@ -554,3 +554,20 @@ Stakeholder wurden bewusst als normale Diagrammelemente erhalten. Ein Stakeholde
 
 - Die Platzierung wird beim Öffnen berechnet. Wird das Fenster bei offenem Menü verkleinert, wird nicht neu platziert; das Menü schließt beim nächsten Klick daneben.
 - Kein Browser-E2E-Test. Belegt ist die reine Funktion; die Messung per `getBoundingClientRect` im echten Browser ist nur manuell prüfbar.
+
+## #117: Speicherstatus (25.11.2026)
+
+### Entscheidungen
+
+- Eine zentrale Stelle statt Anpassungen an jedem Aufrufer: Alle Repository-Schreibzugriffe laufen über `sidebarApi`. Dort mitzuzählen erfasst auch Speichervorgänge ohne eigene Rückmeldung, etwa das Verschieben von Knoten.
+- Festhalten statt sofort ablehnen bei vorübergehenden Fehlern: Würde der Request sofort scheitern und später „nebenher“ erneut gesendet, bekäme der Aufrufer den Erfolg nicht mit; Fehlermeldung und lokaler Zustand wären dann veraltet. Durch das Festhalten setzt ein erfolgreicher Wiederholversuch genau dort fort, wo der erste Versuch aufgehört hat.
+- 4xx-Antworten werden nicht wiederholt: Derselbe Request würde wieder abgelehnt. Der Wiederholungsweg ist hier „Eingabe prüfen und erneut speichern“; Konflikte (409) behandelt weiterhin der bestehende Konfliktdialog.
+- Zurücksetzen beim Abmelden: Der Tracker lebt modulweit. Ohne Zurücksetzen könnte eine festgehaltene Änderung nach einem Nutzerwechsel im selben Tab mit dem neuen Token gesendet werden; eine Neuanlage (POST) landete dann in der Firma des neuen Nutzers.
+- Dateiname `saveTracker.ts` statt `saveStatus.ts`: Neben `SaveStatus.tsx` kollidierte er auf Windows (Dateisystem ohne Groß-/Kleinschreibung).
+
+### Grenzen
+
+- Nicht erfasst sind Schreibzugriffe außerhalb von `sidebarApi`: Nutzerverwaltung, Anmeldung und der Datei-Import (`transferApi`, eigener Fortschrittsdialog).
+- Kommt ein Request beim Server an, die Antwort aber nicht beim Client, ist „Erneut versuchen“ bei Neuanlagen (POST ohne `If-Match`) nicht idempotent und kann ein Duplikat erzeugen. Änderungen und Löschungen mit `If-Match` laufen stattdessen in den Konfliktdialog. Abhilfe wären Idempotenzschlüssel im Backend.
+- Nach „Verwerfen“ lädt die App den gespeicherten Stand neu. Aufrufer ohne eigene Fehlerbehandlung (z. B. Verschieben von Knoten, bereits vorher so) hinterlassen dabei eine unbehandelte Promise-Ablehnung in der Browserkonsole.
+- Nicht im Browser getestet: Die Anzeige ist mit `react-test-renderer` und statischem Rendering geprüft, der Ablauf mit gemocktem `fetch`. Offline-Verhalten, `beforeunload`-Dialog und Lage des Banners über Dialogen sind nur manuell prüfbar.

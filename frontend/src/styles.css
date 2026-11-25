@@ -3876,6 +3876,23 @@ tr.attention td {
 .account-role-info summary::-webkit-details-marker { display: none; }
 .account-role-info > div { position: absolute; z-index: 50; top: calc(100% + 8px); right: 0; width: min(300px, 80vw); padding: 12px 14px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; box-shadow: 0 12px 28px rgb(15 23 42 / 18%); color: #334155; font-size: 13px; line-height: 1.4; }
 .account-role-info p { margin: 7px 0 0; }
+
+/* #117: save status in the header and the failure banner */
+.save-status { display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.save-status--saved { background: #f0fdf4; color: #166534; }
+.save-status--saving { background: #f1f5f9; color: #475569; }
+.save-status--saving svg { animation: save-status-spin 1s linear infinite; }
+.save-status--failed { background: #fef2f2; color: #b91c1c; }
+@keyframes save-status-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .save-status--saving svg { animation: none; } }
+/* Above every dialog (highest: .conflict-backdrop, 10000), because a dialog may wait for the failed write. */
+.save-failure { position: fixed; z-index: 10050; left: 50%; bottom: 20px; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border: 1px solid #fecaca; border-radius: 10px; background: #fef2f2; color: #991b1b; box-shadow: 0 12px 32px rgb(15 23 42 / 22%); }
+.save-failure > svg { flex: none; margin-top: 2px; }
+.save-failure-text { display: grid; gap: 3px; flex: 1; font-size: 13px; line-height: 1.4; }
+.save-failure-actions { display: flex; gap: 8px; flex: none; align-self: center; }
+.save-failure-actions button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid #fca5a5; border-radius: 7px; background: #fff; color: #991b1b; cursor: pointer; font-size: 13px; }
+.save-failure-actions button.primary { background: #b91c1c; border-color: #b91c1c; color: #fff; }
+.save-failure-close { flex: none; display: inline-flex; padding: 4px; border: 0; background: transparent; color: #991b1b; cursor: pointer; }
 .role-guide { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 16px 0 22px; }
 .role-guide-card { display: grid; gap: 5px; padding: 12px; border: 1px solid #d8dee8; border-radius: 8px; background: #f8fafc; }
 .role-guide-card span { color: #475569; font-size: 13px; line-height: 1.4; }

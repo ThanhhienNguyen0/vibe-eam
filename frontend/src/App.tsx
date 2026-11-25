@@ -24,6 +24,8 @@ import { AccessContext, ROLE_DESCRIPTIONS, ROLE_LABELS, useAccess } from "./acce
 import UserManagement from "./UserManagement";
 import CatalogView from "./CatalogView";
 import AuditLogView from "./AuditLogView";
+import { SaveFailureBanner, SaveStatusIndicator, useSaveStatus, useWarnBeforeLeavingUnsaved } from "./SaveStatus";
+import { saveTracker } from "./saveTracker";
 
 export default function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -31,7 +33,8 @@ export default function App() {
   const [authError, setAuthError] = useState("");
 
   useEffect(() => {
-    const unauthorized = () => { clearAuthToken(); setUser(null); setCheckingAuth(false); };
+    // #117: unsaved writes of this login must never be re-sent under another login.
+    const unauthorized = () => { saveTracker.reset(); clearAuthToken(); setUser(null); setCheckingAuth(false); };
     window.addEventListener("eam:unauthorized", unauthorized);
     if (!getAuthToken()) {
       setCheckingAuth(false);
@@ -58,6 +61,7 @@ export default function App() {
 
   async function logout() {
     try { await authApi.logout(); } catch { /* Stateless logout remains local even if the request fails. */ }
+    saveTracker.reset();
     clearAuthToken();
     setUser(null);
   }
@@ -94,6 +98,8 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
   const [workspaceView, setWorkspaceView] = useState<"diagrams" | "catalogs" | "metamodel" | "users" | "audit">("diagrams");
   const [creatingDiagram, setCreatingDiagram] = useState(false);
   const [error, setError] = useState("");
+  const saveStatus = useSaveStatus();
+  useWarnBeforeLeavingUnsaved(saveStatus);
 
   const activeDiagram = sidebarState.diagrams.find((d) => d.id === activeDiagramId) ?? null;
   const activeCatalog = sidebarState.catalogs.find((c) => c.id === activeCatalogId) ?? null;
@@ -113,6 +119,13 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
   useEffect(() => {
     sidebarApi.getAll()
       .then((state) => { setSidebarState(state); setLoaded(true); })
+      .catch((e) => setError(e instanceof Error ? e.message : "Daten konnten nicht geladen werden."));
+  }, []);
+
+  /** #117: after discarding unsaved changes, show what the server actually stored. */
+  const reloadStoredState = useCallback(() => {
+    sidebarApi.getAll()
+      .then((state) => { setSidebarState(state); setError(""); })
       .catch((e) => setError(e instanceof Error ? e.message : "Daten konnten nicht geladen werden."));
   }, []);
 
@@ -301,6 +314,7 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
           </nav>
         )}
         <div className="account-menu">
+          <SaveStatusIndicator status={saveStatus} />
           <span className="account-identity"><strong>{user.name ?? user.email}</strong><small>{user.companyName}</small></span>
           <details className="account-role-info">
             <summary>{ROLE_LABELS[user.role]}</summary>
@@ -438,6 +452,7 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
           </ResizablePanel>
         )}
       </div>
+      <SaveFailureBanner status={saveStatus} onDiscarded={reloadStoredState} />
     </div>
   );
 }
