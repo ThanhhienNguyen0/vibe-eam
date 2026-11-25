@@ -11,6 +11,9 @@ import CatalogEditor from "./CatalogEditor";
 import { ElementAuditHistory } from "../AuditLogView";
 import DuplicateHint from "./DuplicateHint";
 import { attachedConnections, diagramsUsingComponent, findDuplicateComponents, findDuplicatesByName, findSameNameInOtherTypes, removeComponentFromState } from "./repositoryReferences";
+import { connectionsInvalidAfterTypeChange, type TypeChangeConflict } from "./metamodelRules";
+import { elementNameError, isPlaceholderName, placeholderQuestion, placeholderWarning } from "./nameRules";
+import { useSecondConfirmation } from "./useSecondConfirmation";
 import type {
   ComponentInstance,
   ComponentShape,
@@ -331,12 +334,17 @@ function SidebarPanelsContent({ selection, sidebarState, onStateChange, onSelect
           diagrams={diagrams}
           onSelect={onSelect}
           onOpenDiagram={onOpenDiagram}
-          onSave={async (patch, acknowledgeDuplicate) => {
+          typeChangeConflicts={(componentTypeId) => connectionsInvalidAfterTypeChange(sidebarState, comp.id, componentTypeId)}
+          onSave={async (patch, acknowledgeDuplicate, acknowledgePlaceholder) => {
+            // Confirmation flags are only sent when set: REQ-02 audit event and #113 placeholder confirmation.
+            const options = {
+              ...(acknowledgeDuplicate ? { acknowledgeDuplicate: true } : {}),
+              ...(acknowledgePlaceholder ? { acknowledgePlaceholder: true } : {})
+            };
             const result = await runOptimisticMutation(
               comp.version ?? 1,
-              // The flag only matters for the REQ-02 audit event, so it is sent only when a duplicate was accepted.
-              (version) => acknowledgeDuplicate
-                ? sidebarApi.updateComponent(comp.id, patch, version, { acknowledgeDuplicate })
+              (version) => Object.keys(options).length > 0
+                ? sidebarApi.updateComponent(comp.id, patch, version, options)
                 : sidebarApi.updateComponent(comp.id, patch, version),
               async () => onStateChange(await sidebarApi.getAll()),
               chooseConflictResolution
@@ -441,10 +449,12 @@ function SidebarPanelsContent({ selection, sidebarState, onStateChange, onSelect
           key={`${d.id}:${d.version ?? 1}`}
           diagram={d}
           viewpoints={viewpoints}
-          onSave={async (patch) => {
+          onSave={async (patch, acknowledgePlaceholder) => {
             const result = await runOptimisticMutation(
               d.version ?? 1,
-              (version) => sidebarApi.updateDiagram(d.id, patch, version),
+              (version) => acknowledgePlaceholder
+                ? sidebarApi.updateDiagram(d.id, patch, version, { acknowledgePlaceholder: true })
+                : sidebarApi.updateDiagram(d.id, patch, version),
               async () => onStateChange(await sidebarApi.getAll()),
               chooseConflictResolution
             );
@@ -1216,6 +1226,7 @@ function ComponentEditor({
   diagrams,
   onSelect,
   onOpenDiagram,
+  typeChangeConflicts,
   onSave,
   onUseExisting
 }: {
@@ -1227,17 +1238,26 @@ function ComponentEditor({
   diagrams: Diagram[];
   onSelect: (sel: SidebarSelection) => void;
   onOpenDiagram: (id: string) => void;
-  onSave: (p: Partial<ComponentInstance>, acknowledgeDuplicate: boolean) => Promise<void>;
+  /** #111: connections the active metamodel would no longer allow with the given type. */
+  typeChangeConflicts: (componentTypeId: string) => TypeChangeConflict[];
+  onSave: (p: Partial<ComponentInstance>, acknowledgeDuplicate: boolean, acknowledgePlaceholder: boolean) => Promise<void>;
   onUseExisting: (existingId: string) => Promise<void>;
 }) {
   const { canReadAudit } = useAccess();
   const [draft, setDraft] = useState(comp);
   const [saveError, setSaveError] = useState("");
   const dirty = JSON.stringify(draft) !== JSON.stringify(comp);
+  // #108: name is required and checked at the field; #111: a type change must not break connections.
+  const nameError = elementNameError(draft.name);
+  // #113: a new placeholder name is allowed after a warning and a second click on „Speichern“.
+  const placeholderHint = placeholderWarning(draft.name, comp.name);
+  const placeholderStep = useSecondConfirmation(placeholderHint, draft.name);
+  const legacyPlaceholder = !nameError && !placeholderHint && isPlaceholderName(draft.name);
+  const conflicts = draft.componentTypeId !== comp.componentTypeId ? typeChangeConflicts(draft.componentTypeId) : [];
   const duplicates = findDuplicateComponents(components, draft, comp.id);
   const unused = diagramsUsingComponent(diagrams, comp.id).length === 0 && attachedConnections(connections, comp.id).length === 0;
   const typeName = (typeId: string) => componentTypes.find((type) => type.id === typeId)?.name ?? "unbekannter Typ";
-  // Only for fresh elements: the sidebar "+" creates with the first type, so the real type may not be chosen yet.
+  // Only for fresh, unused elements: a wrongly chosen type at creation is still easy to fix here.
   const sameNameOtherTypes = duplicates.length === 0 && unused
     ? findSameNameInOtherTypes(components, draft, comp.id).map((item) => ({ id: item.id, name: `${item.name} (${typeName(item.componentTypeId)})` }))
     : [];
@@ -1247,9 +1267,11 @@ function ComponentEditor({
   }
 
   async function save() {
+    if (nameError || conflicts.length > 0) return;
+    if (!placeholderStep.confirm()) return;
     setSaveError("");
     try {
-      await onSave(draft, duplicates.length > 0);
+      await onSave(draft, duplicates.length > 0, placeholderHint !== null);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
     }
@@ -1260,12 +1282,51 @@ function ComponentEditor({
 
   return (
     <div className="sb-form">
-      <label>Name<input value={draft.name} onChange={(e) => set("name", e.target.value)} /></label>
+      <label>Name
+        <input
+          value={draft.name}
+          required
+          aria-invalid={nameError ? true : undefined}
+          aria-describedby={nameError ? `name-error-${comp.id}` : placeholderHint ? `name-hint-${comp.id}` : undefined}
+          onChange={(e) => set("name", e.target.value)}
+        />
+        {nameError && <span id={`name-error-${comp.id}`} className="sb-field-error" role="alert">{nameError}</span>}
+        {placeholderHint && !placeholderStep.awaiting && <span id={`name-hint-${comp.id}`} className="sb-field-hint">{placeholderHint}</span>}
+        {legacyPlaceholder && <span className="sb-field-hint">Das ist noch ein Platzhaltername. Bitte einen aussagekräftigen Namen vergeben.</span>}
+      </label>
+      {placeholderStep.awaiting && (
+        <p id={`name-hint-${comp.id}`} className="sb-field-confirm" role="alert">
+          {placeholderQuestion(draft.name)} Zum Bestätigen noch einmal auf „Ja, mit Platzhalter speichern“ klicken.
+        </p>
+      )}
       <label>Typ
-        <select value={draft.componentTypeId} onChange={(e) => set("componentTypeId", e.target.value)}>
+        <select
+          value={draft.componentTypeId}
+          aria-invalid={conflicts.length > 0 ? true : undefined}
+          aria-describedby={conflicts.length > 0 ? `type-conflicts-${comp.id}` : undefined}
+          onChange={(e) => set("componentTypeId", e.target.value)}
+        >
           {componentTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </label>
+      {conflicts.length > 0 && (
+        <div id={`type-conflicts-${comp.id}`} className="sb-field-error-box" role="alert">
+          <strong>
+            {conflicts.length === 1
+              ? `Mit dem Typ „${selectedType?.name ?? draft.componentTypeId}“ wäre diese Verbindung laut Metamodell nicht mehr erlaubt:`
+              : `Mit dem Typ „${selectedType?.name ?? draft.componentTypeId}“ wären diese ${conflicts.length} Verbindungen laut Metamodell nicht mehr erlaubt:`}
+          </strong>
+          <ul>
+            {conflicts.map((conflict) => (
+              <li key={conflict.id}>
+                <span className="sb-conflict-label">{conflict.label}</span>
+                <span className="muted">{conflict.reason}</span>
+              </li>
+            ))}
+          </ul>
+          <p>Entferne oder ändere diese Verbindungen zuerst, oder behalte den bisherigen Typ.</p>
+        </div>
+      )}
       <DuplicateHint
         duplicates={duplicates}
         typeName={selectedType?.name}
@@ -1303,7 +1364,9 @@ function ComponentEditor({
         onChange={(next) => set("properties", next)}
       />
 
-      <button className="sb-save-btn" disabled={!dirty} onClick={save}>Speichern</button>
+      <button className="sb-save-btn" disabled={!dirty || !!nameError || conflicts.length > 0} onClick={save}>
+        {placeholderStep.awaiting ? "Ja, mit Platzhalter speichern" : "Speichern"}
+      </button>
       {saveError && <p className="sb-error" role="alert">{saveError}</p>}
 
       <LinkedConnections
@@ -1429,15 +1492,46 @@ function DiagramMetaEditor({
 }: {
   diagram: Diagram;
   viewpoints: Viewpoint[];
-  onSave: (p: Partial<Diagram>) => Promise<void>;
+  onSave: (p: Partial<Diagram>, acknowledgePlaceholder: boolean) => Promise<void>;
   onOpen: () => void;
 }) {
   const [draft, setDraft] = useState(diagram);
+  const [saveError, setSaveError] = useState("");
   const dirty = JSON.stringify(draft) !== JSON.stringify(diagram);
+  // #113: diagrams follow the same name rule as components.
+  const nameError = elementNameError(draft.name);
+  const placeholderHint = placeholderWarning(draft.name, diagram.name);
+  const placeholderStep = useSecondConfirmation(placeholderHint, draft.name);
+
+  async function save() {
+    if (nameError) return;
+    if (!placeholderStep.confirm()) return;
+    setSaveError("");
+    try {
+      await onSave(draft, placeholderHint !== null);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
+    }
+  }
 
   return (
     <div className="sb-form">
-      <label>Name<input value={draft.name} onChange={(e) => setDraft((p) => ({ ...p, name: e.target.value }))} /></label>
+      <label>Name
+        <input
+          value={draft.name}
+          required
+          aria-invalid={nameError ? true : undefined}
+          aria-describedby={nameError ? `name-error-${diagram.id}` : placeholderHint ? `name-hint-${diagram.id}` : undefined}
+          onChange={(e) => setDraft((p) => ({ ...p, name: e.target.value }))}
+        />
+        {nameError && <span id={`name-error-${diagram.id}`} className="sb-field-error" role="alert">{nameError}</span>}
+        {placeholderHint && !placeholderStep.awaiting && <span id={`name-hint-${diagram.id}`} className="sb-field-hint">{placeholderHint}</span>}
+      </label>
+      {placeholderStep.awaiting && (
+        <p id={`name-hint-${diagram.id}`} className="sb-field-confirm" role="alert">
+          {placeholderQuestion(draft.name)} Zum Bestätigen noch einmal auf „Ja, mit Platzhalter speichern“ klicken.
+        </p>
+      )}
       <label>Viewpoint
         <select value={draft.viewpointId ?? ""} onChange={(e) => setDraft((p) => ({ ...p, viewpointId: e.target.value || undefined }))}>
           <option value="">Kein Viewpoint</option>
@@ -1446,7 +1540,10 @@ function DiagramMetaEditor({
       </label>
       <label>Beschreibung<textarea value={draft.description} onChange={(e) => setDraft((p) => ({ ...p, description: e.target.value }))} /></label>
       <p className="muted">{diagram.componentIds.length} Komponenten · {diagram.connectionIds.length} Verbindungen</p>
-      <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft)}>Speichern</button>
+      <button className="sb-save-btn" disabled={!dirty || !!nameError} onClick={save}>
+        {placeholderStep.awaiting ? "Ja, mit Platzhalter speichern" : "Speichern"}
+      </button>
+      {saveError && <p className="sb-error" role="alert">{saveError}</p>}
       <button className="sb-open-btn" onClick={onOpen}>Diagramm öffnen →</button>
     </div>
   );

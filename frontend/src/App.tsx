@@ -14,7 +14,8 @@ import {
 import Sidebar, { type SidebarSelection } from "./Sidebar/Sidebar";
 import SidebarPanels from "./Sidebar/SidebarPanels";
 import DiagramEditor from "./DiagramEditor";
-import { removeComponentFromState } from "./Sidebar/repositoryReferences";
+import { findDuplicatesByName, removeComponentFromState } from "./Sidebar/repositoryReferences";
+import CreateElementDialog from "./Sidebar/CreateElementDialog";
 import MetamodelView from "./MetamodelView";
 import { sidebarApi } from "./Sidebar/sidebarApi";
 import type { SidebarState } from "./Sidebar/sidebarTypes";
@@ -91,6 +92,7 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
   const [activeDiagramId, setActiveDiagramId] = useState<string | null>(null);
   const [activeCatalogId, setActiveCatalogId] = useState<string | null>(null);
   const [workspaceView, setWorkspaceView] = useState<"diagrams" | "catalogs" | "metamodel" | "users" | "audit">("diagrams");
+  const [creatingDiagram, setCreatingDiagram] = useState(false);
   const [error, setError] = useState("");
 
   const activeDiagram = sidebarState.diagrams.find((d) => d.id === activeDiagramId) ?? null;
@@ -235,8 +237,10 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
     setLinkMessage(null);
   }
 
-  async function createDiagram() {
-    const d = await sidebarApi.createDiagram({ name: "Neues Diagramm", description: "" });
+  // #113: the name is asked for first, so no „Neues Diagramm“ placeholder is ever stored.
+  async function createDiagram(name: string, acknowledgePlaceholder: boolean) {
+    const d = await sidebarApi.createDiagram({ name, description: "" }, acknowledgePlaceholder ? { acknowledgePlaceholder: true } : {});
+    setCreatingDiagram(false);
     setSidebarState((s) => ({ ...s, diagrams: [...s.diagrams, d] }));
     openDiagram(d.id, d);
   }
@@ -399,11 +403,23 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
             <HomeView
               sidebarState={sidebarState}
               onOpenDiagram={openDiagram}
-              onCreateDiagram={createDiagram}
+              onCreateDiagram={() => setCreatingDiagram(true)}
               canWrite={canWrite}
             />
           )}
         </main>
+        {creatingDiagram && (
+          <CreateElementDialog
+            title="Neues Diagramm anlegen"
+            placeholder="z. B. Vertrieb – Anwendungslandschaft"
+            duplicateWarning={(name) => {
+              const existing = findDuplicatesByName(sidebarState.diagrams, name)[0];
+              return existing ? `Mögliches Duplikat: „${existing.name}“ gibt es bereits.` : null;
+            }}
+            onSubmit={(name, _typeId, confirmations) => createDiagram(name, confirmations.acknowledgePlaceholder)}
+            onCancel={() => setCreatingDiagram(false)}
+          />
+        )}
 
         {sidebarSelection && (
           <ResizablePanel side="right" storageKey="eam.panel.details" defaultWidth={380} minWidth={300} maxWidth={760} label="Eigenschaften">

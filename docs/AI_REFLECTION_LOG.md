@@ -522,3 +522,22 @@ Stakeholder wurden bewusst als normale Diagrammelemente erhalten. Ein Stakeholde
 - Der Fix enthält keine Schema- oder Datenmigration. Er verändert weder Authentifizierung noch Company-Isolation oder Optimistic Locking.
 - Die gezielten und vollständigen automatisierten Prüfungen bestanden. Der erste vollständige Lauf wurde nicht als Produktfehler gewertet: Der isoliert wiederholte RBAC-Test bestand 14/14, nachdem die lokale Loopback-Sperre aufgehoben war; der vollständige Wiederholungslauf bestand ebenfalls.
 - Eine visuelle Browser-E2E-Reproduktion und eine echte PostgreSQL-Persistenzprobe wurden nicht durchgeführt. Remote-CI, CodeQL, unabhängige Kontrolle und menschliches Review bleiben PR-Gates.
+
+## Paket „Speichern & Validierung“ (#109, #113, #108, #111) am 25.11.2026
+
+### Entscheidungen
+
+- #109 wird an der Quelle behoben: Es wird gar nicht erst gespeichert, wenn sich nichts geändert hat. So entsteht weder eine Version noch ein Audit-Eintrag, und #139 (Audit-Bündelung) muss erst nach einer neuen Messung bewertet werden. Verglichen wird erst nach dem Einrasten, damit eine Geste, die auf denselben Rasterpunkt zurückfällt, ebenfalls nichts speichert.
+- Eine Namensregel für #108 und #113 statt zwei: Beide Issues verlangen dieselbe Prüfung, die Triage hatte sie als Duplikat markiert. Der Server bleibt maßgeblich, das Frontend spiegelt die Regel nur für frühe Rückmeldung. Ein Paritätstest vergleicht beide Implementierungen.
+- Ein unveränderter Alt-Platzhalter wird beim PATCH ohne neue Bestätigung akzeptiert. Sonst würde jede Beschreibungsänderung an alten Testdaten eine Rückfrage auslösen, bevor #143 aufgeräumt ist.
+- Platzhalter waren zuerst hart gesperrt. Nach Rückmeldung der Nutzerin/des Nutzers am 26.11.2026 sind sie erlaubt, aber nur nach Warnung und zweiter Bestätigung. Der Server verlangt dafür `acknowledgePlaceholder: true`, damit auch kein anderer Client einen Platzhalter unbemerkt speichert. Das Akzeptanzkriterium „Platzhalter werden nicht als gültiger Name gespeichert“ ist damit bewusst abgeschwächt: Ein Platzhalter entsteht nicht mehr automatisch oder aus Versehen, kann aber absichtlich gewählt werden.
+- #111 lehnt den Typwechsel ab, statt nur zu warnen. Eine Warnung hätte weiterhin ungültige Daten gespeichert, was das Akzeptanzkriterium „keine stille Inkonsistenz“ verletzt. Auch schon vorher ungültige Verbindungen blockieren den Wechsel, weil das Issue die Prüfung aller bestehenden Beziehungen verlangt.
+- Die Konfliktliste im Detail-Panel enthält bewusst keine Links: Ein Klick würde die Auswahl wechseln und den Entwurf verwerfen, also genau das Problem aus #110.
+
+### Grenzen
+
+- Kein Pflicht-Owner (#36). Keine Namensregel für Typen, Viewpoints und Kataloge. Imports prüfen weiterhin nur auf leere Namen.
+- Die Meldungen von `validateConnectionInstance` bleiben englisch (#130). Die neuen Meldungen sind deutsch und nennen Namen statt IDs.
+- Metamodelländerungen (z. B. das Entfernen einer Regel) können bestehende Verbindungen weiterhin ungültig machen. #111 deckt nur den Typwechsel einer Komponente ab.
+- Die UI-Tests rendern mit `react-test-renderer` ohne Browser. Das Verhalten beim Ziehen, Skalieren und Klicken auf der echten Diagrammfläche ist nur über die reine Funktion `changedNodeLayout` belegt, nicht per E2E oder manuellem Test.
+- Die Typwechsel-Prüfung liest den Stand vor dem Speichern und läuft nicht in derselben Transaktion. Legt jemand gleichzeitig eine Verbindung zur selben Komponente an, kann im schmalen Zeitfenster dazwischen eine ungültige Kombination entstehen. „Ansicht prüfen“ meldet sie dann weiterhin.

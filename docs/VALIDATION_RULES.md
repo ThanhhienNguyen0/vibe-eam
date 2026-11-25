@@ -83,5 +83,30 @@ Applies to `ComponentInstance` in the sidebar/diagram repository (`/api/sidebar/
 - Every create or save that matches a duplicate writes a REQ-23 business event `duplicate.accepted` in the same transaction as the change (`GET /api/sidebar/audit-log`). `details` contains `acknowledged` and the ids/names of the existing duplicates. This also covers creation inside a diagram (`POST /diagrams/:id/components`).
 - UI: the canvas create dialog and the component properties panel show the hint with a link to the existing element and the option "Vorhandenes Element verwenden". In the panel this option only appears while the new element is still unused (in no diagram, no connections), because it discards the new element.
 - **Metamodel types** follow the same rule: component types (`/component-types`) and connection types (`/connection-types`) warn when another type of the same kind has the same normalized name (codes `DUPLICATE_COMPONENT_TYPE`, `DUPLICATE_CONNECTION_TYPE`). Create and rename succeed, return `warnings` and are audited. The type editor shows the hint with a link to the existing type; quick creation uses unique default names ("Neuer Typ 2").
-- Informational only (no warning in the API, no audit entry): a fresh, unused component whose name matches a component of another type shows "Gleicher Name bei anderem Typ" with the option to use the existing element, because sidebar quick creation assigns the first type before the user picks one.
+- Informational only (no warning in the API, no audit entry): a fresh, unused component whose name matches a component of another type shows "Gleicher Name bei anderem Typ" with the option to use the existing element. Since #113 the sidebar asks for name and type before creating, so this mainly catches a wrongly chosen type.
 - Limit: no fuzzy matching (typos, abbreviations).
+
+## Name Rule for Components and Diagrams (#108, #113)
+
+Applies to `ComponentInstance` and `Diagram` in the sidebar/diagram repository. Shared rule: `backend/src/Sidebar/nameRules.ts`, mirrored in `frontend/src/Sidebar/nameRules.ts` (a frontend test checks parity).
+
+- The name is required. Missing, empty or whitespace-only names are always rejected with HTTP 400, `code: "NAME_REQUIRED"`, `field: "name"`.
+- Placeholders are "Neue Komponente" and "Neues Diagramm", compared like REQ-02 (NFKC, whitespace removed, lower-cased) and including a trailing number such as "Neue Komponente 2" or "Neues Diagramm (3)". They are **allowed, but only with an explicit confirmation**: the request must contain `acknowledgePlaceholder: true` (boolean). Without it the server answers HTTP 400, `code: "NAME_PLACEHOLDER"`. The flag is never stored.
+- Stored names are trimmed.
+- Checked on `POST /components`, `POST /diagrams/:id/components`, `POST /diagrams`, and on `PATCH /components/:id` and `PATCH /diagrams/:id` whenever the body contains `name`.
+- On PATCH, an **unchanged** legacy placeholder needs no confirmation, so other edits of old test data are not blocked (cleanup: #143). Renaming to a placeholder needs the confirmation.
+- UI: the sidebar and the diagram overview ask for the name (and for components the type) in a dialog before anything is created. An empty name shows an error at the field and blocks saving. A placeholder shows a warning; the first click on "Anlegen"/"Speichern" (or the first Enter when renaming in the sidebar) saves nothing and asks "Wirklich den Platzhalternamen „…“ verwenden?", the second click ("Ja, mit Platzhalter …") saves. Changing the name starts over. Leaving the sidebar rename field without the second Enter restores the old name. An unchanged placeholder shows a non-blocking hint in the panel.
+- No separate audit event for a confirmed placeholder; the normal create/update audit applies.
+- Out of scope: a required owner (belongs to the owner concept, REQ-04 / #36), names of metamodel types, viewpoints and catalogs, and imports (which already reject empty names).
+
+## Type Change Rule (#111)
+
+- `PATCH /components/:id` with a changed `componentTypeId` checks that the type exists (`code: "COMPONENT_TYPE_MISSING"`) and validates **every** incoming and outgoing connection of the component against the active metamodel as if the new type were already set (`connectionsInvalidAfterTypeChange` in `metamodelRules.ts`).
+- If any connection would be invalid, the save is rejected with HTTP 400, `code: "TYPE_CHANGE_INVALID_CONNECTIONS"`, `field: "componentTypeId"` and `invalidConnections: [{ id, label, reason }]`. The error message names the connections, e.g. "CRM → ERP (depends_on)".
+- The rule only runs when the type actually changes. Connections that were already invalid before the change also block it, because the change would otherwise save an inconsistent model without notice.
+- UI: the properties panel shows the affected connections as soon as another type is selected and disables "Speichern". The user removes or changes those connections first, or keeps the old type.
+
+## Layout Autosave (#109)
+
+- Moving or resizing a node only saves the diagram when the final position or size differs from the start of the gesture (tolerance 0.5 flow units, after snapping). A plain click or selection therefore creates no new diagram version and no audit entry.
+- Width and height are only written when they were stored before or actually changed; otherwise the shape's default size keeps applying. Helper: `changedNodeLayout` in `frontend/src/diagramLayout.ts`.

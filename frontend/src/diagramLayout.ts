@@ -1,6 +1,6 @@
 /** Pure layout helpers for the diagram editor (BUG-02): grid, rulers and placement of new elements. */
 
-import type { ComponentShape } from "./Sidebar/sidebarTypes";
+import type { ComponentShape, DiagramPosition } from "./Sidebar/sidebarTypes";
 
 export const GRID_SIZE = 20;
 
@@ -73,6 +73,38 @@ export function findFreePosition(
   }
   const bottom = occupied.reduce((max, rect) => Math.max(max, rect.y + rect.height), origin.y);
   return { x: origin.x, y: snapToGrid(bottom + gap, snap) };
+}
+
+/** Below half a flow unit the difference is rendering noise, not a layout change. */
+const LAYOUT_EPSILON = 0.5;
+
+const sameRect = (a: Rect, b: Rect): boolean =>
+  Math.abs(a.x - b.x) < LAYOUT_EPSILON
+  && Math.abs(a.y - b.y) < LAYOUT_EPSILON
+  && Math.abs(a.width - b.width) < LAYOUT_EPSILON
+  && Math.abs(a.height - b.height) < LAYOUT_EPSILON;
+
+/**
+ * #109: Decides what a finished move/resize gesture has to persist.
+ * `start` is the node as rendered when the gesture began, `end` where the pointer left it (not snapped yet).
+ * Returns null when nothing changed, e.g. a plain click or a drag that snaps back to the start, so selecting
+ * a node never creates a new diagram version or audit entry. Width/height are only written when they were
+ * stored before or actually changed; otherwise the shape's default size keeps applying.
+ */
+export function changedNodeLayout(
+  stored: DiagramPosition | undefined,
+  start: Rect,
+  end: Rect,
+  snap: boolean
+): DiagramPosition | null {
+  if (sameRect(start, end)) return null;
+  const point = snap ? snapPoint(end, true) : { x: end.x, y: end.y };
+  const final: Rect = { ...end, ...point };
+  if (sameRect(start, final)) return null;
+  const next: DiagramPosition = { x: final.x, y: final.y };
+  if (stored?.width !== undefined || Math.abs(final.width - start.width) >= LAYOUT_EPSILON) next.width = final.width;
+  if (stored?.height !== undefined || Math.abs(final.height - start.height) >= LAYOUT_EPSILON) next.height = final.height;
+  return next;
 }
 
 /** Deterministic fallback grid position for elements without a stored position. */

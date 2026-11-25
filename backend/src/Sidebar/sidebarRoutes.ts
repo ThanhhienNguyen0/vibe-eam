@@ -1,7 +1,8 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import type { Catalog, ComponentShape, ComponentType, ConnectionType, SidebarState } from "./sidebarTypes.js";
 import { catalogColumnKeys } from "../catalog/catalogModel.js";
-import { validateConnectionInstance, validateDiagram } from "./metamodelRules.js";
+import { connectionsInvalidAfterTypeChange, validateConnectionInstance, validateDiagram } from "./metamodelRules.js";
+import { checkElementName } from "./nameRules.js";
 import { OptimisticLockError, ResourceNotFoundError } from "../persistence/databaseSidebarRepository.js";
 import {
   duplicateAuditEvent,
@@ -526,15 +527,17 @@ router.get("/components", async (_req, res, next) => {
 
 router.post("/components", async (req, res, next) => {
   try {
-    const { name, componentTypeId, properties, description, externalId, acknowledgeDuplicate } = req.body as {
+    const { name, componentTypeId, properties, description, externalId, acknowledgeDuplicate, acknowledgePlaceholder } = req.body as {
       name?: string;
       componentTypeId?: string;
       properties?: Record<string, string>;
       description?: string;
       externalId?: unknown;
       acknowledgeDuplicate?: boolean;
+      acknowledgePlaceholder?: boolean;
     };
-    if (!name?.trim()) return res.status(400).json({ error: "name is required." });
+    const checkedName = checkElementName(name, { acknowledgePlaceholder });
+    if ("error" in checkedName) return res.status(400).json(checkedName);
     if (!componentTypeId) return res.status(400).json({ error: "componentTypeId is required." });
     const external = parseExternalId(externalId);
     if (external.error) return res.status(400).json({ error: external.error });
@@ -542,17 +545,17 @@ router.post("/components", async (req, res, next) => {
     if (external.value && components.some((item) => item.externalId === external.value)) {
       return res.status(409).json({ error: "Diese Externe ID wird bereits von einer anderen Komponente verwendet." });
     }
-    const duplicates = findDuplicateComponents(components, { name, componentTypeId });
+    const duplicates = findDuplicateComponents(components, { name: checkedName.name, componentTypeId });
     const id = crypto.randomUUID();
     const comp = await addComponent({
       id,
       version: 1,
-      name: name.trim(),
+      name: checkedName.name,
       componentTypeId,
       properties: properties ?? {},
       description: description ?? "",
       ...(external.value ? { externalId: external.value } : {})
-    }, duplicateAuditEvent("component", "created", { id, name: name.trim() }, duplicates, acknowledgeDuplicate === true));
+    }, duplicateAuditEvent("component", "created", { id, name: checkedName.name }, duplicates, acknowledgeDuplicate === true));
     res.status(201).json({ ...comp, warnings: duplicateComponentWarnings(duplicates) });
   } catch (err) {
     next(err);
@@ -562,8 +565,40 @@ router.post("/components", async (req, res, next) => {
 router.patch("/components/:id", async (req, res, next) => {
   try {
     const version = expectedVersion(req.header("if-match"));
-    const { acknowledgeDuplicate, ...patch } = { ...req.body } as Record<string, unknown>;
+    // Both confirmation flags only steer the checks and are never stored on the component.
+    const { acknowledgeDuplicate, acknowledgePlaceholder, ...patch } = { ...req.body } as Record<string, unknown>;
     const components = await getComponents();
+    const existing = components.find((item) => item.id === req.params.id);
+    if (!existing) return res.status(404).json({ error: "Component not found." });
+    // #108: the server checks the name too, so no client can store an empty name or an unconfirmed placeholder.
+    if ("name" in patch) {
+      const checkedName = checkElementName(patch.name, { previousName: existing.name, acknowledgePlaceholder: acknowledgePlaceholder === true });
+      if ("error" in checkedName) return res.status(400).json(checkedName);
+      patch.name = checkedName.name;
+    }
+    // #111: a type change must keep every existing connection of the component valid.
+    if ("componentTypeId" in patch && patch.componentTypeId !== existing.componentTypeId) {
+      const state = await readSidebarState();
+      const nextType = typeof patch.componentTypeId === "string"
+        ? state.componentTypes.find((type) => type.id === patch.componentTypeId)
+        : undefined;
+      if (!nextType) {
+        return res.status(400).json({ error: "Diesen Komponenten-Typ gibt es im aktiven Metamodell nicht.", code: "COMPONENT_TYPE_MISSING", field: "componentTypeId" });
+      }
+      const invalidConnections = connectionsInvalidAfterTypeChange(state, existing.id, nextType.id);
+      if (invalidConnections.length > 0) {
+        const list = invalidConnections.map((item) => item.label).join("; ");
+        const lead = invalidConnections.length === 1
+          ? "Diese Verbindung wäre laut Metamodell nicht mehr erlaubt"
+          : `Diese ${invalidConnections.length} Verbindungen wären laut Metamodell nicht mehr erlaubt`;
+        return res.status(400).json({
+          error: `Der Typ kann nicht auf „${nextType.name}“ geändert werden. ${lead}: ${list}. Bitte zuerst entfernen oder ändern.`,
+          code: "TYPE_CHANGE_INVALID_CONNECTIONS",
+          field: "componentTypeId",
+          invalidConnections
+        });
+      }
+    }
     if ("externalId" in patch) {
       const external = parseExternalId(patch.externalId);
       if (external.error) return res.status(400).json({ error: external.error });
@@ -572,10 +607,9 @@ router.patch("/components/:id", async (req, res, next) => {
       }
       patch.externalId = external.value;
     }
-    const existing = components.find((item) => item.id === req.params.id);
-    const identity = existing ? changedComponentIdentity(existing, patch) : null;
-    const duplicates = existing && identity ? findDuplicateComponents(components, identity, existing.id) : [];
-    const event = existing && identity
+    const identity = changedComponentIdentity(existing, patch);
+    const duplicates = identity ? findDuplicateComponents(components, identity, existing.id) : [];
+    const event = identity
       ? duplicateAuditEvent("component", "updated", { id: existing.id, name: identity.name }, duplicates, acknowledgeDuplicate === true)
       : undefined;
     const updated = await updateComponent(req.params.id, patch, version, event);
@@ -694,13 +728,14 @@ router.get("/diagrams", async (_req, res, next) => {
 
 router.post("/diagrams", async (req, res, next) => {
   try {
-    const { name, description, viewpointId } = req.body as { name?: string; description?: string; viewpointId?: string };
-    if (!name?.trim()) return res.status(400).json({ error: "name is required." });
+    const { name, description, viewpointId, acknowledgePlaceholder } = req.body as { name?: string; description?: string; viewpointId?: string; acknowledgePlaceholder?: boolean };
+    const checkedName = checkElementName(name, { acknowledgePlaceholder });
+    if ("error" in checkedName) return res.status(400).json(checkedName);
     const state = await readSidebarState();
     const diagram = await addDiagram({
       id: crypto.randomUUID(),
       version: 1,
-      name: name.trim(),
+      name: checkedName.name,
       description: description ?? "",
       componentIds: [],
       connectionIds: [],
@@ -717,7 +752,7 @@ router.post("/diagrams", async (req, res, next) => {
 router.post("/diagrams/:id/components", async (req, res, next) => {
   try {
     const version = expectedVersion(req.header("if-match"));
-    const { name, componentTypeId, properties, description, externalId, position, acknowledgeDuplicate } = req.body as {
+    const { name, componentTypeId, properties, description, externalId, position, acknowledgeDuplicate, acknowledgePlaceholder } = req.body as {
       name?: string;
       componentTypeId?: string;
       properties?: Record<string, string>;
@@ -725,8 +760,10 @@ router.post("/diagrams/:id/components", async (req, res, next) => {
       externalId?: unknown;
       position?: { x?: unknown; y?: unknown };
       acknowledgeDuplicate?: boolean;
+      acknowledgePlaceholder?: boolean;
     };
-    if (!name?.trim()) return res.status(400).json({ error: "name is required." });
+    const checkedName = checkElementName(name, { acknowledgePlaceholder });
+    if ("error" in checkedName) return res.status(400).json(checkedName);
     if (!componentTypeId) return res.status(400).json({ error: "componentTypeId is required." });
     if (!position || typeof position.x !== "number" || !Number.isFinite(position.x)
       || typeof position.y !== "number" || !Number.isFinite(position.y)) {
@@ -743,18 +780,18 @@ router.post("/diagrams/:id/components", async (req, res, next) => {
     if (external.value && state.components.some((item) => item.externalId === external.value)) {
       return res.status(409).json({ error: "Diese Externe ID wird bereits von einer anderen Komponente verwendet." });
     }
-    const duplicates = findDuplicateComponents(state.components, { name, componentTypeId });
+    const duplicates = findDuplicateComponents(state.components, { name: checkedName.name, componentTypeId });
     const id = crypto.randomUUID();
     const result = await addComponentToDiagram({
       id,
       version: 1,
-      name: name.trim(),
+      name: checkedName.name,
       componentTypeId,
       properties: properties ?? {},
       description: description ?? "",
       ...(external.value ? { externalId: external.value } : {})
     }, diagram.id, { x: position.x, y: position.y }, version,
-    duplicateAuditEvent("component", "created", { id, name: name.trim() }, duplicates, acknowledgeDuplicate === true));
+    duplicateAuditEvent("component", "created", { id, name: checkedName.name }, duplicates, acknowledgeDuplicate === true));
     res.status(201).json({ ...result, warnings: duplicateComponentWarnings(duplicates) });
   } catch (err) {
     next(err);
@@ -834,10 +871,18 @@ router.patch("/diagrams/:id", async (req, res, next) => {
     const state = await readSidebarState();
     const existing = state.diagrams.find((diagram) => diagram.id === req.params.id);
     if (!existing) return res.status(404).json({ error: "Diagram not found." });
-    const candidate = { ...existing, ...req.body, id: req.params.id };
+    // The confirmation flag only steers the name check and is never stored on the diagram.
+    const { acknowledgePlaceholder, ...patch } = { ...req.body } as Record<string, unknown>;
+    // #113: renaming a diagram follows the same name rule as creating one.
+    if ("name" in patch) {
+      const checkedName = checkElementName(patch.name, { previousName: existing.name, acknowledgePlaceholder: acknowledgePlaceholder === true });
+      if ("error" in checkedName) return res.status(400).json(checkedName);
+      patch.name = checkedName.name;
+    }
+    const candidate = { ...existing, ...patch, id: req.params.id };
     const validation = validateDiagram(candidate, state, { includeRequiredRules: false });
     if (!validation.valid) return res.status(400).json({ error: validation.errors[0]?.message ?? "Diagram is not valid.", ...validation });
-    const updated = await updateDiagram(req.params.id, req.body, version);
+    const updated = await updateDiagram(req.params.id, patch, version);
     if (!updated) return res.status(404).json({ error: "Diagram not found." });
     res.json(updated);
   } catch (err) {

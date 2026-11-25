@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boundsOf, fallbackPosition, findFreePosition, niceStep, rulerTicks, snapPoint, snapToGrid } from "./diagramLayout";
+import { boundsOf, changedNodeLayout, fallbackPosition, findFreePosition, niceStep, rulerTicks, snapPoint, snapToGrid } from "./diagramLayout";
 
 const size = { width: 160, height: 80 };
 
@@ -60,5 +60,39 @@ describe("diagram layout helpers", () => {
   it("computes bounds", () => {
     expect(boundsOf([])).toBeNull();
     expect(boundsOf([{ x: 0, y: 0, width: 10, height: 10 }, { x: 20, y: 30, width: 10, height: 10 }])).toEqual({ x: 0, y: 0, width: 30, height: 40 });
+  });
+});
+
+describe("changedNodeLayout (#109)", () => {
+  const rendered = { x: 100, y: 120, width: 160, height: 72 };
+
+  it("saves nothing when a node is only clicked (selection without layout change)", () => {
+    expect(changedNodeLayout(undefined, rendered, { ...rendered }, true)).toBeNull();
+    expect(changedNodeLayout({ x: 100, y: 120, width: 160, height: 72 }, rendered, { ...rendered }, true)).toBeNull();
+  });
+
+  it("does not persist a snapped position for a click on an unsnapped node", () => {
+    const unsnapped = { x: 103, y: 117, width: 160, height: 72 };
+    expect(changedNodeLayout({ x: 103, y: 117 }, unsnapped, { ...unsnapped }, true)).toBeNull();
+  });
+
+  it("ignores sub-pixel jitter and drags that snap back to the start", () => {
+    expect(changedNodeLayout(undefined, rendered, { ...rendered, x: 100.2, height: 72.3 }, false)).toBeNull();
+    expect(changedNodeLayout(undefined, rendered, { ...rendered, x: 106, y: 113 }, true)).toBeNull();
+  });
+
+  it("saves a real move without adding the default size as a diff", () => {
+    expect(changedNodeLayout({ x: 100, y: 120 }, rendered, { ...rendered, x: 157, y: 143 }, true)).toEqual({ x: 160, y: 140 });
+    expect(changedNodeLayout(undefined, rendered, { ...rendered, x: 157, y: 143 }, false)).toEqual({ x: 157, y: 143 });
+  });
+
+  it("keeps a stored size when the node is moved", () => {
+    expect(changedNodeLayout({ x: 100, y: 120, width: 300, height: 90 }, { ...rendered, width: 300, height: 90 }, { x: 200, y: 120, width: 300, height: 90 }, true))
+      .toEqual({ x: 200, y: 120, width: 300, height: 90 });
+  });
+
+  it("stores only the dimension that was actually resized", () => {
+    expect(changedNodeLayout(undefined, rendered, { ...rendered, width: 240 }, true)).toEqual({ x: 100, y: 120, width: 240 });
+    expect(changedNodeLayout(undefined, rendered, { ...rendered, y: 80, height: 112 }, true)).toEqual({ x: 100, y: 80, height: 112 });
   });
 });

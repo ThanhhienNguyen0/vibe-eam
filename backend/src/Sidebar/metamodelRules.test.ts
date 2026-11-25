@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getAllowedConnectionTypes, validateConnectionInstance, validateDiagram } from "./metamodelRules.js";
+import { connectionsInvalidAfterTypeChange, getAllowedConnectionTypes, validateConnectionInstance, validateDiagram } from "./metamodelRules.js";
 import type { ConnectionRule, SidebarState, ValidationRule, ViewpointRule } from "./sidebarTypes.js";
 
 const connectionRules: ConnectionRule[] = [
@@ -351,5 +351,41 @@ describe("Sidebar metamodel connection rules", () => {
     expect(result.valid).toBe(false);
     expect(result.errors.some((item) => item.severity === "error" && item.scope === "metamodel")).toBe(true);
     expect(result.warnings.some((item) => item.severity === "warning" && item.scope === "required-rule")).toBe(true);
+  });
+});
+
+describe("#111 connections after a component type change", () => {
+  it("names every connection that the new type would break", () => {
+    expect(connectionsInvalidAfterTypeChange(state, "app", "ct-proc")).toEqual([
+      {
+        id: "app-serves-proc",
+        label: "ERP System → Order to Cash (serves)",
+        reason: "Business Process darf laut Metamodell nicht über „serves“ mit Business Process verbunden sein."
+      },
+      {
+        id: "stakeholder-responsible-app",
+        label: "Application Owner → ERP System (responsible_for)",
+        reason: "Stakeholder darf laut Metamodell nicht über „responsible_for“ mit Business Process verbunden sein."
+      }
+    ]);
+  });
+
+  it("returns nothing when all connections stay allowed or the component has none", () => {
+    const extended: SidebarState = {
+      ...state,
+      connectionRules: [...state.connectionRules, { id: "rule-proc-uses-data", sourceComponentTypeId: "ct-proc", connectionTypeId: "conn-uses", targetComponentTypeId: "ct-data-object", allowed: true, required: false, severity: "error", description: "", rationale: "", viewpointIds: [] }],
+      components: [...state.components, { id: "app2", name: "CRM", componentTypeId: "ct-app", properties: {}, description: "" }, { id: "lonely", name: "Lonely", componentTypeId: "ct-app", properties: {}, description: "" }],
+      connections: [...state.connections, { id: "app2-uses-data", name: "", connectionTypeId: "conn-uses", sourceComponentId: "app2", targetComponentId: "data", description: "" }]
+    };
+    expect(connectionsInvalidAfterTypeChange(extended, "app2", "ct-proc")).toEqual([]);
+    expect(connectionsInvalidAfterTypeChange(extended, "lonely", "ct-technology-node")).toEqual([]);
+  });
+
+  it("prefixes the connection name when it has one", () => {
+    const named: SidebarState = {
+      ...state,
+      connections: state.connections.map((item) => item.id === "app-serves-proc" ? { ...item, name: " Auftragsabwicklung " } : item)
+    };
+    expect(connectionsInvalidAfterTypeChange(named, "app", "ct-proc")[0].label).toBe("Auftragsabwicklung: ERP System → Order to Cash (serves)");
   });
 });
