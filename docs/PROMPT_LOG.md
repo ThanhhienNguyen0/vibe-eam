@@ -480,3 +480,13 @@ Auftrag: Beim Umbenennen in der Seitenleiste erschien die Meldung rechts im Deta
 - Tests: `SaveButton.test.tsx` prüft jetzt Umbenennen und Anlegen in der echten Seitenleiste (Zeile markiert, Meldung unten, beides verschwindet nach 2,5 Sekunden) und dass der Panel-Button Sidebar-Aktionen nicht bestätigt; die Tests der entfernten Panel-Meldung entfallen.
 
 Nachweise vom 25.11.2026: Lint, Typechecks, 209 bestandene und 39 übersprungene Backendtests, 167 bestandene Frontendtests, Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfiguration, jeweils Exit 0; `db:generate` wegen der gesperrten Prisma-Engine-DLL ausgelassen. Nicht belegt: Browser-E2E und manueller Test.
+
+### #117: Meldung nach endgültigem Löschen (25.11.2026)
+
+Auftrag: Nach dem Löschen ebenfalls kurz melden, dass endgültig gelöscht wurde.
+
+- Seitenleiste (Papierkorb und Kontextmenü, alle acht Elementarten): Nach der Bestätigung durch den Server erscheint unten in der Seitenleiste kurz z. B. „Komponente „CRM“ endgültig aus dem Repository gelöscht.“. Beim Diagramm steht dazu, dass seine Elemente im Repository bleiben. Bricht man den Bestätigungsdialog ab oder endet ein Konflikt mit „Neu laden“, erscheint nichts.
+- Diagrammfläche („Aus Repository löschen…“): Die vorhandene Meldung nennt jetzt den Namen und „endgültig“. „Aus Diagramm entfernen“ bleibt bewusst bei „bleibt im Modell erhalten“, weil dort nichts gelöscht wird.
+- Tests: zwei neue Tests in `SaveButton.test.tsx` (Meldung nach dem Löschen; keine Meldung nach Abbruch oder vor der Serverantwort).
+
+Nachweise vom 25.11.2026: Lint, Typechecks, 209 bestandene und 39 übersprungene Backendtests, 169 bestandene Frontendtests, Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfiguration, jeweils Exit 0; `db:generate` wegen der gesperrten Prisma-Engine-DLL ausgelassen. Ein erster Testentwurf für einen abgelehnten Löschversuch erzeugte eine unbehandelte Promise-Ablehnung, weil der Papierkorb-Button Fehler nicht abfängt (vorbestehend; in der App zeigt das Fehlerbanner den Grund). Er wurde durch einen Test ersetzt, der belegt, dass vor der Serverantwort nichts gemeldet wird. Nicht belegt: Browser-E2E und manueller Test.

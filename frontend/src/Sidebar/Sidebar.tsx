@@ -588,6 +588,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     if (!await confirm(simpleDeleteConfirmation("Komponenten-Typ", name))) return;
     await sidebarApi.deleteComponentType(id);
     onStateChange({ ...sidebarState, componentTypes: componentTypes.filter((c) => c.id !== id) });
+    announceInSidebar(feedbackTarget("componentType", id), `Komponenten-Typ „${name}“ endgültig gelöscht.`);
   }
 
   async function deleteConnectionType(id: string) {
@@ -595,6 +596,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     if (!await confirm(simpleDeleteConfirmation("Verbindungs-Typ", name))) return;
     await sidebarApi.deleteConnectionType(id);
     onStateChange({ ...sidebarState, connectionTypes: connectionTypes.filter((c) => c.id !== id) });
+    announceInSidebar(feedbackTarget("connectionType", id), `Verbindungs-Typ „${name}“ endgültig gelöscht.`);
   }
 
   async function deleteViewpoint(id: string) {
@@ -606,6 +608,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
       viewpoints: viewpoints.filter((v) => v.id !== id),
       diagrams: diagrams.map((d) => (d.viewpointId === id ? { ...d, viewpointId: undefined } : d))
     });
+    announceInSidebar(feedbackTarget("viewpoint", id), `Viewpoint „${name}“ endgültig gelöscht.`);
   }
 
   async function deleteConnectionRule(id: string) {
@@ -614,6 +617,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     if (!await confirm(simpleDeleteConfirmation("Connection Rule", name))) return;
     await sidebarApi.deleteConnectionRule(id);
     onStateChange({ ...sidebarState, connectionRules: connectionRules.filter((ruleItem) => ruleItem.id !== id) });
+    announceInSidebar(feedbackTarget("connectionRule", id), `Connection Rule „${name}“ endgültig gelöscht.`);
   }
 
   async function deleteComponent(id: string) {
@@ -627,12 +631,14 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     );
     if (!result.applied) return;
     onStateChange(removeComponentFromState(sidebarState, id));
+    announceInSidebar(feedbackTarget("component", id), `Komponente „${component.name}“ endgültig aus dem Repository gelöscht.`);
   }
 
   async function deleteConnection(id: string) {
     const connection = connections.find((item) => item.id === id);
     if (!connection) return;
-    if (!await confirm(deleteConnectionConfirmation(connectionLabel(id), id, diagrams))) return;
+    const label = connectionLabel(id);
+    if (!await confirm(deleteConnectionConfirmation(label, id, diagrams))) return;
     const result = await runOptimisticMutation(
       connection.version ?? 1,
       (version) => sidebarApi.deleteConnection(id, version),
@@ -640,6 +646,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     );
     if (!result.applied) return;
     onStateChange(removeConnectionFromState(sidebarState, id));
+    announceInSidebar(feedbackTarget("connection", id), `Verbindung „${label}“ endgültig aus dem Repository gelöscht.`);
   }
 
   async function deleteDiagram(id: string) {
@@ -653,6 +660,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     );
     if (!result.applied) return;
     onStateChange({ ...sidebarState, diagrams: diagrams.filter((d) => d.id !== id) });
+    announceInSidebar(feedbackTarget("diagram", id), `Diagramm „${diagram.name}“ endgültig gelöscht. Seine Elemente bleiben im Repository.`);
   }
 
   async function deleteCatalog(id: string) {
@@ -660,6 +668,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     if (!await confirm(simpleDeleteConfirmation("Katalog", name))) return;
     await sidebarApi.deleteCatalog(id);
     onStateChange({ ...sidebarState, catalogs: catalogs.filter((c) => c.id !== id) });
+    announceInSidebar(feedbackTarget("catalog", id), `Katalog „${name}“ endgültig gelöscht.`);
   }
 
   // ── Rename (inline) ───────────────────────────────────────────────────────

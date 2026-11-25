@@ -1136,7 +1136,7 @@ function DiagramEditorInner({
       onComponentDeleted(nodeId);
       setValidationResult(null);
       setError("");
-      setNotice("Aus dem Repository gelöscht (auch aus allen anderen Diagrammen entfernt).");
+      setNotice(`„${component.name}“ endgültig aus dem Repository gelöscht (auch aus allen anderen Diagrammen entfernt).`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Element konnte nicht aus dem Repository gelöscht werden.");
     }

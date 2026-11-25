@@ -11,7 +11,7 @@ import type { SidebarState } from "./sidebarTypes";
 
 // #117: saving is confirmed where the user saved, briefly, and only after the server confirmed it.
 
-const api = vi.hoisted(() => ({ getAll: vi.fn(), updateComponent: vi.fn(), createComponent: vi.fn() }));
+const api = vi.hoisted(() => ({ getAll: vi.fn(), updateComponent: vi.fn(), createComponent: vi.fn(), deleteComponent: vi.fn() }));
 vi.mock("./sidebarApi", () => ({ sidebarApi: api }));
 
 const textOf = (node: ReactTestInstance): string =>
@@ -29,7 +29,8 @@ const inPanel = (target: string, children: ReactNode) => <SaveTargetContext.Prov
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+  // Without a ConfirmProvider the sidebar falls back to window.confirm.
+  vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn(), confirm: vi.fn(() => true) });
 });
 afterEach(() => {
   act(() => clearSavedFeedback());
@@ -191,5 +192,39 @@ describe("sidebar confirmation (#117)", () => {
 
     expect(row(renderer, "Billing").props.className).toContain("sb-row--saved");
     expect(sidebarNotice(renderer)).toBe("Komponente „Billing“ angelegt und gespeichert.");
+  });
+
+  const deleteButton = (renderer: ReactTestRenderer, label: string) =>
+    row(renderer, label).findAll((node) => node.type === "button" && node.props.title === "Aus Repository löschen")[0];
+
+  it("confirms a permanent deletion in the sidebar after the server deleted it", async () => {
+    api.deleteComponent.mockResolvedValue(undefined);
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<SidebarHarness />); });
+
+    await act(async () => deleteButton(renderer, "CRM").props.onClick({ stopPropagation: () => undefined }));
+    expect(api.deleteComponent).toHaveBeenCalledWith("crm", 1);
+    expect(row(renderer, "CRM")).toBeUndefined();
+    expect(sidebarNotice(renderer)).toBe("Komponente „CRM“ endgültig aus dem Repository gelöscht.");
+  });
+
+  it("says nothing when the deletion was cancelled, and nothing before the server deleted it", async () => {
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<SidebarHarness />); });
+
+    (window.confirm as ReturnType<typeof vi.fn>).mockReturnValueOnce(false);
+    await act(async () => deleteButton(renderer, "CRM").props.onClick({ stopPropagation: () => undefined }));
+    expect(api.deleteComponent).not.toHaveBeenCalled();
+    expect(sidebarNotice(renderer)).toBe("");
+
+    const answer = deferred();
+    api.deleteComponent.mockReturnValue(answer.promise);
+    await act(async () => deleteButton(renderer, "CRM").props.onClick({ stopPropagation: () => undefined }));
+    expect(api.deleteComponent).toHaveBeenCalledTimes(1);
+    expect(row(renderer, "CRM")).toBeDefined();
+    expect(sidebarNotice(renderer)).toBe("");
+
+    await act(async () => { answer.resolve(undefined); });
+    expect(sidebarNotice(renderer)).toBe("Komponente „CRM“ endgültig aus dem Repository gelöscht.");
   });
 });
