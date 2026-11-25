@@ -24,8 +24,9 @@ import { AccessContext, ROLE_DESCRIPTIONS, ROLE_LABELS, useAccess } from "./acce
 import UserManagement from "./UserManagement";
 import CatalogView from "./CatalogView";
 import AuditLogView from "./AuditLogView";
-import { SaveFailureBanner, SaveStatusIndicator, useSaveStatus, useWarnBeforeLeavingUnsaved } from "./SaveStatus";
+import { SaveFailureBanner, useSaveStatus, useWarnBeforeLeavingUnsaved } from "./SaveStatus";
 import { saveTracker } from "./saveTracker";
+import { announceNotice, feedbackTarget } from "./savedFeedback";
 
 export default function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -235,6 +236,7 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
     const created = await sidebarApi.createCatalog({ name: "Neuer Katalog", kind: "elements", columns: ["type", "description"] });
     setSidebarState((s) => ({ ...s, catalogs: [...s.catalogs, created] }));
     setSidebarSelection({ kind: "catalog", id: created.id });
+    announceNotice(feedbackTarget("catalog", created.id), `Katalog „${created.name}“ angelegt und gespeichert.`);
     openCatalog(created.id);
   }
 
@@ -314,7 +316,6 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
           </nav>
         )}
         <div className="account-menu">
-          <SaveStatusIndicator status={saveStatus} />
           <span className="account-identity"><strong>{user.name ?? user.email}</strong><small>{user.companyName}</small></span>
           <details className="account-role-info">
             <summary>{ROLE_LABELS[user.role]}</summary>

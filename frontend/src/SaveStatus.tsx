@@ -1,6 +1,6 @@
 /** #117: shows whether changes are saved, and what to do when saving failed. */
 import { useEffect, useSyncExternalStore } from "react";
-import { AlertTriangle, CircleCheck, LoaderCircle, RefreshCw, X } from "lucide-react";
+import { AlertTriangle, RefreshCw, X } from "lucide-react";
 import { saveTracker, type SaveSnapshot, type SaveTracker } from "./saveTracker";
 
 export function useSaveStatus(tracker: SaveTracker = saveTracker): SaveSnapshot {
@@ -18,25 +18,6 @@ export function useWarnBeforeLeavingUnsaved(status: SaveSnapshot) {
   }, [unsaved]);
 }
 
-const LABELS: Record<SaveSnapshot["state"], string> = {
-  saved: "Alles gespeichert",
-  saving: "Speichern läuft …",
-  failed: "Speichern fehlgeschlagen"
-};
-
-const ICONS = { saved: CircleCheck, saving: LoaderCircle, failed: AlertTriangle } as const;
-
-/** Short state for the header; always visible. */
-export function SaveStatusIndicator({ status }: { status: SaveSnapshot }) {
-  const Icon = ICONS[status.state];
-  return (
-    <span className={`save-status save-status--${status.state}`} role="status" aria-live="polite">
-      <Icon size={14} aria-hidden="true" />
-      {LABELS[status.state]}
-    </span>
-  );
-}
-
 /**
  * Explains a failed save and offers the way out. It sits above every dialog, because a dialog
  * may be waiting for the held write.
@@ -49,9 +30,9 @@ export function SaveFailureBanner({ status, tracker = saveTracker, onDiscarded }
 }) {
   const { failure } = status;
   if (status.state !== "failed" || !failure) return null;
-  const title = failure.retryable
+  const title = "Speichern fehlgeschlagen: " + (failure.retryable
     ? status.unsaved === 1 ? "1 Änderung ist nicht gespeichert." : `${status.unsaved} Änderungen sind nicht gespeichert.`
-    : "Die letzte Änderung wurde nicht gespeichert.";
+    : "Die letzte Änderung wurde nicht gespeichert.");
   const hint = failure.retryable
     ? "„Erneut versuchen“ sendet sie noch einmal. „Verwerfen“ lädt den zuletzt gespeicherten Stand."
     : "Der Server hat sie abgelehnt. Bitte die Eingabe prüfen und erneut speichern.";

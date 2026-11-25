@@ -14,6 +14,8 @@ import { attachedConnections, diagramsUsingComponent, findDuplicateComponents, f
 import { connectionsInvalidAfterTypeChange, type TypeChangeConflict } from "./metamodelRules";
 import { elementNameError, isPlaceholderName, placeholderQuestion, placeholderWarning } from "./nameRules";
 import { useSecondConfirmation } from "./useSecondConfirmation";
+import { SaveButton, SavedNotice, SaveTargetContext } from "./SaveButton";
+import { announceSaved, feedbackTarget } from "../savedFeedback";
 import type {
   ComponentInstance,
   ComponentShape,
@@ -52,15 +54,19 @@ function DetailWrapper({ title, onClose, children }: { title: string; onClose: (
         <button className="sb-close-btn" onClick={onClose} title="Panel schließen"><X size={15} /></button>
       </div>
       <div className="sb-detail-body">{children}</div>
+      <SavedNotice />
     </div>
   );
 }
 
 export default function SidebarPanels(props: Props) {
   const link = props.selection && props.linkFor ? props.linkFor(props.selection) : null;
+  const target = props.selection && "id" in props.selection ? feedbackTarget(props.selection.kind, props.selection.id) : null;
   return (
     <PanelLinkContext.Provider value={link}>
-      <SidebarPanelsContent {...props} />
+      <SaveTargetContext.Provider value={target}>
+        <SidebarPanelsContent {...props} />
+      </SaveTargetContext.Provider>
     </PanelLinkContext.Provider>
   );
 }
@@ -101,6 +107,7 @@ function SidebarPanelsContent({ selection, sidebarState, onStateChange, onSelect
           onSave={async (patch) => {
             const updated = await sidebarApi.updateCatalog(catalog.id, patch);
             onStateChange({ ...sidebarState, catalogs: sidebarState.catalogs.map((item) => (item.id === catalog.id ? updated : item)) });
+            announceSaved(feedbackTarget("catalog", catalog.id));
           }}
           onOpen={() => onOpenCatalog(catalog.id)}
         />
@@ -169,6 +176,7 @@ function SidebarPanelsContent({ selection, sidebarState, onStateChange, onSelect
           onSave={async (patch, acknowledgeDuplicate) => {
             const updated = await sidebarApi.updateComponentType(ct.id, patch, { acknowledgeDuplicate });
             onStateChange({ ...sidebarState, componentTypes: componentTypes.map((c) => (c.id === ct.id ? updated : c)) });
+            announceSaved(feedbackTarget("componentType", ct.id));
           }}
         />
       </DetailWrapper>
@@ -209,6 +217,7 @@ function SidebarPanelsContent({ selection, sidebarState, onStateChange, onSelect
           onSave={async (patch, acknowledgeDuplicate) => {
             const updated = await sidebarApi.updateConnectionType(ct.id, patch, { acknowledgeDuplicate });
             onStateChange({ ...sidebarState, connectionTypes: connectionTypes.map((c) => (c.id === ct.id ? updated : c)) });
+            announceSaved(feedbackTarget("connectionType", ct.id));
           }}
         />
       </DetailWrapper>
@@ -251,6 +260,7 @@ function SidebarPanelsContent({ selection, sidebarState, onStateChange, onSelect
           onSave={async (patch) => {
             const updated = await sidebarApi.updateConnectionRule(rule.id, patch);
             onStateChange({ ...sidebarState, connectionRules: connectionRules.map((item) => (item.id === rule.id ? updated : item)) });
+            announceSaved(feedbackTarget("connectionRule", rule.id));
           }}
         />
       </DetailWrapper>
@@ -288,6 +298,7 @@ function SidebarPanelsContent({ selection, sidebarState, onStateChange, onSelect
           onSave={async (patch) => {
             const updated = await sidebarApi.updateViewpoint(vp.id, patch);
             onStateChange({ ...sidebarState, viewpoints: viewpoints.map((v) => (v.id === vp.id ? updated : v)) });
+            announceSaved(feedbackTarget("viewpoint", vp.id));
           }}
         />
       </DetailWrapper>
@@ -349,7 +360,9 @@ function SidebarPanelsContent({ selection, sidebarState, onStateChange, onSelect
               async () => onStateChange(await sidebarApi.getAll()),
               chooseConflictResolution
             );
-            if (result.applied) onStateChange({ ...sidebarState, components: components.map((c) => (c.id === comp.id ? result.value : c)) });
+            if (!result.applied) return;
+            onStateChange({ ...sidebarState, components: components.map((c) => (c.id === comp.id ? result.value : c)) });
+            announceSaved(feedbackTarget("component", comp.id));
           }}
           onUseExisting={async (existingId) => {
             // Only offered while the new element is still unused, so nothing but the element itself is removed.
@@ -416,7 +429,9 @@ function SidebarPanelsContent({ selection, sidebarState, onStateChange, onSelect
               async () => onStateChange(await sidebarApi.getAll()),
               chooseConflictResolution
             );
-            if (result.applied) onStateChange({ ...sidebarState, connections: connections.map((c) => (c.id === conn.id ? result.value : c)) });
+            if (!result.applied) return;
+            onStateChange({ ...sidebarState, connections: connections.map((c) => (c.id === conn.id ? result.value : c)) });
+            announceSaved(feedbackTarget("connection", conn.id));
           }}
         />
       </DetailWrapper>
@@ -458,7 +473,9 @@ function SidebarPanelsContent({ selection, sidebarState, onStateChange, onSelect
               async () => onStateChange(await sidebarApi.getAll()),
               chooseConflictResolution
             );
-            if (result.applied) onStateChange({ ...sidebarState, diagrams: diagrams.map((x) => (x.id === d.id ? result.value : x)) });
+            if (!result.applied) return;
+            onStateChange({ ...sidebarState, diagrams: diagrams.map((x) => (x.id === d.id ? result.value : x)) });
+            announceSaved(feedbackTarget("diagram", d.id));
           }}
           onOpen={() => onOpenDiagram(d.id)}
         />
@@ -739,7 +756,7 @@ function ComponentTypeEditor({
         <input placeholder="Neuer Schlüssel" value={newKey} onChange={(e) => setNewKey(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addKey()} />
         <button onClick={addKey}>Hinzufügen</button>
       </div>
-      <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft, duplicates.length > 0)}>Speichern</button>
+      <SaveButton dirty={dirty} disabled={!dirty} onSave={() => onSave(draft, duplicates.length > 0)} />
     </div>
   );
 }
@@ -857,7 +874,7 @@ function ConnectionTypeEditor({
       {viewpoints.length > 0 && (
         <p className="muted sb-custom-hint">Viewpoint-Zuordnung wird im Viewpoint-Editor gepflegt.</p>
       )}
-      <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft, duplicates.length > 0)}>Speichern</button>
+      <SaveButton dirty={dirty} disabled={!dirty} onSave={() => onSave(draft, duplicates.length > 0)} />
     </div>
   );
 }
@@ -937,7 +954,7 @@ function ConnectionRuleEditor({
           </label>
         ))}
       </div>
-      <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft)}>Speichern</button>
+      <SaveButton dirty={dirty} disabled={!dirty} onSave={() => onSave(draft)} />
     </div>
   );
 }
@@ -1022,7 +1039,7 @@ function ViewpointEditor({
           </label>
         ))}
       </div>
-      <button className="sb-save-btn" disabled={!dirty} onClick={() => onSave(draft)}>Speichern</button>
+      <SaveButton dirty={dirty} disabled={!dirty} onSave={() => onSave(draft)} />
     </div>
   );
 }
@@ -1364,9 +1381,9 @@ function ComponentEditor({
         onChange={(next) => set("properties", next)}
       />
 
-      <button className="sb-save-btn" disabled={!dirty || !!nameError || conflicts.length > 0} onClick={save}>
+      <SaveButton dirty={dirty} disabled={!dirty || !!nameError || conflicts.length > 0} onSave={save}>
         {placeholderStep.awaiting ? "Ja, mit Platzhalter speichern" : "Speichern"}
-      </button>
+      </SaveButton>
       {saveError && <p className="sb-error" role="alert">{saveError}</p>}
 
       <LinkedConnections
@@ -1469,7 +1486,7 @@ function ConnectionEditor({
         onChange={(next) => set("properties", next)}
       />
 
-      <button className="sb-save-btn" disabled={!dirty} onClick={save}>Speichern</button>
+      <SaveButton dirty={dirty} disabled={!dirty} onSave={save} />
       {saveError && <p className="sb-error" role="alert">{saveError}</p>}
 
       <LinkedDiagrams
@@ -1540,9 +1557,9 @@ function DiagramMetaEditor({
       </label>
       <label>Beschreibung<textarea value={draft.description} onChange={(e) => setDraft((p) => ({ ...p, description: e.target.value }))} /></label>
       <p className="muted">{diagram.componentIds.length} Komponenten · {diagram.connectionIds.length} Verbindungen</p>
-      <button className="sb-save-btn" disabled={!dirty || !!nameError} onClick={save}>
+      <SaveButton dirty={dirty} disabled={!dirty || !!nameError} onSave={save}>
         {placeholderStep.awaiting ? "Ja, mit Platzhalter speichern" : "Speichern"}
-      </button>
+      </SaveButton>
       {saveError && <p className="sb-error" role="alert">{saveError}</p>}
       <button className="sb-open-btn" onClick={onOpen}>Diagramm öffnen →</button>
     </div>

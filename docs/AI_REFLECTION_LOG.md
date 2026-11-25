@@ -571,3 +571,10 @@ Stakeholder wurden bewusst als normale Diagrammelemente erhalten. Ein Stakeholde
 - Kommt ein Request beim Server an, die Antwort aber nicht beim Client, ist „Erneut versuchen“ bei Neuanlagen (POST ohne `If-Match`) nicht idempotent und kann ein Duplikat erzeugen. Änderungen und Löschungen mit `If-Match` laufen stattdessen in den Konfliktdialog. Abhilfe wären Idempotenzschlüssel im Backend.
 - Nach „Verwerfen“ lädt die App den gespeicherten Stand neu. Aufrufer ohne eigene Fehlerbehandlung (z. B. Verschieben von Knoten, bereits vorher so) hinterlassen dabei eine unbehandelte Promise-Ablehnung in der Browserkonsole.
 - Nicht im Browser getestet: Die Anzeige ist mit `react-test-renderer` und statischem Rendering geprüft, der Ablauf mit gemocktem `fetch`. Offline-Verhalten, `beforeunload`-Dialog und Lage des Banners über Dialogen sind nur manuell prüfbar.
+
+### #117: Nachkorrektur nach Rückmeldung (25.11.2026)
+
+- Eine dauerhafte Anzeige „Alles gespeichert“ im Kopfbereich wurde übersehen und sagte nach kurzer Zeit nichts mehr aus. Rückmeldung gehört an die Stelle, an der gespeichert wurde, und darf danach verschwinden. Das Akzeptanzkriterium bleibt erfüllt: „Speichern …“ und „Gespeichert“ am Button, „Speichern fehlgeschlagen“ im Banner.
+- Nur der Fehler bleibt stehen: Verschwände er von selbst, könnte eine nicht gespeicherte Änderung unbemerkt verloren gehen.
+- Änderungen auf der Diagrammfläche (z. B. Verschieben) haben keinen Button. Sie bestätigen sich weiterhin nur durch das sichtbare Ergebnis; ein Fehler erscheint im Banner.
+- Grenze: Die Typ-, Regel-, Viewpoint- und Katalog-Editoren zeigen „Gespeichert“ nur, wenn ihr Entwurf nach dem Speichern dem Serverstand entspricht. Normalisiert der Server eine Eingabe (z. B. abschließende Leerzeichen), bleibt das Formular als geändert markiert wie bisher, und „Gespeichert“ erscheint dort nicht.

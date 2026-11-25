@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it, vi } from "vitest";
-import { SaveFailureBanner, SaveStatusIndicator } from "./SaveStatus";
+import { SaveFailureBanner } from "./SaveStatus";
 import type { SaveSnapshot, SaveTracker } from "./saveTracker";
 
 const saved: SaveSnapshot = { state: "saved", pending: 0, unsaved: 0, failure: null };
@@ -22,20 +22,6 @@ function button(renderer: ReactTestRenderer, text: string) {
     item.props["aria-label"] ?? item.children.filter((child) => typeof child === "string").join("").trim();
   return renderer.root.findAllByType("button").find((item) => label(item) === text)!;
 }
-
-describe("save status in the header (#117)", () => {
-  it.each([
-    [saved, "Alles gespeichert"],
-    [saving, "Speichern läuft …"],
-    [unsaved, "Speichern fehlgeschlagen"],
-    [rejected, "Speichern fehlgeschlagen"]
-  ])("shows the state as text for %#", (status, text) => {
-    const html = renderToStaticMarkup(<SaveStatusIndicator status={status} />);
-    expect(html).toContain(text);
-    expect(html).toContain('role="status"');
-    expect(html).toContain(`save-status--${status.state}`);
-  });
-});
 
 describe("save failure banner (#117)", () => {
   it("is not shown while saving or when everything is saved", () => {

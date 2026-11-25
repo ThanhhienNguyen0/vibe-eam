@@ -19,6 +19,7 @@ import {
 import { sidebarApi } from "./sidebarApi";
 import { runOptimisticMutation } from "../optimisticConflict";
 import { fitMenuInViewport } from "../contextMenuPosition";
+import { announceNotice, feedbackTarget } from "../savedFeedback";
 import { COMPONENT_DRAG_MIME, COMPONENT_TYPE_DRAG_MIME, DEFAULT_TYPE_CATEGORY } from "./sidebarTypes";
 import type { ComponentType, SidebarState } from "./sidebarTypes";
 import { useAccess } from "../access";
@@ -392,6 +393,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     });
     onStateChange({ ...sidebarState, componentTypes: [...componentTypes, ct] });
     onSelect({ kind: "componentType", id: ct.id });
+    announceNotice(feedbackTarget("componentType", ct.id), `Komponenten-Typ „${ct.name}“ angelegt und gespeichert.`);
     setRenaming({ kind: "componentType", id: ct.id });
   }
 
@@ -406,6 +408,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     });
     onStateChange({ ...sidebarState, connectionTypes: [...connectionTypes, ct] });
     onSelect({ kind: "connectionType", id: ct.id });
+    announceNotice(feedbackTarget("connectionType", ct.id), `Verbindungstyp „${ct.name}“ angelegt und gespeichert.`);
     setRenaming({ kind: "connectionType", id: ct.id });
   }
 
@@ -424,6 +427,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     });
     onStateChange({ ...sidebarState, connectionRules: [...connectionRules, rule] });
     onSelect({ kind: "connectionRule", id: rule.id });
+    announceNotice(feedbackTarget("connectionRule", rule.id), "Connection Rule angelegt und gespeichert.");
   }
 
   async function addViewpoint() {
@@ -439,6 +443,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     });
     onStateChange({ ...sidebarState, viewpoints: [...viewpoints, vp] });
     onSelect({ kind: "viewpoint", id: vp.id });
+    announceNotice(feedbackTarget("viewpoint", vp.id), `Viewpoint „${vp.name}“ angelegt und gespeichert.`);
     setRenaming({ kind: "viewpoint", id: vp.id });
   }
 
@@ -456,6 +461,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     setCreating(null);
     onStateChange({ ...sidebarState, components: [...components, comp] });
     onSelect({ kind: "component", id: comp.id });
+    announceNotice(feedbackTarget("component", comp.id), `Komponente „${comp.name}“ angelegt und gespeichert.`);
   }
 
   function allowedConnectionTypesFor(sourceComponentId: string, targetComponentId: string) {
@@ -525,12 +531,17 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
           diagrams: diagrams.map((diagram) => diagram.id === result.diagram.id ? result.diagram : diagram)
         });
         onSelect({ kind: "connection", id: result.connection.id });
+        announceNotice(
+          feedbackTarget("connection", result.connection.id),
+          result.created ? "Verbindung angelegt und gespeichert." : "Diese Verbindung gab es schon; sie ist jetzt im Diagramm."
+        );
         setConnectionDraft(null);
         return;
       }
       const conn = await sidebarApi.createConnection(input);
       onStateChange({ ...sidebarState, connections: [...connections, conn] });
       onSelect({ kind: "connection", id: conn.id });
+      announceNotice(feedbackTarget("connection", conn.id), "Verbindung angelegt und gespeichert.");
       setConnectionDraft(null);
     } catch (error) {
       setConnectionCreateError(error instanceof Error ? error.message : "Verbindung konnte nicht erstellt werden.");
@@ -548,12 +559,14 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     setCreating(null);
     onStateChange({ ...sidebarState, diagrams: [...diagrams, d] });
     onSelect({ kind: "diagram", id: d.id });
+    announceNotice(feedbackTarget("diagram", d.id), `Diagramm „${d.name}“ angelegt und gespeichert.`);
   }
 
   async function addCatalog() {
     const created = await sidebarApi.createCatalog({ name: "Neuer Katalog", kind: "elements", columns: ["type", "description"] });
     onStateChange({ ...sidebarState, catalogs: [...catalogs, created] });
     onSelect({ kind: "catalog", id: created.id });
+    announceNotice(feedbackTarget("catalog", created.id), `Katalog „${created.name}“ angelegt und gespeichert.`);
     setRenaming({ kind: "catalog", id: created.id });
   }
 
@@ -663,12 +676,14 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
       const result = await runOptimisticMutation(item.version ?? 1, (version) => placeholderFlag
         ? sidebarApi.updateComponent(id, { name }, version, placeholderFlag)
         : sidebarApi.updateComponent(id, { name }, version), async () => onStateChange(await sidebarApi.getAll()));
-      if (result.applied) onStateChange({ ...sidebarState, components: components.map((c) => (c.id === id ? result.value : c)) });
+      if (!result.applied) return;
+      onStateChange({ ...sidebarState, components: components.map((c) => (c.id === id ? result.value : c)) });
     } else if (kind === "connection") {
       const item = connections.find((c) => c.id === id);
       if (!item) return;
       const result = await runOptimisticMutation(item.version ?? 1, (version) => sidebarApi.updateConnection(id, { name }, version), async () => onStateChange(await sidebarApi.getAll()));
-      if (result.applied) onStateChange({ ...sidebarState, connections: connections.map((c) => (c.id === id ? result.value : c)) });
+      if (!result.applied) return;
+      onStateChange({ ...sidebarState, connections: connections.map((c) => (c.id === id ? result.value : c)) });
     } else if (kind === "catalog") {
       const u = await sidebarApi.updateCatalog(id, { name });
       onStateChange({ ...sidebarState, catalogs: catalogs.map((c) => (c.id === id ? u : c)) });
@@ -678,8 +693,11 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
       const result = await runOptimisticMutation(item.version ?? 1, (version) => placeholderFlag
         ? sidebarApi.updateDiagram(id, { name }, version, placeholderFlag)
         : sidebarApi.updateDiagram(id, { name }, version), async () => onStateChange(await sidebarApi.getAll()));
-      if (result.applied) onStateChange({ ...sidebarState, diagrams: diagrams.map((d) => (d.id === id ? result.value : d)) });
+      if (!result.applied) return;
+      onStateChange({ ...sidebarState, diagrams: diagrams.map((d) => (d.id === id ? result.value : d)) });
     }
+    // #117: visible in the detail panel when it shows this element.
+    announceNotice(feedbackTarget(kind, id), `„${name}“ gespeichert.`);
   }
 
   const isRenaming = (kind: ItemKind, id: string) => renaming?.kind === kind && renaming?.id === id;

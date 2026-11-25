@@ -807,7 +807,7 @@ function CreateComponentDialog({
         />
         <div className="diagram-suggestion-actions">
           <button className="sb-save-btn" style={{ margin: 0 }} disabled={!canConfirm} onClick={confirm}>
-            {confirmLabel}
+            {saving ? "Wird angelegt …" : confirmLabel}
           </button>
           <button onClick={onCancel}>Abbrechen</button>
         </div>
