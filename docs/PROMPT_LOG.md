@@ -469,3 +469,14 @@ Auftrag: „Alles gespeichert“ nicht dauerhaft irgendwo im Kopfbereich anzeige
 - Tests: 7 neue Tests in `SaveButton.test.tsx` (Button-Zustände, Ablauf, Meldung, Ablauf im echten Detail-Panel mit Neuaufbau, kein „Gespeichert“ nach „Neu laden“); die 4 Tests der entfernten Kopfanzeige entfallen. In `optimisticEditor.test.tsx` findet die Testhilfe den Speichern-Button jetzt über die CSS-Klasse statt über den Text, weil er nach dem Speichern kurz „Gespeichert“ zeigt; die geprüften Aussagen sind unverändert.
 
 Nachweise vom 25.11.2026: Lint, Typechecks, 209 bestandene und 39 übersprungene Backendtests, 166 bestandene Frontendtests, Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfiguration, jeweils Exit 0; `db:generate` wegen der gesperrten Prisma-Engine-DLL ausgelassen. Der erste Testlauf scheiterte an den zwei Tests in `optimisticEditor.test.tsx`, die den Button am Text „Speichern“ suchten. Nicht belegt: Browser-E2E und manueller Test.
+
+### #117: Bestätigung von Sidebar-Aktionen in der Sidebar (25.11.2026)
+
+Auftrag: Beim Umbenennen in der Seitenleiste erschien die Meldung rechts im Detail-Panel, beim Anlegen ebenfalls dort. Was in der Seitenleiste geändert wird, soll auch dort bestätigt werden, wo man es sieht.
+
+- Anlegen und Umbenennen in der Seitenleiste lassen die betroffene Zeile im Baum 2,5 Sekunden grün mit Häkchen aufleuchten; die Zeile wird bei Bedarf in den sichtbaren Bereich gescrollt. Zusätzlich erscheint unten in der Seitenleiste kurz die Meldung, z. B. „Komponente „Billing“ angelegt und gespeichert.“, auch wenn die Zeile in einer zugeklappten Gruppe liegt.
+- Im Detail-Panel erscheint dafür nichts mehr; dort bestätigt nur noch der Speichern-Button Änderungen, die im Panel gemacht wurden.
+- Das Anlegen eines Katalogs aus der Katalogübersicht meldet nichts zusätzlich: Der neue Katalog öffnet sich direkt im Hauptbereich.
+- Tests: `SaveButton.test.tsx` prüft jetzt Umbenennen und Anlegen in der echten Seitenleiste (Zeile markiert, Meldung unten, beides verschwindet nach 2,5 Sekunden) und dass der Panel-Button Sidebar-Aktionen nicht bestätigt; die Tests der entfernten Panel-Meldung entfallen.
+
+Nachweise vom 25.11.2026: Lint, Typechecks, 209 bestandene und 39 übersprungene Backendtests, 167 bestandene Frontendtests, Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfiguration, jeweils Exit 0; `db:generate` wegen der gesperrten Prisma-Engine-DLL ausgelassen. Nicht belegt: Browser-E2E und manueller Test.

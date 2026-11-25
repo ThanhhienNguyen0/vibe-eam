@@ -3,14 +3,15 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from "rea
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccessContext } from "../access";
 import { ApiError } from "../authApi";
-import { SAVED_FEEDBACK_MS, announceNotice, announceSaved, clearSavedFeedback } from "../savedFeedback";
-import { SaveButton, SavedNotice, SaveTargetContext } from "./SaveButton";
+import { SAVED_FEEDBACK_MS, announceInSidebar, announceSaved, clearSavedFeedback } from "../savedFeedback";
+import { SaveButton, SaveTargetContext } from "./SaveButton";
+import Sidebar from "./Sidebar";
 import SidebarPanels from "./SidebarPanels";
 import type { SidebarState } from "./sidebarTypes";
 
 // #117: saving is confirmed where the user saved, briefly, and only after the server confirmed it.
 
-const api = vi.hoisted(() => ({ getAll: vi.fn(), updateComponent: vi.fn() }));
+const api = vi.hoisted(() => ({ getAll: vi.fn(), updateComponent: vi.fn(), createComponent: vi.fn() }));
 vi.mock("./sidebarApi", () => ({ sidebarApi: api }));
 
 const textOf = (node: ReactTestInstance): string =>
@@ -76,27 +77,12 @@ describe("save button (#117)", () => {
     act(() => announceSaved("component:crm"));
     expect(textOf(saveButton(renderer)).trim()).toBe("Speichern");
   });
-});
 
-describe("notice in the detail panel (#117)", () => {
-  it("shows a short message after creating and hides it on its own", () => {
-    vi.useFakeTimers();
+  it("ignores changes made in the sidebar, which are confirmed there", () => {
     let renderer!: ReactTestRenderer;
-    act(() => { renderer = create(inPanel("component:crm", <SavedNotice />)); });
-    expect(renderer.toJSON()).toBeNull();
-
-    act(() => announceNotice("component:crm", "Komponente „CRM“ angelegt und gespeichert."));
-    expect(textOf(renderer.root.findByProps({ role: "status" }))).toContain("Komponente „CRM“ angelegt und gespeichert.");
-
-    act(() => { vi.advanceTimersByTime(SAVED_FEEDBACK_MS); });
-    expect(renderer.toJSON()).toBeNull();
-  });
-
-  it("is not shown for a plain save, which the button confirms", () => {
-    let renderer!: ReactTestRenderer;
-    act(() => { renderer = create(inPanel("component:crm", <SavedNotice />)); });
-    act(() => announceSaved("component:crm"));
-    expect(renderer.toJSON()).toBeNull();
+    act(() => { renderer = create(inPanel("component:crm", <SaveButton dirty={false} onSave={() => undefined} />)); });
+    act(() => announceInSidebar("component:crm", "„CRM“ gespeichert."));
+    expect(textOf(saveButton(renderer)).trim()).toBe("Speichern");
   });
 });
 
@@ -153,5 +139,57 @@ describe("detail panel save (#117)", () => {
     await act(async () => { saveButton(renderer).props.onClick(); });
     expect(api.getAll).toHaveBeenCalled();
     expect(textOf(saveButton(renderer)).trim()).toBe("Speichern");
+  });
+});
+
+function SidebarHarness() {
+  const [current, setCurrent] = useState(state);
+  return <AccessContext.Provider value="Architect">
+    <Sidebar onSelect={() => undefined} selection={null} sidebarState={current} onStateChange={setCurrent} onOpenDiagram={() => undefined} activeDiagramId={null} defaultOpen />
+  </AccessContext.Provider>;
+}
+
+const hasClass = (node: ReactTestInstance, className: string) => typeof node.type === "string" && String(node.props.className ?? "").split(" ").includes(className);
+const row = (renderer: ReactTestRenderer, label: string) =>
+  renderer.root.findAll((node) => hasClass(node, "sb-row") && textOf(node).trim() === label)[0];
+const sidebarNotice = (renderer: ReactTestRenderer) =>
+  renderer.root.findAll((node) => hasClass(node, "sb-sidebar-notice")).map(textOf).join("").trim();
+
+describe("sidebar confirmation (#117)", () => {
+  it("confirms a rename in the sidebar: row highlight and a short message there", async () => {
+    vi.useFakeTimers();
+    api.updateComponent.mockResolvedValue({ ...state.components[0], name: "CRM Neu", version: 2 });
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<SidebarHarness />); });
+
+    await act(async () => row(renderer, "CRM").props.onContextMenu({ preventDefault: () => undefined, stopPropagation: () => undefined, clientX: 10, clientY: 10 }));
+    const rename = renderer.root.findAll((node) => node.type === "button" && textOf(node).includes("Umbenennen"))[0];
+    await act(async () => rename.props.onClick());
+    const input = renderer.root.find((node) => hasClass(node, "sb-rename-input"));
+    await act(async () => input.props.onChange({ target: { value: "CRM Neu" } }));
+    await act(async () => input.props.onKeyDown({ key: "Enter" }));
+
+    expect(api.updateComponent).toHaveBeenCalledWith("crm", { name: "CRM Neu" }, 1);
+    expect(row(renderer, "CRM Neu").props.className).toContain("sb-row--saved");
+    expect(sidebarNotice(renderer)).toBe("„CRM Neu“ gespeichert.");
+
+    act(() => { vi.advanceTimersByTime(SAVED_FEEDBACK_MS); });
+    expect(row(renderer, "CRM Neu").props.className).not.toContain("sb-row--saved");
+    expect(sidebarNotice(renderer)).toBe("");
+  });
+
+  it("confirms a new component in the sidebar, where it was created", async () => {
+    api.createComponent.mockImplementation(async (input: object) => ({ ...input, id: "billing", version: 1 }));
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<SidebarHarness />); });
+
+    const add = renderer.root.findAll((node) => node.type === "button" && node.props.title === "Neue Komponente")[0];
+    await act(async () => add.props.onClick({ stopPropagation: () => undefined }));
+    const form = renderer.root.findByType("form");
+    await act(async () => form.findByType("input").props.onChange({ target: { value: "Billing" } }));
+    await act(async () => form.props.onSubmit({ preventDefault: () => undefined }));
+
+    expect(row(renderer, "Billing").props.className).toContain("sb-row--saved");
+    expect(sidebarNotice(renderer)).toBe("Komponente „Billing“ angelegt und gespeichert.");
   });
 });

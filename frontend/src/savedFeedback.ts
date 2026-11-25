@@ -2,15 +2,17 @@
  * #117: short confirmation right where something was saved. It disappears on its own; only a failed
  * save stays visible (see `SaveFailureBanner`), because then something is still unsaved.
  *
- * The target is the detail panel of an element (`component:<id>` etc.). Panels are rebuilt after a
- * save (their key contains the version), so the confirmation lives here and not in the panel.
+ * - "saved": a save in the detail panel, shown on its save button.
+ * - "sidebar": creating or renaming in the sidebar, shown there (row and message), not in the panel.
+ *
+ * The target is the element (`component:<id>` etc.). Panels are rebuilt after a save (their key
+ * contains the version), so the confirmation lives here and not in the panel.
  */
 import { useSyncExternalStore } from "react";
 
 export interface SavedFeedback {
   target: string;
-  /** "saved": shown on the panel's save button. "notice": small message in the panel, e.g. after creating. */
-  kind: "saved" | "notice";
+  kind: "saved" | "sidebar";
   text: string;
   id: number;
 }
@@ -42,8 +44,8 @@ export function announceSaved(target: string): void {
 }
 
 /** Call only after the server confirmed the save. */
-export function announceNotice(target: string, text: string): void {
-  show({ target, kind: "notice", text });
+export function announceInSidebar(target: string, text: string): void {
+  show({ target, kind: "sidebar", text });
 }
 
 export function clearSavedFeedback(): void {
@@ -61,8 +63,18 @@ export function currentSavedFeedback(): SavedFeedback | null {
   return current;
 }
 
+function useCurrentFeedback(): SavedFeedback | null {
+  return useSyncExternalStore(subscribe, currentSavedFeedback, currentSavedFeedback);
+}
+
 /** The feedback for this target, or null. */
 export function useSavedFeedback(target: string | null): SavedFeedback | null {
-  const feedback = useSyncExternalStore(subscribe, currentSavedFeedback, currentSavedFeedback);
+  const feedback = useCurrentFeedback();
   return feedback && target !== null && feedback.target === target ? feedback : null;
+}
+
+/** The current confirmation of a sidebar action, or null. */
+export function useSidebarFeedback(): SavedFeedback | null {
+  const feedback = useCurrentFeedback();
+  return feedback?.kind === "sidebar" ? feedback : null;
 }

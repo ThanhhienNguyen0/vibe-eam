@@ -14,7 +14,7 @@ import { attachedConnections, diagramsUsingComponent, findDuplicateComponents, f
 import { connectionsInvalidAfterTypeChange, type TypeChangeConflict } from "./metamodelRules";
 import { elementNameError, isPlaceholderName, placeholderQuestion, placeholderWarning } from "./nameRules";
 import { useSecondConfirmation } from "./useSecondConfirmation";
-import { SaveButton, SavedNotice, SaveTargetContext } from "./SaveButton";
+import { SaveButton, SaveTargetContext } from "./SaveButton";
 import { announceSaved, feedbackTarget } from "../savedFeedback";
 import type {
   ComponentInstance,
@@ -54,7 +54,6 @@ function DetailWrapper({ title, onClose, children }: { title: string; onClose: (
         <button className="sb-close-btn" onClick={onClose} title="Panel schließen"><X size={15} /></button>
       </div>
       <div className="sb-detail-body">{children}</div>
-      <SavedNotice />
     </div>
   );
 }

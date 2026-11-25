@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  Check,
   ChevronDown,
   ChevronRight,
   Eye,
@@ -19,7 +20,7 @@ import {
 import { sidebarApi } from "./sidebarApi";
 import { runOptimisticMutation } from "../optimisticConflict";
 import { fitMenuInViewport } from "../contextMenuPosition";
-import { announceNotice, feedbackTarget } from "../savedFeedback";
+import { announceInSidebar, feedbackTarget, useSidebarFeedback } from "../savedFeedback";
 import { COMPONENT_DRAG_MIME, COMPONENT_TYPE_DRAG_MIME, DEFAULT_TYPE_CATEGORY } from "./sidebarTypes";
 import type { ComponentType, SidebarState } from "./sidebarTypes";
 import { useAccess } from "../access";
@@ -157,6 +158,8 @@ interface RowProps {
   onDragStart?: (e: React.DragEvent) => void;
   dragHint?: string;
   renaming?: boolean;
+  /** #117: just created or renamed here; briefly highlighted and scrolled into view. */
+  saved?: boolean;
   /** REQ-02: returns a warning for the typed name, e.g. a possible duplicate. */
   renameWarning?: (name: string) => string | null;
   /** #108: blocks the rename, e.g. an empty name. */
@@ -170,17 +173,22 @@ interface RowProps {
 function Row({
   structural,
   label, icon, color, active, onClick, onDoubleClick, onDelete, deleteTitle, onOpen, openTitle,
-  onContextMenu, draggable, onDragStart, dragHint, renaming, renameWarning, renameError, renamePlaceholder, onRenameSubmit, onRenameCancel
+  onContextMenu, draggable, onDragStart, dragHint, renaming, saved, renameWarning, renameError, renamePlaceholder, onRenameSubmit, onRenameCancel
 }: RowProps) {
   const { canWrite, canManageMetamodel } = useAccess();
   const canEdit = structural ? canManageMetamodel : canWrite;
+  const rowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (saved) rowRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [saved]);
   if (renaming) {
     return <RenameRow label={label} icon={icon} color={color} active={active} warning={renameWarning} error={renameError} placeholder={renamePlaceholder} onSubmit={onRenameSubmit} onCancel={onRenameCancel} />;
   }
 
   return (
     <div
-      className={`sb-row${active ? " sb-active" : ""}${draggable ? " sb-row--draggable" : ""}`}
+      ref={rowRef}
+      className={`sb-row${active ? " sb-active" : ""}${draggable ? " sb-row--draggable" : ""}${saved ? " sb-row--saved" : ""}`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onContextMenu={canEdit ? onContextMenu : undefined}
@@ -194,6 +202,7 @@ function Row({
       {icon && color ? <span className="sb-row-icon" style={{ color }}>{icon}</span> : color && <span className="sb-color-dot" style={{ background: color }} />}
       {!color && icon && <span className="sb-row-icon">{icon}</span>}
       <span className="sb-row-label">{label}</span>
+      {saved && <Check size={13} className="sb-row-saved-mark" aria-hidden="true" />}
       {onOpen && (
         <button
           className="sb-open-icon-btn"
@@ -299,6 +308,8 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
   const searching = q.length > 0;
 
   const [contextMenu, setContextMenu] = useState<TreeContextMenu | null>(null);
+  // #117: creating and renaming here is confirmed here, not in the detail panel.
+  const sidebarFeedback = useSidebarFeedback();
   const [renaming, setRenaming] = useState<{ kind: ItemKind; id: string } | null>(null);
   const [creating, setCreating] = useState<"component" | "diagram" | null>(null);
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
@@ -393,7 +404,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     });
     onStateChange({ ...sidebarState, componentTypes: [...componentTypes, ct] });
     onSelect({ kind: "componentType", id: ct.id });
-    announceNotice(feedbackTarget("componentType", ct.id), `Komponenten-Typ „${ct.name}“ angelegt und gespeichert.`);
+    announceInSidebar(feedbackTarget("componentType", ct.id), `Komponenten-Typ „${ct.name}“ angelegt und gespeichert.`);
     setRenaming({ kind: "componentType", id: ct.id });
   }
 
@@ -408,7 +419,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     });
     onStateChange({ ...sidebarState, connectionTypes: [...connectionTypes, ct] });
     onSelect({ kind: "connectionType", id: ct.id });
-    announceNotice(feedbackTarget("connectionType", ct.id), `Verbindungstyp „${ct.name}“ angelegt und gespeichert.`);
+    announceInSidebar(feedbackTarget("connectionType", ct.id), `Verbindungstyp „${ct.name}“ angelegt und gespeichert.`);
     setRenaming({ kind: "connectionType", id: ct.id });
   }
 
@@ -427,7 +438,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     });
     onStateChange({ ...sidebarState, connectionRules: [...connectionRules, rule] });
     onSelect({ kind: "connectionRule", id: rule.id });
-    announceNotice(feedbackTarget("connectionRule", rule.id), "Connection Rule angelegt und gespeichert.");
+    announceInSidebar(feedbackTarget("connectionRule", rule.id), "Connection Rule angelegt und gespeichert.");
   }
 
   async function addViewpoint() {
@@ -443,7 +454,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     });
     onStateChange({ ...sidebarState, viewpoints: [...viewpoints, vp] });
     onSelect({ kind: "viewpoint", id: vp.id });
-    announceNotice(feedbackTarget("viewpoint", vp.id), `Viewpoint „${vp.name}“ angelegt und gespeichert.`);
+    announceInSidebar(feedbackTarget("viewpoint", vp.id), `Viewpoint „${vp.name}“ angelegt und gespeichert.`);
     setRenaming({ kind: "viewpoint", id: vp.id });
   }
 
@@ -461,7 +472,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     setCreating(null);
     onStateChange({ ...sidebarState, components: [...components, comp] });
     onSelect({ kind: "component", id: comp.id });
-    announceNotice(feedbackTarget("component", comp.id), `Komponente „${comp.name}“ angelegt und gespeichert.`);
+    announceInSidebar(feedbackTarget("component", comp.id), `Komponente „${comp.name}“ angelegt und gespeichert.`);
   }
 
   function allowedConnectionTypesFor(sourceComponentId: string, targetComponentId: string) {
@@ -531,7 +542,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
           diagrams: diagrams.map((diagram) => diagram.id === result.diagram.id ? result.diagram : diagram)
         });
         onSelect({ kind: "connection", id: result.connection.id });
-        announceNotice(
+        announceInSidebar(
           feedbackTarget("connection", result.connection.id),
           result.created ? "Verbindung angelegt und gespeichert." : "Diese Verbindung gab es schon; sie ist jetzt im Diagramm."
         );
@@ -541,7 +552,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
       const conn = await sidebarApi.createConnection(input);
       onStateChange({ ...sidebarState, connections: [...connections, conn] });
       onSelect({ kind: "connection", id: conn.id });
-      announceNotice(feedbackTarget("connection", conn.id), "Verbindung angelegt und gespeichert.");
+      announceInSidebar(feedbackTarget("connection", conn.id), "Verbindung angelegt und gespeichert.");
       setConnectionDraft(null);
     } catch (error) {
       setConnectionCreateError(error instanceof Error ? error.message : "Verbindung konnte nicht erstellt werden.");
@@ -559,14 +570,14 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     setCreating(null);
     onStateChange({ ...sidebarState, diagrams: [...diagrams, d] });
     onSelect({ kind: "diagram", id: d.id });
-    announceNotice(feedbackTarget("diagram", d.id), `Diagramm „${d.name}“ angelegt und gespeichert.`);
+    announceInSidebar(feedbackTarget("diagram", d.id), `Diagramm „${d.name}“ angelegt und gespeichert.`);
   }
 
   async function addCatalog() {
     const created = await sidebarApi.createCatalog({ name: "Neuer Katalog", kind: "elements", columns: ["type", "description"] });
     onStateChange({ ...sidebarState, catalogs: [...catalogs, created] });
     onSelect({ kind: "catalog", id: created.id });
-    announceNotice(feedbackTarget("catalog", created.id), `Katalog „${created.name}“ angelegt und gespeichert.`);
+    announceInSidebar(feedbackTarget("catalog", created.id), `Katalog „${created.name}“ angelegt und gespeichert.`);
     setRenaming({ kind: "catalog", id: created.id });
   }
 
@@ -696,11 +707,11 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
       if (!result.applied) return;
       onStateChange({ ...sidebarState, diagrams: diagrams.map((d) => (d.id === id ? result.value : d)) });
     }
-    // #117: visible in the detail panel when it shows this element.
-    announceNotice(feedbackTarget(kind, id), `„${name}“ gespeichert.`);
+    announceInSidebar(feedbackTarget(kind, id), `„${name}“ gespeichert.`);
   }
 
   const isRenaming = (kind: ItemKind, id: string) => renaming?.kind === kind && renaming?.id === id;
+  const isSaved = (kind: ItemKind, id: string) => sidebarFeedback?.target === feedbackTarget(kind, id);
 
   function openContextMenu(e: React.MouseEvent, kind: ItemKind, id: string, label: string) {
     e.preventDefault();
@@ -793,6 +804,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               }}
               dragHint="In ein offenes Diagramm ziehen, um eine neue Komponente dieses Typs zu erstellen"
               renaming={isRenaming("componentType", ct.id)}
+              saved={isSaved("componentType", ct.id)}
               renameWarning={(name) => duplicateHint(findDuplicatesByName(componentTypes, name, ct.id))}
               onRenameSubmit={(name) => renameItem("componentType", ct.id, name)}
               onRenameCancel={() => setRenaming(null)}
@@ -867,6 +879,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               onDelete={() => deleteConnectionType(ct.id)}
               onContextMenu={(e) => openContextMenu(e, "connectionType", ct.id, ct.name)}
               renaming={isRenaming("connectionType", ct.id)}
+              saved={isSaved("connectionType", ct.id)}
               renameWarning={(name) => duplicateHint(findDuplicatesByName(connectionTypes, name, ct.id))}
               onRenameSubmit={(name) => renameItem("connectionType", ct.id, name)}
               onRenameCancel={() => setRenaming(null)}
@@ -941,6 +954,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               onDelete={() => deleteConnectionRule(rule.id)}
               onContextMenu={(e) => openContextMenu(e, "connectionRule", rule.id, label)}
               renaming={isRenaming("connectionRule", rule.id)}
+              saved={isSaved("connectionRule", rule.id)}
               onRenameSubmit={(name) => renameItem("connectionRule", rule.id, name)}
               onRenameCancel={() => setRenaming(null)}
             />
@@ -973,6 +987,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
             onDelete={() => deleteViewpoint(vp.id)}
             onContextMenu={(e) => openContextMenu(e, "viewpoint", vp.id, vp.name)}
             renaming={isRenaming("viewpoint", vp.id)}
+            saved={isSaved("viewpoint", vp.id)}
             onRenameSubmit={(name) => renameItem("viewpoint", vp.id, name)}
             onRenameCancel={() => setRenaming(null)}
           />
@@ -1025,6 +1040,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               }}
               dragHint="In ein offenes Diagramm ziehen, um sie hinzuzufügen"
               renaming={isRenaming("component", comp.id)}
+              saved={isSaved("component", comp.id)}
               renameWarning={(name) => {
                 const sameType = duplicateHint(findDuplicateComponents(components, { name, componentTypeId: comp.componentTypeId }, comp.id));
                 if (sameType) return sameType;
@@ -1103,6 +1119,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               deleteTitle="Aus Repository löschen"
               onContextMenu={(e) => openContextMenu(e, "connection", conn.id, label)}
               renaming={isRenaming("connection", conn.id)}
+              saved={isSaved("connection", conn.id)}
               onRenameSubmit={(name) => renameItem("connection", conn.id, name)}
               onRenameCancel={() => setRenaming(null)}
             />
@@ -1136,6 +1153,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
             openTitle="Diagramm öffnen (oder Doppelklick)"
             onContextMenu={(e) => openContextMenu(e, "diagram", d.id, d.name)}
             renaming={isRenaming("diagram", d.id)}
+            saved={isSaved("diagram", d.id)}
             renameError={elementNameError}
             renamePlaceholder={(name) => placeholderWarning(name, d.name)}
             onRenameSubmit={(name, acknowledgePlaceholder) => renameItem("diagram", d.id, name, acknowledgePlaceholder)}
@@ -1170,6 +1188,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
             openTitle="Katalog öffnen (oder Doppelklick)"
             onContextMenu={(e) => openContextMenu(e, "catalog", c.id, c.name)}
             renaming={isRenaming("catalog", c.id)}
+            saved={isSaved("catalog", c.id)}
             onRenameSubmit={(name) => renameItem("catalog", c.id, name)}
             onRenameCancel={() => setRenaming(null)}
           />
@@ -1246,6 +1265,12 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               <button disabled={connectionCreating} onClick={() => setConnectionDraft(null)}>Abbrechen</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {sidebarFeedback && (
+        <div key={sidebarFeedback.id} className="sb-sidebar-notice" role="status">
+          <Check size={14} aria-hidden="true" /> {sidebarFeedback.text}
         </div>
       )}
 

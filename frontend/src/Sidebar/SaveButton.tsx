@@ -43,14 +43,3 @@ export function SaveButton({ onSave, disabled = false, dirty, children = "Speich
     </>
   );
 }
-
-/** Small message in the detail panel, e.g. after creating an element; disappears on its own. */
-export function SavedNotice() {
-  const feedback = useSavedFeedback(useContext(SaveTargetContext));
-  if (feedback?.kind !== "notice") return null;
-  return (
-    <div key={feedback.id} className="sb-saved-notice" role="status">
-      <Check size={14} aria-hidden="true" /> {feedback.text}
-    </div>
-  );
-}

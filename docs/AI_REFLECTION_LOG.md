@@ -578,3 +578,4 @@ Stakeholder wurden bewusst als normale Diagrammelemente erhalten. Ein Stakeholde
 - Nur der Fehler bleibt stehen: Verschwände er von selbst, könnte eine nicht gespeicherte Änderung unbemerkt verloren gehen.
 - Änderungen auf der Diagrammfläche (z. B. Verschieben) haben keinen Button. Sie bestätigen sich weiterhin nur durch das sichtbare Ergebnis; ein Fehler erscheint im Banner.
 - Grenze: Die Typ-, Regel-, Viewpoint- und Katalog-Editoren zeigen „Gespeichert“ nur, wenn ihr Entwurf nach dem Speichern dem Serverstand entspricht. Normalisiert der Server eine Eingabe (z. B. abschließende Leerzeichen), bleibt das Formular als geändert markiert wie bisher, und „Gespeichert“ erscheint dort nicht.
+- Nachtrag: Eine Meldung im Detail-Panel nach einer Aktion in der Seitenleiste landete auf der anderen Bildschirmseite. Bestätigt wird jetzt immer dort, wo gehandelt wurde: Panel-Änderungen am Panel-Button, Seitenleisten-Änderungen in der Seitenleiste (Zeile und kurze Meldung).

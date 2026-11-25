@@ -26,7 +26,6 @@ import CatalogView from "./CatalogView";
 import AuditLogView from "./AuditLogView";
 import { SaveFailureBanner, useSaveStatus, useWarnBeforeLeavingUnsaved } from "./SaveStatus";
 import { saveTracker } from "./saveTracker";
-import { announceNotice, feedbackTarget } from "./savedFeedback";
 
 export default function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -236,7 +235,6 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
     const created = await sidebarApi.createCatalog({ name: "Neuer Katalog", kind: "elements", columns: ["type", "description"] });
     setSidebarState((s) => ({ ...s, catalogs: [...s.catalogs, created] }));
     setSidebarSelection({ kind: "catalog", id: created.id });
-    announceNotice(feedbackTarget("catalog", created.id), `Katalog „${created.name}“ angelegt und gespeichert.`);
     openCatalog(created.id);
   }
 

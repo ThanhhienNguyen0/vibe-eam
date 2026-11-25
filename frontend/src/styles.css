@@ -1375,7 +1375,6 @@ tr.attention td {
 }
 
 .sb-detail-wrapper {
-  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -1587,12 +1586,18 @@ tr.attention td {
 }
 .sb-save-spin { animation: sb-save-spin 1s linear infinite; }
 @keyframes sb-save-spin { to { transform: rotate(360deg); } }
-.sb-saved-notice {
-  position: absolute;
-  left: 16px;
-  right: 16px;
-  bottom: 16px;
+/* Creating or renaming in the sidebar is confirmed in the sidebar: row highlight and a short message */
+.sb-row.sb-row--saved {
+  background: #dcfce7;
+  color: #166534;
+  transition: background 0.4s;
+}
+.sb-row-saved-mark { flex: none; color: #16a34a; }
+.sb-sidebar-notice {
+  position: sticky;
+  bottom: 8px;
   z-index: 5;
+  margin: auto 8px 8px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1604,11 +1609,13 @@ tr.attention td {
   font-size: 13px;
   font-weight: 600;
   box-shadow: 0 8px 20px rgb(15 23 42 / 14%);
+  line-height: 1.35;
   animation: sb-saved-in 160ms ease-out;
 }
+.sb-sidebar-notice > svg { flex: none; }
 @keyframes sb-saved-in { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) {
-  .sb-save-spin, .sb-saved-notice { animation: none; }
+  .sb-save-spin, .sb-sidebar-notice { animation: none; }
 }
 .sb-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
