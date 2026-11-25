@@ -26,6 +26,23 @@ describe("#108/#113 name rule for components and diagrams", () => {
     expect(checkElementName(" Neue Komponente 2 ", { acknowledgePlaceholder: true })).toEqual({ name: "Neue Komponente 2" });
   });
 
+  it("strips only a real trailing number when recognizing placeholders", () => {
+    expect(isPlaceholderName("Neue Komponente(12")).toBe(true);
+    expect(isPlaceholderName("Neue Komponente 12)")).toBe(true);
+    expect(isPlaceholderName("Neue Komponente)")).toBe(false);
+    expect(isPlaceholderName("Neue Komponente ()")).toBe(false);
+    expect(isPlaceholderName("Neue Komponente 1 2 x")).toBe(false);
+  });
+
+  it("stays linear on long digit runs (CodeQL js/polynomial-redos)", () => {
+    // The former regex /\(?\d+\)?$/ needed about 0.35 s for 20 000 digits and grew quadratically.
+    const hostile = `${"9".repeat(200_000)}x`;
+    const started = performance.now();
+    expect(isPlaceholderName(hostile)).toBe(false);
+    expect(checkElementName(hostile)).toEqual({ name: hostile });
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
   it("accepts real names and returns them trimmed", () => {
     expect(checkElementName("  SAP S/4HANA  ")).toEqual({ name: "SAP S/4HANA" });
   });
