@@ -1613,6 +1613,7 @@ tr.attention td {
   animation: sb-saved-in 160ms ease-out;
 }
 .sb-sidebar-notice > svg { flex: none; }
+.sb-sidebar-notice--danger { border-color: #fecaca; background: #fef2f2; color: #b91c1c; }
 @keyframes sb-saved-in { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) {
   .sb-save-spin, .sb-sidebar-notice { animation: none; }
@@ -4122,6 +4123,12 @@ tr.attention td {
   border-bottom: 1px solid #a7f3d0;
   color: #047857;
   font-size: 13px;
+}
+
+.diagram-notice--danger {
+  background: #fef2f2;
+  border-bottom-color: #fecaca;
+  color: #b91c1c;
 }
 
 @media (max-width: 768px) {

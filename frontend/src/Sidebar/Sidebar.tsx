@@ -588,7 +588,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     if (!await confirm(simpleDeleteConfirmation("Komponenten-Typ", name))) return;
     await sidebarApi.deleteComponentType(id);
     onStateChange({ ...sidebarState, componentTypes: componentTypes.filter((c) => c.id !== id) });
-    announceInSidebar(feedbackTarget("componentType", id), `Komponenten-Typ „${name}“ endgültig gelöscht.`);
+    announceInSidebar(feedbackTarget("componentType", id), `Komponenten-Typ „${name}“ endgültig gelöscht.`, "danger");
   }
 
   async function deleteConnectionType(id: string) {
@@ -596,7 +596,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     if (!await confirm(simpleDeleteConfirmation("Verbindungs-Typ", name))) return;
     await sidebarApi.deleteConnectionType(id);
     onStateChange({ ...sidebarState, connectionTypes: connectionTypes.filter((c) => c.id !== id) });
-    announceInSidebar(feedbackTarget("connectionType", id), `Verbindungs-Typ „${name}“ endgültig gelöscht.`);
+    announceInSidebar(feedbackTarget("connectionType", id), `Verbindungs-Typ „${name}“ endgültig gelöscht.`, "danger");
   }
 
   async function deleteViewpoint(id: string) {
@@ -608,7 +608,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
       viewpoints: viewpoints.filter((v) => v.id !== id),
       diagrams: diagrams.map((d) => (d.viewpointId === id ? { ...d, viewpointId: undefined } : d))
     });
-    announceInSidebar(feedbackTarget("viewpoint", id), `Viewpoint „${name}“ endgültig gelöscht.`);
+    announceInSidebar(feedbackTarget("viewpoint", id), `Viewpoint „${name}“ endgültig gelöscht.`, "danger");
   }
 
   async function deleteConnectionRule(id: string) {
@@ -617,7 +617,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     if (!await confirm(simpleDeleteConfirmation("Connection Rule", name))) return;
     await sidebarApi.deleteConnectionRule(id);
     onStateChange({ ...sidebarState, connectionRules: connectionRules.filter((ruleItem) => ruleItem.id !== id) });
-    announceInSidebar(feedbackTarget("connectionRule", id), `Connection Rule „${name}“ endgültig gelöscht.`);
+    announceInSidebar(feedbackTarget("connectionRule", id), `Connection Rule „${name}“ endgültig gelöscht.`, "danger");
   }
 
   async function deleteComponent(id: string) {
@@ -631,7 +631,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     );
     if (!result.applied) return;
     onStateChange(removeComponentFromState(sidebarState, id));
-    announceInSidebar(feedbackTarget("component", id), `Komponente „${component.name}“ endgültig aus dem Repository gelöscht.`);
+    announceInSidebar(feedbackTarget("component", id), `Komponente „${component.name}“ endgültig aus dem Repository gelöscht.`, "danger");
   }
 
   async function deleteConnection(id: string) {
@@ -646,7 +646,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     );
     if (!result.applied) return;
     onStateChange(removeConnectionFromState(sidebarState, id));
-    announceInSidebar(feedbackTarget("connection", id), `Verbindung „${label}“ endgültig aus dem Repository gelöscht.`);
+    announceInSidebar(feedbackTarget("connection", id), `Verbindung „${label}“ endgültig aus dem Repository gelöscht.`, "danger");
   }
 
   async function deleteDiagram(id: string) {
@@ -660,7 +660,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     );
     if (!result.applied) return;
     onStateChange({ ...sidebarState, diagrams: diagrams.filter((d) => d.id !== id) });
-    announceInSidebar(feedbackTarget("diagram", id), `Diagramm „${diagram.name}“ endgültig gelöscht. Seine Elemente bleiben im Repository.`);
+    announceInSidebar(feedbackTarget("diagram", id), `Diagramm „${diagram.name}“ endgültig gelöscht. Seine Elemente bleiben im Repository.`, "danger");
   }
 
   async function deleteCatalog(id: string) {
@@ -668,7 +668,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     if (!await confirm(simpleDeleteConfirmation("Katalog", name))) return;
     await sidebarApi.deleteCatalog(id);
     onStateChange({ ...sidebarState, catalogs: catalogs.filter((c) => c.id !== id) });
-    announceInSidebar(feedbackTarget("catalog", id), `Katalog „${name}“ endgültig gelöscht.`);
+    announceInSidebar(feedbackTarget("catalog", id), `Katalog „${name}“ endgültig gelöscht.`, "danger");
   }
 
   // ── Rename (inline) ───────────────────────────────────────────────────────
@@ -1278,8 +1278,12 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
       )}
 
       {sidebarFeedback && (
-        <div key={sidebarFeedback.id} className="sb-sidebar-notice" role="status">
-          <Check size={14} aria-hidden="true" /> {sidebarFeedback.text}
+        <div
+          key={sidebarFeedback.id}
+          className={`sb-sidebar-notice${sidebarFeedback.tone === "danger" ? " sb-sidebar-notice--danger" : ""}`}
+          role="status"
+        >
+          {sidebarFeedback.tone === "danger" ? <Trash2 size={14} aria-hidden="true" /> : <Check size={14} aria-hidden="true" />} {sidebarFeedback.text}
         </div>
       )}
 

@@ -490,3 +490,13 @@ Auftrag: Nach dem Löschen ebenfalls kurz melden, dass endgültig gelöscht wurd
 - Tests: zwei neue Tests in `SaveButton.test.tsx` (Meldung nach dem Löschen; keine Meldung nach Abbruch oder vor der Serverantwort).
 
 Nachweise vom 25.11.2026: Lint, Typechecks, 209 bestandene und 39 übersprungene Backendtests, 169 bestandene Frontendtests, Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfiguration, jeweils Exit 0; `db:generate` wegen der gesperrten Prisma-Engine-DLL ausgelassen. Ein erster Testentwurf für einen abgelehnten Löschversuch erzeugte eine unbehandelte Promise-Ablehnung, weil der Papierkorb-Button Fehler nicht abfängt (vorbestehend; in der App zeigt das Fehlerbanner den Grund). Er wurde durch einen Test ersetzt, der belegt, dass vor der Serverantwort nichts gemeldet wird. Nicht belegt: Browser-E2E und manueller Test.
+
+### #117: Löschmeldung in Rot (25.11.2026)
+
+Auftrag: Die Meldung nach dem Löschen rot statt grün anzeigen.
+
+- Seitenleiste: Die acht Löschmeldungen erscheinen rot mit Papierkorb-Symbol; Anlegen und Umbenennen bleiben grün mit Häkchen. `announceInSidebar` nimmt dafür den Ton `"danger"`.
+- Diagrammfläche: Die Meldung ist jetzt ein Objekt `{ text, tone }`. „Aus Repository löschen…“ setzt `tone: "danger"` und erscheint rot; alle anderen Meldungen bleiben grün. „Aus Diagramm entfernen“ bleibt grün, weil nichts gelöscht wird.
+- Tests: Die Sidebar-Tests prüfen, dass die Löschmeldung rot und die Anlegemeldung nicht rot ist.
+
+Nachweise vom 25.11.2026: Lint, Typechecks, 209 bestandene und 39 übersprungene Backendtests, 169 bestandene Frontendtests, Builds und alle Validatoren mit Exit 0; `db:generate` wegen der gesperrten Prisma-Engine-DLL ausgelassen. Nicht belegt: Browser-E2E und manueller Test.

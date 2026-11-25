@@ -14,6 +14,8 @@ export interface SavedFeedback {
   target: string;
   kind: "saved" | "sidebar";
   text: string;
+  /** "danger": a permanent deletion, shown in red. */
+  tone?: "danger";
   id: number;
 }
 
@@ -43,9 +45,9 @@ export function announceSaved(target: string): void {
   show({ target, kind: "saved", text: "Gespeichert" });
 }
 
-/** Call only after the server confirmed the save. */
-export function announceInSidebar(target: string, text: string): void {
-  show({ target, kind: "sidebar", text });
+/** Call only after the server confirmed the save (or the deletion, with tone "danger"). */
+export function announceInSidebar(target: string, text: string, tone?: "danger"): void {
+  show({ target, kind: "sidebar", text, ...(tone ? { tone } : {}) });
 }
 
 export function clearSavedFeedback(): void {

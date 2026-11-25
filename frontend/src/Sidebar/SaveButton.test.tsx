@@ -155,6 +155,8 @@ const row = (renderer: ReactTestRenderer, label: string) =>
   renderer.root.findAll((node) => hasClass(node, "sb-row") && textOf(node).trim() === label)[0];
 const sidebarNotice = (renderer: ReactTestRenderer) =>
   renderer.root.findAll((node) => hasClass(node, "sb-sidebar-notice")).map(textOf).join("").trim();
+const sidebarNoticeIsRed = (renderer: ReactTestRenderer) =>
+  renderer.root.findAll((node) => hasClass(node, "sb-sidebar-notice--danger")).length === 1;
 
 describe("sidebar confirmation (#117)", () => {
   it("confirms a rename in the sidebar: row highlight and a short message there", async () => {
@@ -192,6 +194,7 @@ describe("sidebar confirmation (#117)", () => {
 
     expect(row(renderer, "Billing").props.className).toContain("sb-row--saved");
     expect(sidebarNotice(renderer)).toBe("Komponente „Billing“ angelegt und gespeichert.");
+    expect(sidebarNoticeIsRed(renderer)).toBe(false);
   });
 
   const deleteButton = (renderer: ReactTestRenderer, label: string) =>
@@ -206,6 +209,7 @@ describe("sidebar confirmation (#117)", () => {
     expect(api.deleteComponent).toHaveBeenCalledWith("crm", 1);
     expect(row(renderer, "CRM")).toBeUndefined();
     expect(sidebarNotice(renderer)).toBe("Komponente „CRM“ endgültig aus dem Repository gelöscht.");
+    expect(sidebarNoticeIsRed(renderer)).toBe(true);
   });
 
   it("says nothing when the deletion was cancelled, and nothing before the server deleted it", async () => {
