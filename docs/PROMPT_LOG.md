@@ -419,7 +419,7 @@ CodeQL meldete `js/polynomial-redos` (High) für `/\(?\d+\)?$/` in `nameRules.ts
 
 ## #122: Kontextmenü innerhalb des Viewports am 25.11.2026
 
-Auftrag: Issue #122 umsetzen. Das Rechtsklick-Menü ragte unten aus dem Bild, „Aus Repository löschen…“ war dadurch nicht anklickbar. Ausgangsstand war `main` auf `9a669217c6d43ac78dcd5ff818b5b6edab30465a`, Branch `codex/eam/feedback-122-kontextmenue-viewport`. Die Nutzerin/der Nutzer fragte, ob #122 und #117 zusammen umgesetzt werden können; wegen „kleine, fachlich zusammenhängende Änderungen“ (CONTRIBUTING) wurden sie auf zwei getrennte Branches gelegt.
+Auftrag: Issue #122 umsetzen. Das Rechtsklick-Menü ragte unten aus dem Bild, „Aus Repository löschen…“ war dadurch nicht anklickbar. Ausgangsstand war `main` auf `9a669217c6d43ac78dcd5ff818b5b6edab30465a`. Die Nutzerin/der Nutzer fragte, ob #122 und #117 zusammen umgesetzt werden können. Wegen „kleine, fachlich zusammenhängende Änderungen“ (CONTRIBUTING) entstanden sie zuerst auf zwei getrennten Branches von `main`. Auf Wunsch der Nutzerin/des Nutzers wurden beide Commits danach auf den gemeinsamen Branch `feedback_speicherstatus_und_kontextmenue` übertragen, der auf `feedback_speicherung_und_validierung` (PR #146) aufsetzt.
 
 Befund vor der Umsetzung: Das Kontextmenü im Diagramm-Editor wurde mit `position: fixed` genau an der Cursorposition geöffnet und nie verschoben. Das Kontextmenü der Seitenleiste hielt sich bereits per `useLayoutEffect` im Fenster, klappte aber nicht um und war bei sehr kleinen Fenstern über `overflow: hidden` abgeschnitten.
 
@@ -434,7 +434,7 @@ Nachweise vom 25.11.2026: Lint, Typechecks, 184 bestandene und 39 übersprungene
 
 ## #117: Speicherstatus und fehlgeschlagene Speicherung sichtbar machen am 25.11.2026
 
-Auftrag: Issue #117 umsetzen. Nutzer konnten nicht erkennen, ob Änderungen gespeichert sind oder ein Speichern fehlgeschlagen ist. Ausgangsstand war `main` auf `9a669217c6d43ac78dcd5ff818b5b6edab30465a`, Branch `codex/eam/feedback-117-speicherstatus` (getrennt von #122, siehe dort).
+Auftrag: Issue #117 umsetzen. Nutzer konnten nicht erkennen, ob Änderungen gespeichert sind oder ein Speichern fehlgeschlagen ist. Ausgangsstand war `main` auf `9a669217c6d43ac78dcd5ff818b5b6edab30465a`; zum Branch siehe #122.
 
 Befund vor der Umsetzung: Es gab keine zentrale Speicheranzeige. Einzelne Formulare zeigten „Speichere…“ am eigenen Button; Fehler erschienen nur dort, wo der Aufrufer sie abfing. Das Verschieben von Knoten speicherte ohne jede Rückmeldung, ein Fehler dabei blieb unsichtbar. Alle Schreibzugriffe auf das Repository laufen über `sidebarApi` und damit über eine Stelle.
 
@@ -449,3 +449,9 @@ Umgesetzt wurde:
 - Tests: 26 Tests in `saveTracker.test.ts` (Zustände, Wiederholung, Reihenfolge, Verwerfen, Ablehnung, Abmelden, Fehlerklassifikation, Integration mit `sidebarApi` über gemocktes `fetch`) und 8 Tests in `SaveStatus.test.tsx` (Anzeige und Banner-Aktionen).
 
 Nachweise vom 25.11.2026: Lint, Typechecks, 184 bestandene und 39 übersprungene Backendtests, 138 bestandene Frontendtests, Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfiguration, jeweils Exit 0. `db:generate` wurde wie bei #122 wegen der vom laufenden Dev-Server gesperrten Prisma-Engine-DLL ausgelassen; das Prisma-Schema ist unverändert. Ein erster Testlauf scheiterte, weil `saveStatus.ts` und `SaveStatus.tsx` auf Windows kollidierten (umbenannt in `saveTracker.ts`), ein zweiter an einer Testhilfe, die Icon-Knoten serialisieren wollte. Nicht belegt: Browser-E2E, manueller Test, unabhängige Kontrolle, Remote-CI, Review und Merge.
+
+### Zusammenführung von #122 und #117 auf dem Stand von PR #146 (25.11.2026)
+
+Beide Commits wurden per Cherry-Pick auf `feedback_speicherstatus_und_kontextmenue` übertragen (Basis `feedback_speicherung_und_validierung` auf `c4e9fb19b9e251d636b4a790c09b4936bf6e9d72`). Der Code ließ sich ohne Konflikte übernehmen; nur die Einträge am Ende dieses Logs und des Reflexionslogs kollidierten und wurden aneinandergehängt. Geprüft wurde außerdem, dass kein Ablauf aus #146 absichtlich eine 4xx-Antwort auslöst: Platzhalter- und Duplikatbestätigungen entscheidet der Client vor dem Senden, das Fehlerbanner erscheint dabei also nicht fälschlich.
+
+Nachweise auf dem zusammengeführten Stand: Lint, Typechecks, 209 bestandene und 39 übersprungene Backendtests, 163 bestandene Frontendtests (121 aus #146 plus 8 für #122 und 34 für #117), Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfiguration, jeweils Exit 0; `db:generate` wieder wegen der gesperrten Prisma-Engine-DLL ausgelassen. Vor dem Übertragen auf den Ausgangsständen: `npm run scan:dependencies` ohne hohe oder kritische Befunde (9 moderate, wie dokumentiert), `npm run scan:secrets` ohne Fund über die gesamte Historie. Solange PR #146 nicht gemergt ist, enthält ein PR dieses Branches gegen `main` auch dessen Commits.
