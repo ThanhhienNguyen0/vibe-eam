@@ -416,3 +416,18 @@ Auftrag: Platzhalternamen wie „Neue Komponente“ nicht hart ablehnen, sondern
 ### CodeQL-Befund im PR (26.11.2026)
 
 CodeQL meldete `js/polynomial-redos` (High) für `/\(?\d+\)?$/` in `nameRules.ts`: Der nicht verankerte Ausdruck probiert jede Startposition und ist bei langen Ziffernfolgen quadratisch. Gemessen: 357 ms für 20 000 Ziffern; ein Name bis zur JSON-Grenze von 2 MB hätte das Backend lange blockiert. Ersetzt in Backend und Frontend durch einen einzigen Rückwärtsdurchlauf (`withoutTrailingNumber`, 0,1 ms für 200 000 Ziffern). Gleichwertigkeit mit dem alten Ausdruck: 19 Randfälle und 200 000 Zufallsstrings ohne Abweichung. Regressionstests für Randfälle und Laufzeit ergänzt. Nachweis: alle Schritte von `npm run check` außer `db:generate` mit Exit 0 (209 bestandene und 39 übersprungene Backendtests, 121 Frontendtests). `db:generate` scheiterte lokal mit EPERM, weil der laufende Dev-Server die Prisma-Engine-DLL gesperrt hielt; das Prisma-Schema ist unverändert.
+
+## #122: Kontextmenü innerhalb des Viewports am 25.11.2026
+
+Auftrag: Issue #122 umsetzen. Das Rechtsklick-Menü ragte unten aus dem Bild, „Aus Repository löschen…“ war dadurch nicht anklickbar. Ausgangsstand war `main` auf `9a669217c6d43ac78dcd5ff818b5b6edab30465a`, Branch `codex/eam/feedback-122-kontextmenue-viewport`. Die Nutzerin/der Nutzer fragte, ob #122 und #117 zusammen umgesetzt werden können; wegen „kleine, fachlich zusammenhängende Änderungen“ (CONTRIBUTING) wurden sie auf zwei getrennte Branches gelegt.
+
+Befund vor der Umsetzung: Das Kontextmenü im Diagramm-Editor wurde mit `position: fixed` genau an der Cursorposition geöffnet und nie verschoben. Das Kontextmenü der Seitenleiste hielt sich bereits per `useLayoutEffect` im Fenster, klappte aber nicht um und war bei sehr kleinen Fenstern über `overflow: hidden` abgeschnitten.
+
+Umgesetzt wurde:
+
+- Neue reine Funktion `fitMenuInViewport` (`contextMenuPosition.ts`): Reicht der Platz unten oder rechts nicht, öffnet das Menü über bzw. links vom Cursor; danach wird es mit 8 px Abstand in das Fenster geschoben. Die Funktion ist idempotent, ein zweiter Durchlauf verschiebt nichts.
+- Diagramm-Editor: Ein `useLayoutEffect` misst das Menü vor dem Zeichnen und setzt die passende Position. Die Seitenleiste nutzt dieselbe Funktion statt ihrer eigenen Rechnung.
+- CSS `.diagram-context-menu`: `max-height`/`max-width` auf Fenstergröße minus Rand und `overflow-y: auto`, damit in sehr kleinen Fenstern gescrollt statt abgeschnitten wird.
+- Tests: 8 Tests in `contextMenuPosition.test.ts` (alle vier Ränder, Ecke, Umklappen, Menü größer als Fenster, Idempotenz).
+
+Nachweise vom 25.11.2026: Lint, Typechecks, 184 bestandene und 39 übersprungene Backendtests, 112 bestandene Frontendtests, Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfiguration, jeweils Exit 0. `db:generate` scheiterte lokal mit EPERM, weil der laufende Dev-Server die Prisma-Engine-DLL gesperrt hielt; das Prisma-Schema ist unverändert, die übrigen Schritte von `npm run check` wurden einzeln ausgeführt. Nicht belegt: Browser-E2E, manueller Test, unabhängige Kontrolle, Remote-CI, Review und Merge.

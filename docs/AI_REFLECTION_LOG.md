@@ -541,3 +541,16 @@ Stakeholder wurden bewusst als normale Diagrammelemente erhalten. Ein Stakeholde
 - Metamodelländerungen (z. B. das Entfernen einer Regel) können bestehende Verbindungen weiterhin ungültig machen. #111 deckt nur den Typwechsel einer Komponente ab.
 - Die UI-Tests rendern mit `react-test-renderer` ohne Browser. Das Verhalten beim Ziehen, Skalieren und Klicken auf der echten Diagrammfläche ist nur über die reine Funktion `changedNodeLayout` belegt, nicht per E2E oder manuellem Test.
 - Die Typwechsel-Prüfung liest den Stand vor dem Speichern und läuft nicht in derselben Transaktion. Legt jemand gleichzeitig eine Verbindung zur selben Komponente an, kann im schmalen Zeitfenster dazwischen eine ungültige Kombination entstehen. „Ansicht prüfen“ meldet sie dann weiterhin.
+
+## #122: Kontextmenü innerhalb des Viewports (25.11.2026)
+
+### Entscheidungen
+
+- Umklappen vor Verschieben: Am unteren oder rechten Rand öffnet das Menü über bzw. links vom Cursor, wie native Kontextmenüs. Reines Verschieben (bisheriges Verhalten der Seitenleiste) hätte das Menü unter den Mauszeiger gelegt.
+- Eine gemeinsame reine Funktion für Diagramm-Editor und Seitenleiste, damit beide Menüs gleich reagieren und das Verhalten ohne Browser testbar ist.
+- `useLayoutEffect` statt `useEffect`: Die Korrektur passiert vor dem Zeichnen, das Menü blitzt nicht abgeschnitten auf.
+
+### Grenzen
+
+- Die Platzierung wird beim Öffnen berechnet. Wird das Fenster bei offenem Menü verkleinert, wird nicht neu platziert; das Menü schließt beim nächsten Klick daneben.
+- Kein Browser-E2E-Test. Belegt ist die reine Funktion; die Messung per `getBoundingClientRect` im echten Browser ist nur manuell prüfbar.

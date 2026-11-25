@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -21,6 +21,7 @@ import { CircleCheck, GitBranch, Grid3x3, Link2, Maximize, MousePointerClick, Pa
 import DiagramCoordinates from "./DiagramCoordinates";
 import DiagramExportDialog, { type ExportChoice } from "./DiagramExportDialog";
 import { copyText } from "./CopyLinkButton";
+import { fitMenuInViewport } from "./contextMenuPosition";
 import ShareMenu from "./ShareMenu";
 import { absoluteLink, viewParam, type FocusTarget } from "./deepLink";
 import {
@@ -1017,6 +1018,16 @@ function DiagramEditorInner({
     window.addEventListener("pointerdown", handler);
     return () => window.removeEventListener("pointerdown", handler);
   }, [contextMenu.visible]);
+
+  // #122: keep the menu inside the window; runs before paint, so it never shows cut off.
+  useLayoutEffect(() => {
+    if (!contextMenu.visible || !menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    const { x, y } = fitMenuInViewport(contextMenu, rect, { width: window.innerWidth, height: window.innerHeight });
+    if (x !== contextMenu.x || y !== contextMenu.y) {
+      setContextMenu((current) => ({ ...current, x, y }));
+    }
+  }, [contextMenu]);
 
   // ── Shared connection creation ──────────────────────────────────────────────
 

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { sidebarApi } from "./sidebarApi";
 import { runOptimisticMutation } from "../optimisticConflict";
+import { fitMenuInViewport } from "../contextMenuPosition";
 import { COMPONENT_DRAG_MIME, COMPONENT_TYPE_DRAG_MIME, DEFAULT_TYPE_CATEGORY } from "./sidebarTypes";
 import type { ComponentType, SidebarState } from "./sidebarTypes";
 import { useAccess } from "../access";
@@ -322,10 +323,8 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
 
   useLayoutEffect(() => {
     if (!contextMenu || !menuRef.current) return;
-    const margin = 8;
     const rect = menuRef.current.getBoundingClientRect();
-    const x = Math.max(margin, Math.min(contextMenu.x, window.innerWidth - rect.width - margin));
-    const y = Math.max(margin, Math.min(contextMenu.y, window.innerHeight - rect.height - margin));
+    const { x, y } = fitMenuInViewport(contextMenu, rect, { width: window.innerWidth, height: window.innerHeight });
     if (x !== contextMenu.x || y !== contextMenu.y) {
       setContextMenu((current) => current ? { ...current, x, y } : null);
     }

@@ -2142,7 +2142,11 @@ tr.attention td {
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
   min-width: 196px;
   z-index: 9999;
-  overflow: hidden;
+  /* #122: in a very small window the menu scrolls instead of cutting off entries (margin 8px per side). */
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .diagram-context-label {
