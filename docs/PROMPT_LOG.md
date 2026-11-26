@@ -382,3 +382,37 @@ Umgesetzt wurden:
 - Regressionstests für mehrere Beziehungen zum selben Nachbarn, „Nur Komponente“, bestehende Mitgliedschaften und die API-Grenzvalidierung.
 
 Nachweise: gezielt 5/5 Frontend- und 22/22 Backend-Regeltests; vollständiges `npm run check` mit 184 bestandenen und 39 übersprungenen Backendtests, 104 bestandenen Frontendtests, Lint, Typechecks, Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen; drei reale Compose-`config --quiet`-Läufe; Dependency-Scan ohne hohe/kritische Befunde bei 10 weiter dokumentierten moderaten Befunden; vollständiger Secret-Scan ohne Fund. Ein erster Check scheiterte am gesperrten Prisma-Download, der nächste an einem einmaligen Vitest-Workerabbruch in `rbac.test.ts`; der isolierte Rollentest bestand anschließend 14/14 und der vollständige Wiederholungslauf bestand. Nicht belegt sind Browser-E2E, Image-Build, PostgreSQL-Integration, unabhängiges Review, Remote-CI, Merge oder Deployment.
+
+## Paket „Speichern & Validierung“ (#109, #113, #108, #111) am 25.11.2026
+
+Auftrag: Die vier Issues aus Paket 1 der Feedback-Triage umsetzen, in der dort festgelegten Reihenfolge: #109, dann #113 und #108 zusammen, zuletzt #111. Ausgangsstand war `main` auf `9a669217c6d43ac78dcd5ff818b5b6edab30465a`, Branch `feedback_speicherung_und_validierung`.
+
+Befunde vor der Umsetzung:
+
+- #109: Das Interaktions-Overlay meldete auch einen reinen Klick als beendete Verschiebung. `onNodeTransformEnd` speicherte dann Position und gemessene Größe, was eine neue Diagrammversion und einen Audit-Eintrag erzeugte. Bei Knoten ohne gespeicherte Größe kam die Standardgröße als neuer Diff hinzu.
+- #113: Sidebar und Diagrammübersicht legten sofort „Neue Komponente“ oder „Neues Diagramm“ an und boten erst danach das Umbenennen an.
+- #108: `PATCH /components/:id` prüfte den Namen nicht. Leere Namen kamen über das Detail-Panel oder direkte API-Aufrufe durch.
+- #111: `PATCH /components/:id` prüfte bei einem Typwechsel weder den neuen Typ noch die bestehenden Verbindungen.
+
+Umgesetzt wurde:
+
+- #109: `changedNodeLayout` in `diagramLayout.ts` vergleicht Start und Ende einer Geste (nach dem Einrasten) und gibt bei keiner Änderung `null` zurück. Breite und Höhe werden nur geschrieben, wenn sie schon gespeichert waren oder sich geändert haben. Das Overlay übergibt dafür den Startzustand.
+- #113/#108: Eine gemeinsame Namensregel `nameRules.ts` im Backend und gespiegelt im Frontend lehnt leere Namen und reine Leerzeichen ab und speichert getrimmt. Platzhalter (auch nummeriert) brauchen eine ausdrückliche zweite Bestätigung (siehe Nachkorrektur unten). Die Regel greift bei allen Anlege- und Änderungsrouten für Komponenten und Diagramme. Ein unveränderter Alt-Platzhalter blockiert andere Änderungen nicht. Der neue `CreateElementDialog` fragt Name und bei Komponenten den Typ ab, bevor etwas gespeichert wird. Detail-Panel, Umbenennen in der Sidebar und der Anlegedialog im Diagramm zeigen den Fehler am Feld und sperren das Speichern.
+- #111: `connectionsInvalidAfterTypeChange` (Backend und gespiegelt im Frontend) prüft alle Verbindungen der Komponente mit dem neuen Typ. Der Server lehnt unzulässige Typwechsel mit HTTP 400 ab und nennt die Verbindungen. Das Detail-Panel zeigt sie schon bei der Typauswahl und sperrt „Speichern“.
+- Der Pflicht-Owner aus #108 wurde nach der Triage bewusst weggelassen, er gehört zum Owner-Konzept aus #36.
+- Tests: 14 Routentests (`saveValidation.test.ts`), 4 Regeltests (`nameRules.test.ts`) und 3 Typwechseltests (`metamodelRules.test.ts`) im Backend, 6 Layouttests (`diagramLayout.test.ts`) und 8 UI- und Paritätstests (`saveValidation.test.tsx`) im Frontend.
+
+Nachweise vom 25.11.2026: vollständiges `npm run check` mit Exit 0: Lint ohne Warnungen, Typechecks, 205 bestandene und 39 übersprungene Backendtests (Datenbanktests ohne lokales PostgreSQL), 118 bestandene Frontendtests, Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen, Prisma-Konfiguration. `npm run scan:dependencies` ohne hohe oder kritische Befunde (9 moderate, wie dokumentiert). `npm run scan:secrets` ohne Fund. Der erste Lauf in Git Bash scheiterte, weil GNU-`tar` den Pfad `D:\…` als Remote-Host las; der Wiederholungslauf in PowerShell mit Windows-`tar` bestand. Alle drei Compose-Konfigurationen bestehen `config --quiet` mit ihren `.env*.example`-Dateien. Nicht belegt: Browser-E2E, manueller Test im Testsystem, Image-Build, PostgreSQL-Integration, unabhängige Kontrolle, Remote-CI, Review und Merge.
+
+### Nachkorrektur nach Rückmeldung (26.11.2026)
+
+Auftrag: Platzhalternamen wie „Neue Komponente“ nicht hart ablehnen, sondern nur warnen. Gespeichert werden soll erst, wenn man den Platzhalter zweimal bestätigt.
+
+- Backend: `checkElementName` nimmt `{ previousName, acknowledgePlaceholder }`. Ohne `acknowledgePlaceholder: true` antwortet der Server weiter mit `NAME_PLACEHOLDER`, mit dem Flag wird gespeichert. Das Flag wird in allen fünf Routen ausgewertet und nie gespeichert. Leere Namen bleiben immer gesperrt.
+- Frontend: `placeholderWarning` zeigt die Warnung, `useSecondConfirmation` steuert den Ablauf. Beim ersten Klick auf „Anlegen“ oder „Speichern“ wird nichts gespeichert, sondern gefragt; erst „Ja, mit Platzhalter …“ speichert. Beim Umbenennen in der Seitenleiste entspricht das zwei Mal Enter. Eine Namensänderung setzt die Bestätigung zurück. Gilt im Anlegedialog der Seitenleiste und der Übersicht, im Anlegedialog der Diagrammfläche, im Detail-Panel für Komponenten und Diagramme und beim Umbenennen in der Seitenleiste.
+- Tests angepasst und ergänzt: Paritätstest gegen die Serverregel mit und ohne Bestätigung, Zwei-Klick-Ablauf im Dialog und im Detail-Panel, Zurücksetzen bei Namensänderung, Routentests für bestätigte Platzhalter und nicht-boolesche Flags.
+- Nachweis vom 26.11.2026: `npm run check` mit Exit 0, 207 bestandene und 39 übersprungene Backendtests, 121 bestandene Frontendtests, Lint, Typechecks, Builds und alle Validatoren. Ein erster Lauf scheiterte am Typecheck einer Testhilfe (falscher Parametertyp), der nach der Korrektur bestand. Manueller Test im Browser steht noch aus.
+
+### CodeQL-Befund im PR (26.11.2026)
+
+CodeQL meldete `js/polynomial-redos` (High) für `/\(?\d+\)?$/` in `nameRules.ts`: Der nicht verankerte Ausdruck probiert jede Startposition und ist bei langen Ziffernfolgen quadratisch. Gemessen: 357 ms für 20 000 Ziffern; ein Name bis zur JSON-Grenze von 2 MB hätte das Backend lange blockiert. Ersetzt in Backend und Frontend durch einen einzigen Rückwärtsdurchlauf (`withoutTrailingNumber`, 0,1 ms für 200 000 Ziffern). Gleichwertigkeit mit dem alten Ausdruck: 19 Randfälle und 200 000 Zufallsstrings ohne Abweichung. Regressionstests für Randfälle und Laufzeit ergänzt. Nachweis: alle Schritte von `npm run check` außer `db:generate` mit Exit 0 (209 bestandene und 39 übersprungene Backendtests, 121 Frontendtests). `db:generate` scheiterte lokal mit EPERM, weil der laufende Dev-Server die Prisma-Engine-DLL gesperrt hielt; das Prisma-Schema ist unverändert.

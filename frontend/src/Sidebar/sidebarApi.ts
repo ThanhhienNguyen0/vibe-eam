@@ -19,7 +19,9 @@ const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(
 const request = apiRequest;
 
 type WithWarnings<T> = T & { warnings?: unknown[] };
-type DuplicateOptions = { acknowledgeDuplicate?: boolean };
+/** Confirmation flags: they only steer server checks and are never stored. */
+type DuplicateOptions = { acknowledgeDuplicate?: boolean; acknowledgePlaceholder?: boolean };
+type PlaceholderOptions = { acknowledgePlaceholder?: boolean };
 
 /** REQ-02: the server adds duplicate `warnings`; the UI detects duplicates itself, so they are stripped here. */
 function withoutWarnings<T>(response: WithWarnings<T>): T {
@@ -95,8 +97,8 @@ export const sidebarApi = {
     request<void>(`${BASE}/catalogs/${id}`, { method: "DELETE" }),
 
   // Diagrams
-  createDiagram: (data: { name: string; description?: string }) =>
-    request<Diagram>(`${BASE}/diagrams`, { method: "POST", body: JSON.stringify(data) }),
+  createDiagram: (data: { name: string; description?: string }, options: PlaceholderOptions = {}) =>
+    request<Diagram>(`${BASE}/diagrams`, { method: "POST", body: JSON.stringify({ ...data, ...options }) }),
   createComponentInDiagram: async (
     diagramId: string,
     data: Omit<ComponentInstance, "id" | "version"> & { position: { x: number; y: number } },
@@ -109,8 +111,8 @@ export const sidebarApi = {
   })),
   createDiagramConnection: (diagramId: string, data: Omit<ConnectionInstance, "id" | "version">) =>
     request<{ connection: ConnectionInstance; diagram: Diagram; created: boolean }>(`${BASE}/diagrams/${diagramId}/connections`, { method: "POST", body: JSON.stringify(data) }),
-  updateDiagram: (id: string, data: Partial<Diagram>, expectedVersion: number) =>
-    request<Diagram>(`${BASE}/diagrams/${id}`, { method: "PATCH", headers: { "If-Match": String(expectedVersion) }, body: JSON.stringify(data) }),
+  updateDiagram: (id: string, data: Partial<Diagram>, expectedVersion: number, options: PlaceholderOptions = {}) =>
+    request<Diagram>(`${BASE}/diagrams/${id}`, { method: "PATCH", headers: { "If-Match": String(expectedVersion) }, body: JSON.stringify({ ...data, ...options }) }),
   validateDiagram: (id: string) =>
     request<DiagramValidationResult>(`${BASE}/diagrams/${id}/validate`),
   deleteDiagram: (id: string, expectedVersion: number) =>

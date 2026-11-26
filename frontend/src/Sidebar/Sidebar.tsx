@@ -32,9 +32,19 @@ import {
   removeComponentFromState,
   simpleDeleteConfirmation,
   removeConnectionFromState,
-  uniqueComponentName,
   uniqueName
 } from "./repositoryReferences";
+import CreateElementDialog, { type CreateConfirmations } from "./CreateElementDialog";
+import { elementNameError, placeholderQuestion, placeholderWarning } from "./nameRules";
+import { useSecondConfirmation } from "./useSecondConfirmation";
+
+/** Only the flags that are set, so ordinary requests stay unchanged. */
+function confirmationFlags({ acknowledgeDuplicate, acknowledgePlaceholder }: CreateConfirmations) {
+  return {
+    ...(acknowledgeDuplicate ? { acknowledgeDuplicate: true } : {}),
+    ...(acknowledgePlaceholder ? { acknowledgePlaceholder: true } : {})
+  };
+}
 
 export type SidebarSelection =
   | { kind: "componentTypes" }
@@ -147,19 +157,23 @@ interface RowProps {
   renaming?: boolean;
   /** REQ-02: returns a warning for the typed name, e.g. a possible duplicate. */
   renameWarning?: (name: string) => string | null;
-  onRenameSubmit?: (name: string) => void;
+  /** #108: blocks the rename, e.g. an empty name. */
+  renameError?: (name: string) => string | null;
+  /** #113: allowed, but only after a warning and a second Enter (placeholder names). */
+  renamePlaceholder?: (name: string) => string | null;
+  onRenameSubmit?: (name: string, acknowledgePlaceholder?: boolean) => void;
   onRenameCancel?: () => void;
 }
 
 function Row({
   structural,
   label, icon, color, active, onClick, onDoubleClick, onDelete, deleteTitle, onOpen, openTitle,
-  onContextMenu, draggable, onDragStart, dragHint, renaming, renameWarning, onRenameSubmit, onRenameCancel
+  onContextMenu, draggable, onDragStart, dragHint, renaming, renameWarning, renameError, renamePlaceholder, onRenameSubmit, onRenameCancel
 }: RowProps) {
   const { canWrite, canManageMetamodel } = useAccess();
   const canEdit = structural ? canManageMetamodel : canWrite;
   if (renaming) {
-    return <RenameRow label={label} icon={icon} color={color} active={active} warning={renameWarning} onSubmit={onRenameSubmit} onCancel={onRenameCancel} />;
+    return <RenameRow label={label} icon={icon} color={color} active={active} warning={renameWarning} error={renameError} placeholder={renamePlaceholder} onSubmit={onRenameSubmit} onCancel={onRenameCancel} />;
   }
 
   return (
@@ -201,37 +215,47 @@ function Row({
 }
 
 function RenameRow({
-  label, icon, color, active, warning, onSubmit, onCancel
+  label, icon, color, active, warning, error, placeholder, onSubmit, onCancel
 }: {
   label: string;
   icon?: React.ReactNode;
   color?: string;
   active: boolean;
   warning?: (name: string) => string | null;
-  onSubmit?: (name: string) => void;
+  error?: (name: string) => string | null;
+  placeholder?: (name: string) => string | null;
+  onSubmit?: (name: string, acknowledgePlaceholder?: boolean) => void;
   onCancel?: () => void;
 }) {
   const [value, setValue] = useState(label);
-  const message = warning?.(value) ?? null;
+  const errorMessage = error?.(value) ?? null;
+  const placeholderMessage = errorMessage ? null : placeholder?.(value) ?? null;
+  const placeholderStep = useSecondConfirmation(placeholderMessage, value);
+  const message = errorMessage
+    ?? (placeholderStep.awaiting ? `${placeholderQuestion(value)} Zum Bestätigen noch einmal Enter drücken.` : placeholderMessage)
+    ?? warning?.(value)
+    ?? null;
   return (
     <div className={`sb-row sb-row--renaming${active ? " sb-active" : ""}`}>
       {icon && color ? <span className="sb-row-icon" style={{ color }}>{icon}</span> : color && <span className="sb-color-dot" style={{ background: color }} />}
       {!color && icon && <span className="sb-row-icon">{icon}</span>}
       <div className="sb-rename-field">
         <input
-          className={`sb-rename-input${message ? " sb-rename-input--warning" : ""}`}
+          className={`sb-rename-input${errorMessage ? " sb-rename-input--error" : message ? " sb-rename-input--warning" : ""}`}
           autoFocus
           value={value}
           aria-invalid={message ? true : undefined}
           onChange={(e) => setValue(e.target.value)}
           onFocus={(e) => e.target.select()}
           onKeyDown={(e) => {
-            if (e.key === "Enter") onSubmit?.(value);
+            // An invalid name keeps the field open; a placeholder needs a second Enter.
+            if (e.key === "Enter" && !errorMessage && placeholderStep.confirm()) onSubmit?.(value, placeholderMessage !== null);
             if (e.key === "Escape") onCancel?.();
           }}
-          onBlur={() => onSubmit?.(value)}
+          // Leaving the field without a valid, confirmed name restores the stored name.
+          onBlur={() => (errorMessage || placeholderMessage ? onCancel?.() : onSubmit?.(value))}
         />
-        {message && <span className="sb-rename-warning" role="status">{message}</span>}
+        {message && <span className={errorMessage ? "sb-rename-error" : "sb-rename-warning"} role={errorMessage ? "alert" : "status"}>{message}</span>}
       </div>
     </div>
   );
@@ -274,6 +298,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
 
   const [contextMenu, setContextMenu] = useState<TreeContextMenu | null>(null);
   const [renaming, setRenaming] = useState<{ kind: ItemKind; id: string } | null>(null);
+  const [creating, setCreating] = useState<"component" | "diagram" | null>(null);
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
   const [connectionCreateError, setConnectionCreateError] = useState("");
   const [connectionCreating, setConnectionCreating] = useState(false);
@@ -418,17 +443,20 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     setRenaming({ kind: "viewpoint", id: vp.id });
   }
 
-  async function addComponent() {
+  // #113: ask for the name first instead of storing a placeholder and renaming it afterwards.
+  function addComponent() {
     if (componentTypes.length === 0) return;
-    const comp = await sidebarApi.createComponent({
-      name: uniqueComponentName(components, "Neue Komponente", componentTypes[0].id),
-      componentTypeId: componentTypes[0].id,
-      properties: {},
-      description: ""
-    });
+    setCreating("component");
+  }
+
+  async function createComponent(name: string, componentTypeId: string, confirmations: CreateConfirmations) {
+    const comp = await sidebarApi.createComponent(
+      { name, componentTypeId, properties: {}, description: "" },
+      confirmationFlags(confirmations)
+    );
+    setCreating(null);
     onStateChange({ ...sidebarState, components: [...components, comp] });
     onSelect({ kind: "component", id: comp.id });
-    setRenaming({ kind: "component", id: comp.id });
   }
 
   function allowedConnectionTypesFor(sourceComponentId: string, targetComponentId: string) {
@@ -512,11 +540,15 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     }
   }
 
-  async function addDiagram() {
-    const d = await sidebarApi.createDiagram({ name: "Neues Diagramm", description: "" });
+  function addDiagram() {
+    setCreating("diagram");
+  }
+
+  async function createDiagram(name: string, confirmations: CreateConfirmations) {
+    const d = await sidebarApi.createDiagram({ name, description: "" }, confirmations.acknowledgePlaceholder ? { acknowledgePlaceholder: true } : {});
+    setCreating(null);
     onStateChange({ ...sidebarState, diagrams: [...diagrams, d] });
     onSelect({ kind: "diagram", id: d.id });
-    setRenaming({ kind: "diagram", id: d.id });
   }
 
   async function addCatalog() {
@@ -609,7 +641,8 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
 
   // ── Rename (inline) ───────────────────────────────────────────────────────
 
-  async function renameItem(kind: ItemKind, id: string, rawName: string) {
+  async function renameItem(kind: ItemKind, id: string, rawName: string, acknowledgePlaceholder = false) {
+    const placeholderFlag = acknowledgePlaceholder ? { acknowledgePlaceholder: true } : undefined;
     setRenaming(null);
     const name = rawName.trim();
     if (!name) return;
@@ -628,7 +661,9 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     } else if (kind === "component") {
       const item = components.find((c) => c.id === id);
       if (!item) return;
-      const result = await runOptimisticMutation(item.version ?? 1, (version) => sidebarApi.updateComponent(id, { name }, version), async () => onStateChange(await sidebarApi.getAll()));
+      const result = await runOptimisticMutation(item.version ?? 1, (version) => placeholderFlag
+        ? sidebarApi.updateComponent(id, { name }, version, placeholderFlag)
+        : sidebarApi.updateComponent(id, { name }, version), async () => onStateChange(await sidebarApi.getAll()));
       if (result.applied) onStateChange({ ...sidebarState, components: components.map((c) => (c.id === id ? result.value : c)) });
     } else if (kind === "connection") {
       const item = connections.find((c) => c.id === id);
@@ -641,7 +676,9 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     } else {
       const item = diagrams.find((d) => d.id === id);
       if (!item) return;
-      const result = await runOptimisticMutation(item.version ?? 1, (version) => sidebarApi.updateDiagram(id, { name }, version), async () => onStateChange(await sidebarApi.getAll()));
+      const result = await runOptimisticMutation(item.version ?? 1, (version) => placeholderFlag
+        ? sidebarApi.updateDiagram(id, { name }, version, placeholderFlag)
+        : sidebarApi.updateDiagram(id, { name }, version), async () => onStateChange(await sidebarApi.getAll()));
       if (result.applied) onStateChange({ ...sidebarState, diagrams: diagrams.map((d) => (d.id === id ? result.value : d)) });
     }
   }
@@ -978,7 +1015,9 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
                 const otherType = other && componentTypes.find((type) => type.id === other.componentTypeId)?.name;
                 return other ? `„${other.name}“ gibt es bereits als ${otherType ?? "anderen Typ"}.` : null;
               }}
-              onRenameSubmit={(name) => renameItem("component", comp.id, name)}
+              renameError={elementNameError}
+              renamePlaceholder={(name) => placeholderWarning(name, comp.name)}
+              onRenameSubmit={(name, acknowledgePlaceholder) => renameItem("component", comp.id, name, acknowledgePlaceholder)}
               onRenameCancel={() => setRenaming(null)}
             />
             );
@@ -1080,7 +1119,9 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
             openTitle="Diagramm öffnen (oder Doppelklick)"
             onContextMenu={(e) => openContextMenu(e, "diagram", d.id, d.name)}
             renaming={isRenaming("diagram", d.id)}
-            onRenameSubmit={(name) => renameItem("diagram", d.id, name)}
+            renameError={elementNameError}
+            renamePlaceholder={(name) => placeholderWarning(name, d.name)}
+            onRenameSubmit={(name, acknowledgePlaceholder) => renameItem("diagram", d.id, name, acknowledgePlaceholder)}
             onRenameCancel={() => setRenaming(null)}
           />
         ))}
@@ -1227,6 +1268,26 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
             <Trash2 size={14} /> {contextMenu.kind === "component" || contextMenu.kind === "connection" ? "Aus Repository löschen" : "Löschen"}
           </button>
         </div>
+      )}
+
+      {creating === "component" && (
+        <CreateElementDialog
+          title="Neue Komponente anlegen"
+          placeholder="z. B. CRM-System"
+          types={componentTypes}
+          duplicateWarning={(name, componentTypeId) => duplicateHint(findDuplicateComponents(components, { name, componentTypeId }))}
+          onSubmit={createComponent}
+          onCancel={() => setCreating(null)}
+        />
+      )}
+      {creating === "diagram" && (
+        <CreateElementDialog
+          title="Neues Diagramm anlegen"
+          placeholder="z. B. Vertrieb – Anwendungslandschaft"
+          duplicateWarning={(name) => duplicateHint(findDuplicatesByName(diagrams, name))}
+          onSubmit={(name, _typeId, confirmations) => createDiagram(name, confirmations)}
+          onCancel={() => setCreating(null)}
+        />
       )}
     </nav>
   );

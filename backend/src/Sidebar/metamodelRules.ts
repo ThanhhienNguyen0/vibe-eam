@@ -237,6 +237,48 @@ export function validateConnectionInstance(
   return result;
 }
 
+/** #111: An existing connection that the active metamodel would no longer allow after a type change. */
+export interface TypeChangeConflict {
+  id: string;
+  /** Readable name for messages, e.g. „CRM → Kundendaten (depends_on)“. */
+  label: string;
+  reason: string;
+}
+
+/**
+ * #111: Checks every connection of a component against the active metamodel as if the component already
+ * had `componentTypeId`. Returns the connections that would become invalid (empty list = change is safe).
+ */
+export function connectionsInvalidAfterTypeChange(
+  state: SidebarState,
+  componentId: string,
+  componentTypeId: string
+): TypeChangeConflict[] {
+  const changed: SidebarState = {
+    ...state,
+    components: state.components.map((component) => component.id === componentId ? { ...component, componentTypeId } : component)
+  };
+  const componentName = (id: string) => changed.components.find((component) => component.id === id)?.name ?? "?";
+  return state.connections
+    .filter((connection) => connection.sourceComponentId === componentId || connection.targetComponentId === componentId)
+    .flatMap((connection) => {
+      const validation = validateConnectionInstance(connection, changed);
+      if (validation.valid) return [];
+      const relation = connectionTypeName(state.connectionTypes, connection.connectionTypeId);
+      const ends = `${componentName(connection.sourceComponentId)} → ${componentName(connection.targetComponentId)} (${relation})`;
+      const source = componentTypeFor(changed.components.find((component) => component.id === connection.sourceComponentId), changed);
+      const target = componentTypeFor(changed.components.find((component) => component.id === connection.targetComponentId), changed);
+      const ruleProblem = validation.errors.some((item) => item.code === "CONNECTION_RULE_MISSING" || item.code === "CONNECTION_RULE_DENIED");
+      return [{
+        id: connection.id,
+        label: connection.name?.trim() ? `${connection.name.trim()}: ${ends}` : ends,
+        reason: ruleProblem && source && target
+          ? `${source.name} darf laut Metamodell nicht über „${relation}“ mit ${target.name} verbunden sein.`
+          : validation.errors[0]?.message ?? "Die Verbindung ist laut Metamodell nicht erlaubt."
+      }];
+    });
+}
+
 export function validateViewpointCompliance(
   diagram: Diagram,
   viewpoint: Viewpoint,

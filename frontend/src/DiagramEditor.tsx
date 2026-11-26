@@ -37,10 +37,12 @@ import {
   viewportArea
 } from "./diagramExport";
 import ComponentTypeIcon from "./componentIcons";
-import { GRID_SIZE as GRID_BG, fallbackPosition, findFreePosition, shapeDefaultSize, snapPoint, type Rect } from "./diagramLayout";
+import { GRID_SIZE as GRID_BG, changedNodeLayout, fallbackPosition, findFreePosition, shapeDefaultSize, snapPoint, type Rect } from "./diagramLayout";
 import { sidebarApi } from "./Sidebar/sidebarApi";
 import { runOptimisticMutation } from "./optimisticConflict";
 import DuplicateHint from "./Sidebar/DuplicateHint";
+import { elementNameError, placeholderQuestion, placeholderWarning } from "./Sidebar/nameRules";
+import { useSecondConfirmation } from "./Sidebar/useSecondConfirmation";
 import { deleteComponentConfirmation, findDuplicateComponents } from "./Sidebar/repositoryReferences";
 import { useConfirm } from "./ConfirmDialog";
 import { useAccess } from "./access";
@@ -211,7 +213,8 @@ interface ShapedNodeData {
   isSource: boolean;
   showInteraction: boolean;
   onInteractionStart?: (nodeId: string) => void;
-  onTransformEnd?: (nodeId: string, pos: { x: number; y: number; width: number; height: number }) => void;
+  /** `start` is the node as rendered when the gesture began, so the editor can skip saving unchanged layouts (#109). */
+  onTransformEnd?: (nodeId: string, end: NodeTransform, start: NodeTransform) => void;
 }
 
 type NodeTransform = { x: number; y: number; width: number; height: number };
@@ -354,9 +357,10 @@ function NodeInteractionOverlay({
           if (transform) applyTransform(transform);
         },
         (ev) => {
+          const start = resizeSessionRef.current;
           const transform = computeResize(dir, ev.clientX, ev.clientY);
           resizeSessionRef.current = null;
-          if (transform) onTransformEnd?.(nodeId, transform);
+          if (start && transform) onTransformEnd?.(nodeId, transform, start);
         }
       );
     };
@@ -387,9 +391,10 @@ function NodeInteractionOverlay({
         if (transform) applyTransform(transform);
       },
       (ev) => {
+        const start = moveSessionRef.current;
         const transform = computeMove(ev.clientX, ev.clientY);
         moveSessionRef.current = null;
-        if (transform) onTransformEnd?.(nodeId, transform);
+        if (start && transform) onTransformEnd?.(nodeId, transform, start);
       }
     );
   }
@@ -721,7 +726,7 @@ function CreateComponentDialog({
 }: {
   type: ComponentType;
   components: ComponentInstance[];
-  onConfirm: (name: string, properties: Record<string, string>, acknowledgeDuplicate: boolean) => Promise<void>;
+  onConfirm: (name: string, properties: Record<string, string>, acknowledgeDuplicate: boolean, acknowledgePlaceholder: boolean) => Promise<void>;
   onUseExisting: (id: string) => void;
   onShowExisting: (id: string) => void;
   onCancel: () => void;
@@ -730,18 +735,28 @@ function CreateComponentDialog({
   const [properties, setProperties] = useState<Record<string, string>>({});
   // While saving, the new element is already in `components` and would match itself.
   const [saving, setSaving] = useState(false);
-  const canConfirm = name.trim().length > 0 && !saving;
+  // #113: same name rule as everywhere else; the error shows once something was typed.
+  const nameError = elementNameError(name);
+  const placeholderHint = placeholderWarning(name);
+  const placeholderStep = useSecondConfirmation(placeholderHint, name);
+  const canConfirm = !nameError && !saving;
   const duplicates = saving ? [] : findDuplicateComponents(components, { name, componentTypeId: type.id });
 
   async function confirm() {
     if (!canConfirm) return;
+    // A placeholder name needs a second click (or Enter) before the component is created.
+    if (!placeholderStep.confirm()) return;
     setSaving(true);
     try {
-      await onConfirm(name.trim(), properties, duplicates.length > 0);
+      await onConfirm(name.trim(), properties, duplicates.length > 0, placeholderHint !== null);
     } finally {
       setSaving(false);
     }
   }
+
+  const confirmLabel = placeholderStep.awaiting
+    ? "Ja, mit Platzhalter anlegen"
+    : duplicates.length > 0 ? "Trotzdem neu anlegen" : "Erstellen & einfügen";
 
   return (
     <div className="diagram-suggestion-overlay" onKeyDown={(e) => e.key === "Escape" && onCancel()}>
@@ -759,11 +774,19 @@ function CreateComponentDialog({
             <input
               autoFocus
               value={name}
-              placeholder={`Neue ${type.name}`}
+              placeholder="Aussagekräftigen Namen eingeben"
+              aria-invalid={name && nameError ? true : undefined}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && confirm()}
             />
+            {name && nameError && <span className="sb-field-error" role="alert">{nameError}</span>}
+            {placeholderHint && !placeholderStep.awaiting && <span className="sb-field-hint">{placeholderHint}</span>}
           </label>
+          {placeholderStep.awaiting && (
+            <p className="sb-field-confirm" role="alert">
+              {placeholderQuestion(name)} Zum Bestätigen noch einmal auf „{confirmLabel}“ klicken.
+            </p>
+          )}
           {type.customPropertyKeys.map((k) => (
             <label key={k}>{k}
               <input
@@ -783,7 +806,7 @@ function CreateComponentDialog({
         />
         <div className="diagram-suggestion-actions">
           <button className="sb-save-btn" style={{ margin: 0 }} disabled={!canConfirm} onClick={confirm}>
-            {duplicates.length > 0 ? "Trotzdem neu anlegen" : "Erstellen & einfügen"}
+            {confirmLabel}
           </button>
           <button onClick={onCancel}>Abbrechen</button>
         </div>
@@ -855,14 +878,14 @@ function DiagramEditorInner({
   }, []);
 
   const onNodeTransformEnd = useCallback(
-    async (nodeId: string, pos: { x: number; y: number; width: number; height: number }) => {
+    async (nodeId: string, end: Rect, start: Rect) => {
       if (!canWrite) return;
       setActiveNodeId(null);
       const current = diagramRef.current;
-      const snapped = snapRef.current
-        ? { ...pos, ...snapPoint(pos, true) }
-        : pos;
-      const updatedPositions = { ...current.positions, [nodeId]: snapped };
+      // #109: a click without movement (or a drag that snaps back) must not create a version or audit entry.
+      const next = changedNodeLayout(current.positions[nodeId], start, end, snapRef.current);
+      if (!next) return;
+      const updatedPositions = { ...current.positions, [nodeId]: next };
       const updated = await updateDiagramWithConflict(current, { positions: updatedPositions });
       if (!updated) return;
       onDiagramChange(updated);
@@ -1218,7 +1241,7 @@ function DiagramEditorInner({
       startAddComponent(compId, position);
   }
 
-  async function createAndPlaceComponent(name: string, properties: Record<string, string>, acknowledgeDuplicate: boolean) {
+  async function createAndPlaceComponent(name: string, properties: Record<string, string>, acknowledgeDuplicate: boolean, acknowledgePlaceholder: boolean) {
     if (!canWrite || !pendingCreate) return;
     const { typeId, position } = pendingCreate;
     if (activeViewpoint && activeVisibleTypeIds && !activeVisibleTypeIds.has(typeId)) {
@@ -1235,7 +1258,7 @@ function DiagramEditorInner({
           properties,
           description: "",
           position
-        }, version, { acknowledgeDuplicate }),
+        }, version, acknowledgePlaceholder ? { acknowledgeDuplicate, acknowledgePlaceholder } : { acknowledgeDuplicate }),
         async () => {
           const fresh = await sidebarApi.getAll();
           const reloaded = fresh.diagrams.find((item) => item.id === diagram.id);
