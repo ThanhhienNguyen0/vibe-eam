@@ -1847,9 +1847,10 @@ tr.attention td {
 }
 
 .diagram-validation-panel {
+  flex-shrink: 0;
   display: grid;
   gap: 6px;
-  padding: 10px 14px;
+  padding: 6px 14px;
   border-bottom: 1px solid #fecaca;
   background: #fff1f2;
   color: #7f1d1d;
@@ -1865,6 +1866,44 @@ tr.attention td {
 .diagram-validation-panel ul {
   margin: 0;
   padding-left: 18px;
+}
+
+/* #124: Kopfzeile mit Status, Zählern, Ein-/Ausklappen und Schließen */
+.diagram-validation-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.diagram-validation-counts {
+  margin-right: auto;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.diagram-validation-toggle {
+  min-height: 26px;
+  padding: 0 8px;
+  gap: 4px;
+  font-size: 12px;
+  background: transparent;
+  border-color: currentColor;
+  color: inherit;
+}
+
+/* Höhe begrenzt, scrollt intern: auch bei 720 px Fensterhöhe bleibt die Fläche groß genug. */
+.diagram-validation-details {
+  display: grid;
+  gap: 6px;
+  max-height: min(22vh, 200px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Niedrige Fenster (z. B. 1280×720 mit offenem Detail-Panel, Toolbar bricht um): Liste knapper halten. */
+@media (max-height: 800px) {
+  .diagram-validation-details { max-height: 12vh; }
 }
 
 /* ── Komponenten-Palette ──────────────────────────────────────────────────── */
@@ -2244,7 +2283,7 @@ tr.attention td {
   overflow: visible;
 }
 
-.shaped-node.is-node-selected,
+/* Hover/Bearbeiten: dezenter Schein. Die Auswahl selbst zeigt der kräftige Rahmen am Knoten (#123). */
 .shaped-node.is-interaction-visible {
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.4);
 }
@@ -4034,13 +4073,103 @@ tr.attention td {
 .diagram-canvas--connecting { cursor: crosshair; }
 .diagram-canvas--connecting .react-flow__node { cursor: crosshair; }
 
+/* #123: Auswahl. --diagram-zoom setzt der Editor; die Teilung hält Rahmen und Schein beim Herauszoomen
+   auf dem Bildschirm gleich dick (sonst unsichtbar dünn). max(): Browser runden Outline-Breiten auf ganze
+   Pixel ab – unter 3px würde der Rahmen beim Hineinzoomen dünner statt dicker. */
+.diagram-canvas { --diagram-zoom: 1; }
+
 .diagram-canvas .react-flow__node.selected {
-  outline: 2px solid #2563eb;
-  outline-offset: 3px;
+  outline: max(3px, calc(3px / var(--diagram-zoom))) solid #2563eb;
+  outline-offset: max(3px, calc(3px / var(--diagram-zoom)));
+  box-shadow: 0 0 0 calc(10px / var(--diagram-zoom)) rgba(37, 99, 235, 0.18);
   border-radius: 6px;
 }
 
-.diagram-canvas .react-flow__edge.selected .react-flow__edge-path { stroke: #2563eb; stroke-width: 3; }
+/* Farbe/Breite des Pfads setzt der Editor inline (Typfarbe würde CSS überschreiben); hier der Schein darunter. */
+.diagram-canvas .react-flow__edge.selected .react-flow__edge-interaction {
+  stroke: #2563eb;
+  stroke-opacity: 0.22;
+  stroke-width: max(6px, calc(12px / var(--diagram-zoom)));
+}
+
+.diagram-canvas .react-flow__edge.selected .react-flow__edge-textbg { stroke: #2563eb; stroke-width: 1.5px; }
+.diagram-canvas .react-flow__edge.selected .react-flow__edge-text { fill: #1d4ed8; }
+
+/* #120/#123: Auswahlleiste oben auf der Fläche */
+/* Links oben neben dem Lineal; rechts bleibt Platz für die Koordinatenanzeige. Bei schmaler Fläche
+   (Palette + Detail-Panel offen) bricht die Leiste um, statt den Text zu verschlucken. */
+.diagram-selection-bar {
+  position: absolute;
+  top: 60px;
+  left: 30px;
+  z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  max-width: calc(100% - 44px);
+  box-sizing: border-box;
+  padding: 4px 4px 4px 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  color: #1e3a8a;
+  font-size: 13px;
+}
+
+.diagram-selection-label {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: min(9em, 100%);
+}
+
+.diagram-selection-label > svg { flex-shrink: 0; color: #2563eb; }
+.diagram-selection-label > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.diagram-selection-action {
+  flex-shrink: 0;
+  min-height: 28px;
+  padding: 0 8px;
+  gap: 5px;
+  border-color: #fecaca;
+  color: #b91c1c;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.diagram-selection-action:hover { border-color: #f87171; background: #fef2f2; }
+
+.diagram-selection-action kbd {
+  padding: 0 4px;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  font: 11px ui-monospace, monospace;
+}
+
+.diagram-selection-clear {
+  flex-shrink: 0;
+  min-height: 28px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: #64748b;
+}
+
+/* Schmale Fläche: unter der Koordinatenanzeige, Zeile 1 = Text + ✕, Zeile 2 = Aktion.
+   Ab 760px Flächenbreite neben der Anzeige in einer Zeile. */
+.diagram-canvas { container-type: inline-size; }
+.diagram-selection-clear { order: 1; }
+.diagram-selection-action { order: 2; }
+
+@container (min-width: 760px) {
+  .diagram-selection-bar { top: 30px; max-width: calc(100% - 230px); }
+  .diagram-selection-label { flex: 0 1 auto; }
+  .diagram-selection-clear,
+  .diagram-selection-action { order: 0; }
+}
 
 .diagram-error { display: flex; align-items: center; gap: 8px; }
 .diagram-error span { flex: 1; }
@@ -4290,9 +4419,11 @@ tr.attention td {
 /* „Teilen“-Menü in der Diagramm-Toolbar (Bild exportieren + Link kopieren) */
 .share-menu { position: relative; display: inline-flex; }
 .share-menu-caret { margin-left: -2px; opacity: 0.7; }
+/* #121: fixed + Portal, damit Detail-Panel und scrollende Container das Menü nicht verdecken/abschneiden.
+   Unter Dialog-Overlays (1000), über allen Panels. */
 .share-menu-list {
-  position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
-  display: grid; gap: 2px; width: 290px; padding: 6px;
+  position: fixed; z-index: 990; overflow-y: auto; box-sizing: border-box;
+  display: grid; gap: 2px; width: min(290px, calc(100vw - 16px)); padding: 6px;
   border: 1px solid #d8dee8; border-radius: 10px; background: #ffffff;
   box-shadow: 0 14px 32px rgba(15, 23, 42, 0.16);
 }
