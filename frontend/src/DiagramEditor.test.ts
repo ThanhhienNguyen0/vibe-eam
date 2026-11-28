@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildEdges, buildNodes, connectionModeReducer, handleDiagramNodeClick, mergeSmartAddMemberships } from "./DiagramEditor";
+import { buildEdges, buildNodes, connectionModeReducer, handleDiagramNodeClick, isPaletteClick, mergeSmartAddMemberships } from "./DiagramEditor";
 import type { ComponentInstance, ComponentType, ConnectionInstance, ConnectionType, Diagram } from "./Sidebar/sidebarTypes";
 
 describe("DiagramEditor smart add", () => {
@@ -123,5 +123,16 @@ describe("DiagramEditor selection rendering (#119/#123)", () => {
     expect(selected.style?.stroke).toBe("#2563eb");
     expect(selected.style?.strokeWidth).toBe(3);
     expect(selected.markerEnd).toMatchObject({ color: "#2563eb" });
+  });
+});
+
+describe("isPaletteClick (#142)", () => {
+  it("wertet minimale Bewegung als Klick", () => {
+    expect(isPaletteClick({ x: 100, y: 100 }, { x: 103, y: 102 })).toBe(true);
+    expect(isPaletteClick({ x: 100, y: 100 }, { x: 100, y: 100 })).toBe(true);
+  });
+  it("wertet echtes Ziehen und fehlende Koordinaten nicht als Klick", () => {
+    expect(isPaletteClick({ x: 100, y: 100 }, { x: 140, y: 100 })).toBe(false);
+    expect(isPaletteClick({ x: 100, y: 100 }, { x: 0, y: 0 })).toBe(false);
   });
 });

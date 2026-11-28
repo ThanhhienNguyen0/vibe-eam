@@ -730,6 +730,15 @@ function Palette({ components, componentTypes, onAdd }: PaletteProps) {
   );
 }
 
+/** #142: Bewegung bis zu dieser Strecke gilt als Klick, nicht als Ziehen. */
+const PALETTE_CLICK_TOLERANCE = 6;
+
+export function isPaletteClick(start: { x: number; y: number }, end: { x: number; y: number }): boolean {
+  // Manche Browser melden beim Abbruch keine Koordinaten (0,0) – im Zweifel nichts hinzufügen.
+  if (end.x === 0 && end.y === 0) return false;
+  return Math.hypot(end.x - start.x, end.y - start.y) <= PALETTE_CLICK_TOLERANCE;
+}
+
 function PaletteItem({
   comp,
   color,
@@ -743,16 +752,41 @@ function PaletteItem({
   icon?: ReactNode;
   onAdd: (id: string) => void;
 }) {
+  // #142: Bei draggable-Elementen startet der Browser schon bei minimaler Mausbewegung einen Drag – dann
+  // kommt kein click an. Ein „Drag“ ohne Ablage und praktisch ohne Weg zählt deshalb als Klick.
+  const press = useRef<{ x: number; y: number } | null>(null);
+  const handledAsClick = useRef(false);
   return (
     <button
+      type="button"
       className="diagram-palette-item"
       style={{ borderLeftColor: color }}
       draggable
+      onPointerDown={(e) => {
+        press.current = e.button === 0 ? { x: e.clientX, y: e.clientY } : null;
+        handledAsClick.current = false;
+      }}
       onDragStart={(e) => {
         e.dataTransfer.setData(COMPONENT_DRAG_MIME, comp.id);
         e.dataTransfer.effectAllowed = "copy";
       }}
-      onClick={() => onAdd(comp.id)}
+      onDragEnd={(e) => {
+        const start = press.current;
+        press.current = null;
+        if (!start || e.dataTransfer.dropEffect !== "none") return;
+        if (isPaletteClick(start, { x: e.clientX, y: e.clientY })) {
+          handledAsClick.current = true;
+          onAdd(comp.id);
+        }
+      }}
+      onClick={() => {
+        press.current = null;
+        if (handledAsClick.current) {
+          handledAsClick.current = false;
+          return;
+        }
+        onAdd(comp.id);
+      }}
       title="Auf die Fläche ziehen oder klicken zum Hinzufügen"
     >
       {icon ?? <span className={`shape-glyph shape-glyph--${shape}`} style={{ borderColor: color }} />}
@@ -1431,7 +1465,19 @@ function DiagramEditorInner({
 
   // ── Smart add ───────────────────────────────────────────────────────────────
 
+  // #142: Solange ein Hinzufügen läuft, weitere Klicks ignorieren (sonst Konflikte mit veraltetem Diagrammstand).
+  const addingComponentRef = useRef(false);
   async function startAddComponent(compId: string, position?: DiagramPosition) {
+    if (addingComponentRef.current) return;
+    addingComponentRef.current = true;
+    try {
+      await startAddComponentNow(compId, position);
+    } finally {
+      addingComponentRef.current = false;
+    }
+  }
+
+  async function startAddComponentNow(compId: string, position?: DiagramPosition) {
     if (!canWrite) return;
     if (diagram.componentIds.includes(compId)) return;
     const component = components.find((item) => item.id === compId);
