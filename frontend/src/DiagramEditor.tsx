@@ -1260,7 +1260,6 @@ function DiagramEditorInner({
       ));
       if (!result?.applied) return;
       onComponentDeleted(nodeId);
-      setValidationResult(null);
       setError("");
       setNotice({ text: `„${component.name}“ endgültig aus dem Repository gelöscht (auch aus allen anderen Diagrammen entfernt).`, tone: "danger" });
     } catch (err) {
@@ -1287,7 +1286,6 @@ function DiagramEditorInner({
       });
       if (!updated) return;
       onDiagramChange(updated);
-      setValidationResult(null);
       setError("");
       setNotice({ text: nodeIds.length === 1 ? "Aus dem Diagramm entfernt (bleibt im Modell erhalten)." : `${nodeIds.length} Elemente aus dem Diagramm entfernt (bleiben im Modell erhalten).` });
     } catch (err) {
@@ -1320,7 +1318,6 @@ function DiagramEditorInner({
       if (!updated) return;
       onDiagramChange(updated);
       setSelection(EMPTY_SELECTION);
-      setValidationResult(null);
       setError("");
       setNotice({ text: removalNotice(target.nodeIds.length, target.edgeIds.length) });
     } catch (err) {
@@ -1570,22 +1567,49 @@ function DiagramEditorInner({
     }
   }
 
-  async function runDiagramValidation() {
+  // #129: Jede Prüfung bekommt eine Nummer; nur die jüngste darf ihr Ergebnis anzeigen.
+  const validationRunRef = useRef(0);
+  const [validationStale, setValidationStale] = useState(false);
+
+  async function runDiagramValidation(options: { expand?: boolean } = {}) {
+    const run = ++validationRunRef.current;
     const local = validateDiagram(displayedDiagram, sidebarState);
     setValidationResult(local);
-    setValidationCollapsed(false);
+    setValidationStale(false);
+    if (options.expand ?? true) setValidationCollapsed(false);
     if (viewpointFilterId !== (diagram.viewpointId ?? "")) {
       setError("");
       return;
     }
     try {
       const server = await sidebarApi.validateDiagram(diagram.id);
+      if (run !== validationRunRef.current) return;
       setValidationResult(server);
       setError("");
     } catch (err) {
+      if (run !== validationRunRef.current) return;
       setError(err instanceof Error ? err.message : "Diagrammvalidierung konnte nicht ausgefuehrt werden.");
     }
   }
+
+  // #129: Ist das Prüfergebnis offen, wird es nach Modelländerungen neu berechnet statt stehen zu bleiben.
+  // Kurz entprellt, damit Verschieben oder mehrere schnelle Änderungen nur eine Prüfung auslösen.
+  const validationOpen = validationResult !== null;
+  const runValidationRef = useRef(runDiagramValidation);
+  runValidationRef.current = runDiagramValidation;
+  const lastValidatedRef = useRef<{ diagram: Diagram; state: typeof sidebarState } | null>(null);
+  useEffect(() => {
+    if (!validationOpen) {
+      lastValidatedRef.current = null;
+      return;
+    }
+    const last = lastValidatedRef.current;
+    lastValidatedRef.current = { diagram: displayedDiagram, state: sidebarState };
+    if (!last || (last.diagram === displayedDiagram && last.state === sidebarState)) return;
+    setValidationStale(true);
+    const timer = window.setTimeout(() => void runValidationRef.current({ expand: false }), 400);
+    return () => window.clearTimeout(timer);
+  }, [validationOpen, displayedDiagram, sidebarState]);
 
   /* ── REQ-11: Export als PNG/SVG ────────────────────────────────────────── */
   // Grundlage ist das gefilterte Diagramm: ein aktiver Ansichtsfilter gilt auch im Export.
@@ -1772,7 +1796,7 @@ function DiagramEditorInner({
         >
           <Grid3x3 size={16} /> Raster
         </button>
-        <button className="diagram-palette-toggle" onClick={runDiagramValidation}>
+        <button className="diagram-palette-toggle" onClick={() => void runDiagramValidation()}>
           <SlidersHorizontal size={16} /> Ansicht prüfen
         </button>
         <span className="muted diagram-hint">
@@ -1807,6 +1831,7 @@ function DiagramEditorInner({
             <strong role="status">{validationStatus}</strong>
             <span className="diagram-validation-counts">
               {validationErrorCount} Fehler · {validationWarningCount} {validationWarningCount === 1 ? "Warnung" : "Warnungen"}
+              {validationStale && " · wird aktualisiert …"}
             </span>
             {validationGroups.length > 0 && (
               <button
