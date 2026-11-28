@@ -375,6 +375,7 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
               focusRequest={focusRequest}
               viewRequest={viewRequest}
               onViewChange={setCurrentFilterId}
+              selectedElementId={sidebarSelection?.kind === "component" || sidebarSelection?.kind === "connection" ? sidebarSelection.id : null}
             />
           ) : activeCatalog && workspaceView === "diagrams" ? (
             <CatalogView

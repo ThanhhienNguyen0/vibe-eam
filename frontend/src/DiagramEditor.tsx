@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type RefObject } from "react";
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -10,14 +10,17 @@ import ReactFlow, {
   Position,
   ReactFlowProvider,
   useReactFlow,
+  useStore,
   type Connection,
   type Edge,
+  type EdgeChange,
   type Node,
+  type NodeChange,
   type NodeProps,
   useEdgesState,
   useNodesState
 } from "reactflow";
-import { CircleCheck, GitBranch, Grid3x3, Link2, Maximize, MousePointerClick, PanelLeftClose, PanelLeftOpen, Ruler, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, CircleCheck, GitBranch, Grid3x3, Link2, Maximize, MousePointerClick, PanelLeftClose, PanelLeftOpen, Ruler, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import DiagramCoordinates from "./DiagramCoordinates";
 import DiagramExportDialog, { type ExportChoice } from "./DiagramExportDialog";
 import { copyText } from "./CopyLinkButton";
@@ -37,6 +40,21 @@ import {
   viewportArea
 } from "./diagramExport";
 import ComponentTypeIcon from "./componentIcons";
+import {
+  EMPTY_SELECTION,
+  applySelectChanges,
+  diagramRemoval,
+  diagramShortcut,
+  isSelectionEmpty,
+  pruneSelection,
+  removalConfirmation,
+  removalNotice,
+  selectionForPanelElement,
+  selectionLabel,
+  visibleElementIds,
+  type DiagramSelection,
+  type SelectChange
+} from "./diagramSelection";
 import { GRID_SIZE as GRID_BG, changedNodeLayout, fallbackPosition, findFreePosition, shapeDefaultSize, snapPoint, type Rect } from "./diagramLayout";
 import { sidebarApi } from "./Sidebar/sidebarApi";
 import { runOptimisticMutation } from "./optimisticConflict";
@@ -98,6 +116,8 @@ interface Props {
   viewRequest?: { filterId: string; nonce: number } | null;
   /** Meldet den aktuell gewählten Ansichtsfilter, damit die Adresszeile ihn mitführt. */
   onViewChange?: (filterId: string) => void;
+  /** #123: im Detail-Panel geöffnete Komponente/Verbindung – wird auf der Fläche markiert (null = nichts gewählt). */
+  selectedElementId?: string | null;
 }
 
 interface Suggestion {
@@ -168,6 +188,8 @@ export async function handleDiagramNodeClick({
   if (!canWrite || targetId === connectingFrom) return;
   await createConnection(connectingFrom, targetId);
 }
+
+const SELECTION_COLOR = "#2563eb";
 
 const lineStyleDash: Record<string, string | undefined> = {
   solid: undefined,
@@ -533,7 +555,7 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
 
 const nodeTypes = { shaped: ShapedNode };
 
-function buildNodes(
+export function buildNodes(
   diagram: Diagram,
   components: ComponentInstance[],
   componentTypes: ComponentType[],
@@ -543,7 +565,8 @@ function buildNodes(
   onInteractionStart: ShapedNodeData["onInteractionStart"],
   onTransformEnd: ShapedNodeData["onTransformEnd"],
   canEdit: boolean,
-  highlightId: string | null = null
+  highlightId: string | null = null,
+  selectedNodeIds: ReadonlySet<string> = new Set()
 ): Node[] {
   return diagram.componentIds.flatMap((id) => {
     const comp = components.find((c) => c.id === id);
@@ -574,19 +597,22 @@ function buildNodes(
       } satisfies ShapedNodeData,
       style: { width, height },
       draggable: false,
-      // REQ-12: per Link angesprungenes Element pulsiert kurz, damit man es sofort findet.
-      ...(id === highlightId ? { className: "is-link-target", selected: true } : {}),
+      // #119/#123: Auswahl kommt ausschließlich aus dem Editor-State, nie aus einem Rest-Zustand von React Flow.
+      selected: selectedNodeIds.has(id),
+      // REQ-12: per Link angesprungenes Element pulsiert kurz, damit man es sofort findet (Auswahl setzt der Editor).
+      ...(id === highlightId ? { className: "is-link-target" } : {}),
       ...(isPool ? { zIndex: -1 } : {})
     };
     return [node];
   });
 }
 
-function buildEdges(
+export function buildEdges(
   diagram: Diagram,
   connections: ConnectionInstance[],
   connectionTypes: ConnectionType[],
-  highlightId: string | null = null
+  highlightId: string | null = null,
+  selectedEdgeIds: ReadonlySet<string> = new Set()
 ): Edge[] {
   return diagram.connectionIds.flatMap((id) => {
     const conn = connections.find((c) => c.id === id);
@@ -594,10 +620,14 @@ function buildEdges(
     if (!diagram.componentIds.includes(conn.sourceComponentId) || !diagram.componentIds.includes(conn.targetComponentId)) return [];
     const type = connectionTypes.find((t) => t.id === conn.connectionTypeId);
     const highlighted = id === highlightId;
+    const selected = selectedEdgeIds.has(id);
+    // #123: Die Typfarbe steht inline am Pfad und schlägt jedes CSS – deshalb Auswahlfarbe hier setzen.
+    const stroke = selected ? SELECTION_COLOR : type?.color ?? "#475569";
     return [
       {
         id: conn.id,
-        ...(highlighted ? { className: "is-link-target", animated: true, selected: true } : {}),
+        selected,
+        ...(highlighted ? { className: "is-link-target", animated: true } : {}),
         source: conn.sourceComponentId,
         target: conn.targetComponentId,
         label: conn.name || type?.name || "",
@@ -605,15 +635,28 @@ function buildEdges(
         labelBgBorderRadius: 4,
         labelStyle: { fill: "#172033", fontWeight: 700, fontSize: 11 },
         labelBgStyle: { fill: "#ffffff", fillOpacity: 0.9 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: type?.color ?? "#475569" },
+        markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
         style: {
-          stroke: type?.color ?? "#475569",
-          strokeWidth: highlighted ? 4 : 2,
+          stroke,
+          strokeWidth: highlighted ? 4 : selected ? 3 : 2,
           strokeDasharray: lineStyleDash[type?.lineStyle ?? "solid"]
         }
       }
     ];
   });
+}
+
+/**
+ * #123: Schreibt den aktuellen Zoom als CSS-Variable an die Fläche, damit Auswahlrahmen und -schein
+ * auf dem Bildschirm in jeder Zoomstufe gleich dick bleiben. Eigene Komponente, damit nicht der ganze
+ * Editor bei jedem Zoom-Schritt neu rendert.
+ */
+function ZoomCssVariable({ target }: { target: RefObject<HTMLDivElement> }) {
+  const zoom = useStore((state) => state.transform[2]);
+  useLayoutEffect(() => {
+    target.current?.style.setProperty("--diagram-zoom", String(zoom || 1));
+  }, [target, zoom]);
+  return null;
 }
 
 /* ── Komponenten-Palette (Drag & Drop oder Klick) ───────────────────────────── */
@@ -838,7 +881,8 @@ function DiagramEditorInner({
   onClose,
   focusRequest,
   viewRequest,
-  onViewChange
+  onViewChange,
+  selectedElementId = null
 }: Props) {
   const { canWrite: roleCanWrite } = useAccess();
   const confirm = useConfirm();
@@ -914,6 +958,8 @@ function DiagramEditorInner({
   snapRef.current = snapEnabled;
   const canvasRef = useRef<HTMLDivElement>(null);
   const [validationResult, setValidationResult] = useState<DiagramValidationResult | null>(null);
+  const [validationCollapsed, setValidationCollapsed] = useState(false);
+  const editorRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, fitView, getViewport, setCenter, getZoom } = useReactFlow();
   const [linkHighlightId, setLinkHighlightId] = useState<string | null>(null);
@@ -945,6 +991,46 @@ function DiagramEditorInner({
     () => activeVisibleTypeIds ? componentTypes.filter((type) => activeVisibleTypeIds.has(type.id)) : componentTypes,
     [activeVisibleTypeIds, componentTypes]
   );
+
+  /* ── #119/#123: Auswahl auf der Fläche (einzige Quelle, siehe diagramSelection.ts) ─────────── */
+  const [selection, setSelection] = useState<DiagramSelection>(EMPTY_SELECTION);
+  const selectedNodeIds = useMemo(() => new Set(selection.nodeIds), [selection.nodeIds]);
+  const selectedEdgeIds = useMemo(() => new Set(selection.edgeIds), [selection.edgeIds]);
+  const visibleIds = useMemo(
+    () => visibleElementIds(displayedDiagram, components, connections),
+    [displayedDiagram, components, connections]
+  );
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
+  const visibleIdsRef = useRef(visibleIds);
+  visibleIdsRef.current = visibleIds;
+  const selectedElementIdRef = useRef(selectedElementId);
+  selectedElementIdRef.current = selectedElementId;
+
+  // Entfernte, gefilterte oder anderswo gelöschte Elemente dürfen nicht unsichtbar ausgewählt bleiben.
+  useEffect(() => {
+    setSelection((current) => pruneSelection(current, visibleIds));
+  }, [visibleIds]);
+
+  // Was im Detail-Panel offen ist, ist auch auf der Fläche markiert (und umgekehrt beim Schließen nicht mehr).
+  useEffect(() => {
+    setSelection((current) => selectionForPanelElement(current, selectedElementId, visibleIdsRef.current));
+  }, [selectedElementId]);
+
+  // React Flow meldet Klick-, Mehrfach- und Rahmenauswahl nur noch; übernommen wird sie in den Editor-State.
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    const selects = changes.filter((change): change is SelectChange & NodeChange => change.type === "select");
+    if (selects.length > 0) setSelection((current) => applySelectChanges(current, "node", selects));
+    const rest = changes.filter((change) => change.type !== "select");
+    if (rest.length > 0) onNodesChange(rest);
+  }, [onNodesChange]);
+
+  const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
+    const selects = changes.filter((change): change is SelectChange & EdgeChange => change.type === "select");
+    if (selects.length > 0) setSelection((current) => applySelectChanges(current, "edge", selects));
+    const rest = changes.filter((change) => change.type !== "select");
+    if (rest.length > 0) onEdgesChange(rest);
+  }, [onEdgesChange]);
 
   // Short confirmation messages disappear on their own.
   useEffect(() => {
@@ -978,6 +1064,8 @@ function DiagramEditorInner({
     setValidationResult(null);
     setError("");
     setNotice("");
+    // Anderes Diagramm: keine Auswahl mitnehmen (gleiche Komponente kann in beiden liegen), nur das Panel-Element.
+    setSelection(selectionForPanelElement(EMPTY_SELECTION, selectedElementIdRef.current, visibleIdsRef.current));
   }, [diagram.id, diagram.viewpointId]);
 
   // REQ-12: Ansicht aus einem Link übernehmen (läuft nach dem Zurücksetzen oben).
@@ -1000,9 +1088,9 @@ function DiagramEditorInner({
   }, [localPreviewActive]);
 
   useEffect(() => {
-    setNodes(buildNodes(displayedDiagram, components, componentTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, canWrite, linkHighlightId));
-    setEdges(buildEdges(displayedDiagram, connections, connectionTypes, linkHighlightId));
-  }, [canWrite, displayedDiagram, components, componentTypes, connections, connectionTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, setNodes, setEdges, linkHighlightId]);
+    setNodes(buildNodes(displayedDiagram, components, componentTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, canWrite, linkHighlightId, selectedNodeIds));
+    setEdges(buildEdges(displayedDiagram, connections, connectionTypes, linkHighlightId, selectedEdgeIds));
+  }, [canWrite, displayedDiagram, components, componentTypes, connections, connectionTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, setNodes, setEdges, linkHighlightId, selectedNodeIds, selectedEdgeIds]);
 
   useEffect(() => () => window.clearTimeout(hoverLeaveTimer.current), []);
 
@@ -1162,21 +1250,60 @@ function DiagramEditorInner({
 
   const removeFromDiagram = (nodeId: string) => removeNodesFromDiagram([nodeId]);
 
-  async function removeEdgesFromDiagram(edgeIds: string[]) {
-    if (!canWrite || edgeIds.length === 0) return;
-    const removed = new Set(edgeIds);
+  /**
+   * #119/#120: Entf und „Aus Diagramm entfernen“ in der Auswahlleiste. Betrifft nur, was gerade sichtbar
+   * ausgewählt ist, und fragt vorher nach – Komponenten und Verbindungen verhalten sich gleich.
+   */
+  const removingSelectionRef = useRef(false);
+  async function removeSelectionFromDiagram() {
+    if (!canWrite || removingSelectionRef.current) return;
+    const target = pruneSelection(selectionRef.current, visibleIdsRef.current);
+    if (isSelectionEmpty(target)) return;
+    removingSelectionRef.current = true;
     try {
-      const updated = await updateDiagramWithConflict(diagram, {
-        connectionIds: diagram.connectionIds.filter((id) => !removed.has(id))
-      });
+      const preview = diagramRemoval(diagramRef.current, connections, target.nodeIds, target.edgeIds);
+      const labels = { components, connections, connectionTypes };
+      if (!await confirm(removalConfirmation(target, preview.attachedConnectionIds.length, labels))) return;
+      // Während der Rückfrage kann sich das Diagramm geändert haben: auf dem aktuellen Stand rechnen.
+      const current = diagramRef.current;
+      const { componentIds, connectionIds, positions } = diagramRemoval(current, connections, target.nodeIds, target.edgeIds);
+      const updated = await updateDiagramWithConflict(current, { componentIds, connectionIds, positions });
       if (!updated) return;
       onDiagramChange(updated);
+      setSelection(EMPTY_SELECTION);
+      setValidationResult(null);
       setError("");
-      setNotice("Verbindung aus dem Diagramm entfernt (bleibt im Modell erhalten).");
+      setNotice(removalNotice(target.nodeIds.length, target.edgeIds.length));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Verbindung konnte nicht aus dem Diagramm entfernt werden.");
+      setError(err instanceof Error ? err.message : "Auswahl konnte nicht aus dem Diagramm entfernt werden.");
+    } finally {
+      removingSelectionRef.current = false;
     }
   }
+  const removeSelectionRef = useRef(removeSelectionFromDiagram);
+  removeSelectionRef.current = removeSelectionFromDiagram;
+
+  // Tastatur: nur wenn der Fokus auf der Diagrammfläche liegt (nicht in Sidebar, Panel, Feldern oder Dialogen).
+  const editorDialogOpen = !!pendingAdd || !!pendingCreate || exportOpen;
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target;
+      const action = diagramShortcut(event, {
+        inEditor: target === document.body || (target instanceof globalThis.Node && !!editorRef.current?.contains(target)),
+        blocked: editorDialogOpen || removingSelectionRef.current,
+        canWrite,
+        connecting: !!connectingFrom,
+        selection: selectionRef.current,
+        visible: visibleIdsRef.current
+      });
+      if (action === "clear") setSelection(EMPTY_SELECTION);
+      if (action !== "remove") return;
+      event.preventDefault();
+      if (!event.repeat) void removeSelectionRef.current();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [canWrite, connectingFrom, editorDialogOpen]);
 
   // ── Platzierung neuer Elemente ──────────────────────────────────────────────
 
@@ -1385,6 +1512,7 @@ function DiagramEditorInner({
   async function runDiagramValidation() {
     const local = validateDiagram(displayedDiagram, sidebarState);
     setValidationResult(local);
+    setValidationCollapsed(false);
     if (viewpointFilterId !== (diagram.viewpointId ?? "")) {
       setError("");
       return;
@@ -1437,6 +1565,7 @@ function DiagramEditorInner({
     const timer = window.setTimeout(() => {
       void setCenter(point.x, point.y, { zoom: Math.max(getZoom(), 1), duration: 600 });
       setLinkHighlightId(target.id);
+      setSelection(target.kind === "component" ? { nodeIds: [target.id], edgeIds: [] } : { nodeIds: [], edgeIds: [target.id] });
     }, 400);
     return () => window.clearTimeout(timer);
   }, [focusRequest, exportScene, setCenter, getZoom]);
@@ -1519,8 +1648,14 @@ function DiagramEditorInner({
       : "Ansicht ungültig"
     : "";
 
+  const selectionInfo = isSelectionEmpty(selection)
+    ? null
+    : selectionLabel(selection, { components, connections, connectionTypes });
+  const validationErrorCount = validationResult?.errors.length ?? 0;
+  const validationWarningCount = validationResult?.warnings.length ?? 0;
+
   return (
-    <div className="diagram-editor">
+    <div className="diagram-editor" ref={editorRef}>
 
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
       <div className="diagram-toolbar">
@@ -1601,23 +1736,57 @@ function DiagramEditorInner({
       )}
 
       {/* ── Connect mode banner ─────────────────────────────────────────────── */}
+      {/* #124: schließbar, einklappbar, höhenbegrenzt (scrollt intern) – die Fläche bleibt nutzbar. */}
       {validationResult && (
-        <div className={`diagram-validation-panel${validationResult.valid ? " diagram-validation-panel--valid" : ""}`}>
-          <strong>{validationStatus}</strong>
-          {validationGroups.map((group) => (
-            <div key={group.title} className="diagram-validation-group">
-              <span className="muted">{group.title}</span>
-              <ul>
-                {group.items.map((item, index) => (
-                  <li key={`${group.title}-${index}`}>
-                    <strong>{item.severity.toUpperCase()} {item.code}</strong>: {item.message}
-                    {(item.ruleId || item.affectedEntityId) && <span className="muted"> ({item.ruleId ?? item.affectedEntityId})</span>}
-                  </li>
-                ))}
-              </ul>
+        <section
+          className={`diagram-validation-panel${validationResult.valid ? " diagram-validation-panel--valid" : ""}`}
+          aria-label="Ergebnis der Ansichtsprüfung"
+        >
+          <div className="diagram-validation-header">
+            <strong role="status">{validationStatus}</strong>
+            <span className="diagram-validation-counts">
+              {validationErrorCount} Fehler · {validationWarningCount} {validationWarningCount === 1 ? "Warnung" : "Warnungen"}
+            </span>
+            {validationGroups.length > 0 && (
+              <button
+                type="button"
+                className="diagram-validation-toggle"
+                aria-expanded={!validationCollapsed}
+                aria-controls="diagram-validation-details"
+                onClick={() => setValidationCollapsed((collapsed) => !collapsed)}
+              >
+                {validationCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                {validationCollapsed ? "Details anzeigen" : "Details ausblenden"}
+              </button>
+            )}
+            <button
+              type="button"
+              className="diagram-banner-close"
+              onClick={() => setValidationResult(null)}
+              aria-label="Prüfergebnis schließen"
+              title="Schließen – „Ansicht prüfen“ öffnet es erneut"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          {!validationCollapsed && validationGroups.length > 0 && (
+            <div className="diagram-validation-details" id="diagram-validation-details">
+              {validationGroups.map((group) => (
+                <div key={group.title} className="diagram-validation-group">
+                  <span className="muted">{group.title}</span>
+                  <ul>
+                    {group.items.map((item, index) => (
+                      <li key={`${group.title}-${index}`}>
+                        <strong>{item.severity.toUpperCase()} {item.code}</strong>: {item.message}
+                        {(item.ruleId || item.affectedEntityId) && <span className="muted"> ({item.ruleId ?? item.affectedEntityId})</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </section>
       )}
 
       {connectingFrom && (() => {
@@ -1655,11 +1824,10 @@ function DiagramEditorInner({
             nodesDraggable={false}
             nodesConnectable={canWrite}
             edgesFocusable={canWrite}
-            deleteKeyCode={canWrite ? ["Backspace", "Delete"] : null}
-            onNodesDelete={canWrite ? (deleted) => { void removeNodesFromDiagram(deleted.map((node) => node.id)); } : undefined}
-            onEdgesDelete={canWrite ? (deleted) => { void removeEdgesFromDiagram(deleted.map((edge) => edge.id)); } : undefined}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
+            // #119: Entf/Backspace behandelt der Editor selbst (nur sichtbare Auswahl, mit Rückfrage).
+            deleteKeyCode={null}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
             onConnect={canWrite ? onConnect : undefined}
             onNodeClick={onNodeClick}
             onEdgeClick={onEdgeClick}
@@ -1683,7 +1851,37 @@ function DiagramEditorInner({
             <Controls showInteractive={false} fitViewOptions={{ padding: 0.2, maxZoom: 1.2 }} />
             {snapEnabled ? <Background variant={BackgroundVariant.Lines} gap={GRID_BG} color="#dbe3ee" /> : <Background variant={BackgroundVariant.Dots} gap={GRID_BG * 2} size={1} />}
             <DiagramCoordinates showRulers={showRulers} />
+            <ZoomCssVariable target={canvasRef} />
           </ReactFlow>
+
+          {/* #120/#123: zeigt, was ausgewählt ist, und macht das Entfernen (auch von Verbindungen) auffindbar. */}
+          {selectionInfo && (
+            <div className="diagram-selection-bar" role="toolbar" aria-label="Auswahl">
+              <span className="diagram-selection-label" title={selectionInfo}>
+                <MousePointerClick size={14} aria-hidden="true" />
+                <span>{selectionInfo}</span>
+              </span>
+              {canWrite && (
+                <button
+                  type="button"
+                  className="diagram-selection-action"
+                  onClick={() => void removeSelectionFromDiagram()}
+                  title="Nur aus diesem Diagramm entfernen – bleibt im Repository erhalten (Taste Entf)"
+                >
+                  <Trash2 size={14} /> Aus Diagramm entfernen <kbd>Entf</kbd>
+                </button>
+              )}
+              <button
+                type="button"
+                className="diagram-selection-clear"
+                onClick={() => setSelection(EMPTY_SELECTION)}
+                aria-label="Auswahl aufheben"
+                title="Auswahl aufheben (Esc)"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
 
           {diagramIsEmpty && (
             <div className="diagram-empty-hint">
