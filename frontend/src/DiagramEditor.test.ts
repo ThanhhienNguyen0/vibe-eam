@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildEdges, buildNodes, connectionModeReducer, handleDiagramNodeClick, mergeSmartAddMemberships } from "./DiagramEditor";
+import { buildEdges, buildNodes, connectionModeReducer, edgeHandles, edgeSides, handleDiagramNodeClick, isPaletteClick, mergeSmartAddMemberships } from "./DiagramEditor";
 import type { ComponentInstance, ComponentType, ConnectionInstance, ConnectionType, Diagram } from "./Sidebar/sidebarTypes";
 
 describe("DiagramEditor smart add", () => {
@@ -123,5 +123,45 @@ describe("DiagramEditor selection rendering (#119/#123)", () => {
     expect(selected.style?.stroke).toBe("#2563eb");
     expect(selected.style?.strokeWidth).toBe(3);
     expect(selected.markerEnd).toMatchObject({ color: "#2563eb" });
+  });
+});
+
+describe("isPaletteClick (#142)", () => {
+  it("wertet minimale Bewegung als Klick", () => {
+    expect(isPaletteClick({ x: 100, y: 100 }, { x: 103, y: 102 })).toBe(true);
+    expect(isPaletteClick({ x: 100, y: 100 }, { x: 100, y: 100 })).toBe(true);
+  });
+  it("wertet echtes Ziehen und fehlende Koordinaten nicht als Klick", () => {
+    expect(isPaletteClick({ x: 100, y: 100 }, { x: 140, y: 100 })).toBe(false);
+    expect(isPaletteClick({ x: 100, y: 100 }, { x: 0, y: 0 })).toBe(false);
+  });
+});
+
+describe("edgeSides / edgeHandles (#127)", () => {
+  const box = (x: number, y: number) => ({ x, y, width: 160, height: 60 });
+  it("dockt untereinander liegende Knoten (z. B. Capabilities) oben/unten an", () => {
+    expect(edgeSides(box(0, 0), box(20, 200))).toEqual({ source: "bottom", target: "top" });
+    expect(edgeSides(box(0, 200), box(20, 0))).toEqual({ source: "top", target: "bottom" });
+  });
+  it("dockt nebeneinander liegende Knoten links/rechts an", () => {
+    expect(edgeSides(box(0, 0), box(300, 10))).toEqual({ source: "right", target: "left" });
+    expect(edgeSides(box(300, 0), box(0, 10))).toEqual({ source: "left", target: "right" });
+  });
+  it("wählt bei diagonaler Lage die dominierende Richtung", () => {
+    expect(edgeSides(box(0, 0), box(400, 150)).source).toBe("right");
+    expect(edgeSides(box(0, 0), box(200, 400)).source).toBe("bottom");
+  });
+  it("nutzt für rechts→links die sichtbaren Standard-Handles ohne ID", () => {
+    expect(edgeHandles({ source: "right", target: "left" })).toEqual({});
+    expect(edgeHandles({ source: "bottom", target: "top" })).toEqual({ sourceHandle: "s-bottom", targetHandle: "t-top" });
+    expect(edgeHandles({ source: "left", target: "right" })).toEqual({ sourceHandle: "s-left", targetHandle: "t-right" });
+  });
+  it("setzt die Handles in buildEdges anhand der Knotenlage", () => {
+    const diagram = { id: "d", name: "D", componentIds: ["a", "b"], connectionIds: ["a-b"], positions: {} } as unknown as Parameters<typeof buildEdges>[0];
+    const connections = [{ id: "a-b", sourceComponentId: "a", targetComponentId: "b", connectionTypeId: "t", name: "" }] as unknown as Parameters<typeof buildEdges>[1];
+    const rects: Record<string, { x: number; y: number; width: number; height: number }> = { a: box(0, 0), b: box(0, 300) };
+    const [edge] = buildEdges(diagram, connections, [], null, new Set(), (id) => rects[id] ?? null);
+    expect(edge.sourceHandle).toBe("s-bottom");
+    expect(edge.targetHandle).toBe("t-top");
   });
 });

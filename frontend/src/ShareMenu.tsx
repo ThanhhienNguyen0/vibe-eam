@@ -111,7 +111,7 @@ export default function ShareMenu({ onExportImage, exportDisabledReason, getLink
         onClick={() => (open ? close() : setOpen(true))}
         title="Diagramm teilen: als Bild exportieren oder Link kopieren"
       >
-        <Share2 size={16} /> Teilen <ChevronDown size={14} className="share-menu-caret" />
+        <Share2 size={16} /> <span className="diagram-tb-label">Teilen</span> <ChevronDown size={14} className="share-menu-caret" />
       </button>
 
       {open && createPortal(

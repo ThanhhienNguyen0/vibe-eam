@@ -13,8 +13,9 @@
  * Alles bis auf `svgToPngBlob`/`downloadBlob` ist rein (ohne DOM) und daher direkt testbar.
  */
 import { createElement } from "react";
+import { edgeSides, sideAnchor } from "./edgeRouting";
 import type { LucideIcon } from "lucide-react";
-import { Position, getBezierPath } from "reactflow";
+import { getBezierPath } from "reactflow";
 import { resolveComponentIcon } from "./componentIcons";
 import { boundsOf, fallbackPosition, shapeDefaultSize, type Rect } from "./diagramLayout";
 import type {
@@ -377,10 +378,10 @@ function renderNode(node: ExportNode, icons?: IconMarkup): string {
       const labelSpace = 34;
       const size = Math.max(Math.min(w * 0.7, h - labelSpace - 6), 12);
       const dcy = y + 6 + size / 2;
-      const marker = node.shape === "gateway-xor" ? "✕" : node.shape === "gateway-and" ? "+" : node.shape === "gateway-or" ? "○" : "";
+      const marker = gatewayMarkerSvg(node.shape, cx, dcy, size, color);
       const nameLine = truncate(node.name, w, 12, true);
       return `${open}<polygon points="${num(cx)},${num(dcy - size / 2)} ${num(cx + size / 2)},${num(dcy)} ${num(cx)},${num(dcy + size / 2)} ${num(cx - size / 2)},${num(dcy)}" fill="#ffffff" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`
-        + (marker ? textLines([marker], { x: cx, y: dcy, size: Math.min(26, size * 0.45), anchor: "middle", bold: true, color }) : "")
+        + marker
         + textLines([nameLine], { x: cx, y: dcy + size / 2 + 12, size: 12, anchor: "middle", bold: true })
         + textLines([truncate(node.typeName, w, 11)], { x: cx, y: dcy + size / 2 + 27, size: 11, anchor: "middle", color: MUTED_COLOR })
         + "</g>";
@@ -416,14 +417,19 @@ function renderEdge(edge: ExportEdge, nodes: Map<string, ExportNode>): string {
   const source = nodes.get(edge.sourceId);
   const target = nodes.get(edge.targetId);
   if (!source || !target) return "";
-  // Gleiche Anker wie im Canvas: Ausgang rechts, Eingang links, jeweils mittig.
+  // #127: Gleiche Andockseiten wie im Editor (oben/unten bei übereinanderliegenden Knoten); Pools bleiben rechts→links.
+  const sides = source.shape === "pool" || target.shape === "pool" || source.id === target.id
+    ? { source: "right" as const, target: "left" as const }
+    : edgeSides(source, target);
+  const from = sideAnchor(source, sides.source);
+  const to = sideAnchor(target, sides.target);
   const [path, labelX, labelY] = getBezierPath({
-    sourceX: source.x + source.width,
-    sourceY: source.y + source.height / 2,
-    sourcePosition: Position.Right,
-    targetX: target.x,
-    targetY: target.y + target.height / 2,
-    targetPosition: Position.Left
+    sourceX: from.x,
+    sourceY: from.y,
+    sourcePosition: from.position,
+    targetX: to.x,
+    targetY: to.y,
+    targetPosition: to.position
   });
   const line = `<path d="${path}" fill="none" stroke="${edge.color}" stroke-width="2"${edge.dash ? ` stroke-dasharray="${edge.dash}"` : ""} marker-end="url(#${markerId(edge.color)})"/>`;
   if (!edge.label) return `<g data-id="${escapeXml(edge.id)}">${line}</g>`;
@@ -584,4 +590,16 @@ export function downloadBlob(blob: Blob, fileName: string): void {
   link.remove();
   // Etwas verzögert freigeben, damit der Download in allen Browsern sicher startet.
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** #126: Gateway-Marker geometrisch zeichnen (wie im Editor), statt als Textzeichen mit schriftabhängiger Lage. */
+export function gatewayMarkerSvg(shape: string, cx: number, cy: number, size: number, color: string): string {
+  const u = size / 100; // gleiche Maße wie die viewBox 0..100 im Editor
+  const sw = num(Math.max(1.5, 7 * u));
+  const line = (x1: number, y1: number, x2: number, y2: number) =>
+    `<line x1="${num(cx + (x1 - 50) * u)}" y1="${num(cy + (y1 - 50) * u)}" x2="${num(cx + (x2 - 50) * u)}" y2="${num(cy + (y2 - 50) * u)}" stroke="${color}" stroke-width="${sw}" stroke-linecap="round"/>`;
+  if (shape === "gateway-xor") return line(37, 37, 63, 63) + line(63, 37, 37, 63);
+  if (shape === "gateway-and") return line(50, 32, 50, 68) + line(32, 50, 68, 50);
+  if (shape === "gateway-or") return `<circle cx="${num(cx)}" cy="${num(cy)}" r="${num(15 * u)}" fill="none" stroke="${color}" stroke-width="${num(Math.max(1.5, 6 * u))}"/>`;
+  return "";
 }

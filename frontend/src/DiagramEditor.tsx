@@ -24,6 +24,7 @@ import { ChevronDown, ChevronUp, CircleCheck, GitBranch, Grid3x3, Link2, Maximiz
 import DiagramCoordinates from "./DiagramCoordinates";
 import DiagramExportDialog, { type ExportChoice } from "./DiagramExportDialog";
 import { copyText } from "./CopyLinkButton";
+import { fitMenuInViewport } from "./contextMenuPosition";
 import ShareMenu from "./ShareMenu";
 import { absoluteLink, viewParam, type FocusTarget } from "./deepLink";
 import {
@@ -55,6 +56,8 @@ import {
   type DiagramSelection,
   type SelectChange
 } from "./diagramSelection";
+import { isRectVisible, paletteAfterResize } from "./viewportFit";
+import { edgeSides, type Side } from "./edgeRouting";
 import { GRID_SIZE as GRID_BG, changedNodeLayout, fallbackPosition, findFreePosition, shapeDefaultSize, snapPoint, type Rect } from "./diagramLayout";
 import { sidebarApi } from "./Sidebar/sidebarApi";
 import { runOptimisticMutation } from "./optimisticConflict";
@@ -463,6 +466,13 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
     <>
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
+      {/* #127: Unsichtbare Andockpunkte, damit Verbindungen an der Seite ansetzen, die zum Gegenüber zeigt. */}
+      <Handle id="s-top" type="source" position={Position.Top} className="diagram-auto-handle" isConnectable={false} />
+      <Handle id="s-bottom" type="source" position={Position.Bottom} className="diagram-auto-handle" isConnectable={false} />
+      <Handle id="s-left" type="source" position={Position.Left} className="diagram-auto-handle" isConnectable={false} />
+      <Handle id="t-top" type="target" position={Position.Top} className="diagram-auto-handle" isConnectable={false} />
+      <Handle id="t-bottom" type="target" position={Position.Bottom} className="diagram-auto-handle" isConnectable={false} />
+      <Handle id="t-right" type="target" position={Position.Right} className="diagram-auto-handle" isConnectable={false} />
     </>
   );
 
@@ -498,12 +508,15 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
   }
 
   if (shape === "gateway" || shape === "gateway-xor" || shape === "gateway-and" || shape === "gateway-or") {
-    const marker = shape === "gateway-xor" ? "✕" : shape === "gateway-and" ? "+" : shape === "gateway-or" ? "○" : null;
+    // #126: Raute und Marker als ein SVG – bleibt quadratisch und zentriert, egal wie groß der Knoten ist.
     return (
       <div className={shellClass("shaped-node shape-gateway")}>
         {interactionOverlay}
-        <div className="shape-gateway-diamond" style={{ borderColor: color }}>
-          {marker && <span className="shape-gateway-marker" style={{ color }}>{marker}</span>}
+        <div className="shape-gateway-diamond">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
+            <polygon className="shape-gateway-outline" points="50,3 97,50 50,97 3,50" fill="#ffffff" stroke={color} strokeWidth={4} strokeLinejoin="round" />
+            <GatewayMarker shape={shape} color={color} />
+          </svg>
         </div>
         <div className="shape-gateway-label">
           <strong>{name}</strong>
@@ -554,6 +567,23 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
 }
 
 const nodeTypes = { shaped: ShapedNode };
+
+/** #127: Lage und Größe eines Knotens aus gespeicherter Position und Formstandard – Grundlage für die Andockseite. */
+export function componentRectLookup(
+  diagram: Diagram,
+  components: ComponentInstance[],
+  componentTypes: ComponentType[]
+): (componentId: string) => Rect | null {
+  return (componentId) => {
+    if (!diagram.componentIds.includes(componentId)) return null;
+    const comp = components.find((c) => c.id === componentId);
+    const shape = componentTypes.find((t) => t.id === comp?.componentTypeId)?.shape ?? "box";
+    if (shape === "pool") return null; // Pools umschließen andere Knoten – dort bleibt es bei links/rechts.
+    const pos = diagram.positions[componentId] ?? fallbackPosition(Math.max(diagram.componentIds.indexOf(componentId), 0));
+    const defaults = shapeDefaultSize(shape);
+    return { x: pos.x, y: pos.y, width: pos.width ?? defaults.width, height: pos.height ?? defaults.height };
+  };
+}
 
 export function buildNodes(
   diagram: Diagram,
@@ -607,12 +637,23 @@ export function buildNodes(
   });
 }
 
+export { edgeSides } from "./edgeRouting";
+
+/** Handle-IDs zu den Seiten; rechts (Quelle) und links (Ziel) sind die sichtbaren Standard-Handles ohne ID. */
+export function edgeHandles(sides: { source: Side; target: Side }): { sourceHandle?: string; targetHandle?: string } {
+  return {
+    ...(sides.source === "right" ? {} : { sourceHandle: `s-${sides.source}` }),
+    ...(sides.target === "left" ? {} : { targetHandle: `t-${sides.target}` })
+  };
+}
+
 export function buildEdges(
   diagram: Diagram,
   connections: ConnectionInstance[],
   connectionTypes: ConnectionType[],
   highlightId: string | null = null,
-  selectedEdgeIds: ReadonlySet<string> = new Set()
+  selectedEdgeIds: ReadonlySet<string> = new Set(),
+  rectOf?: (componentId: string) => Rect | null
 ): Edge[] {
   return diagram.connectionIds.flatMap((id) => {
     const conn = connections.find((c) => c.id === id);
@@ -623,9 +664,15 @@ export function buildEdges(
     const selected = selectedEdgeIds.has(id);
     // #123: Die Typfarbe steht inline am Pfad und schlägt jedes CSS – deshalb Auswahlfarbe hier setzen.
     const stroke = selected ? SELECTION_COLOR : type?.color ?? "#475569";
+    const sourceRect = rectOf?.(conn.sourceComponentId);
+    const targetRect = rectOf?.(conn.targetComponentId);
+    const handles = sourceRect && targetRect && conn.sourceComponentId !== conn.targetComponentId
+      ? edgeHandles(edgeSides(sourceRect, targetRect))
+      : {};
     return [
       {
         id: conn.id,
+        ...handles,
         selected,
         ...(highlighted ? { className: "is-link-target", animated: true } : {}),
         source: conn.sourceComponentId,
@@ -726,6 +773,15 @@ function Palette({ components, componentTypes, onAdd }: PaletteProps) {
   );
 }
 
+/** #142: Bewegung bis zu dieser Strecke gilt als Klick, nicht als Ziehen. */
+const PALETTE_CLICK_TOLERANCE = 6;
+
+export function isPaletteClick(start: { x: number; y: number }, end: { x: number; y: number }): boolean {
+  // Manche Browser melden beim Abbruch keine Koordinaten (0,0) – im Zweifel nichts hinzufügen.
+  if (end.x === 0 && end.y === 0) return false;
+  return Math.hypot(end.x - start.x, end.y - start.y) <= PALETTE_CLICK_TOLERANCE;
+}
+
 function PaletteItem({
   comp,
   color,
@@ -739,16 +795,41 @@ function PaletteItem({
   icon?: ReactNode;
   onAdd: (id: string) => void;
 }) {
+  // #142: Bei draggable-Elementen startet der Browser schon bei minimaler Mausbewegung einen Drag – dann
+  // kommt kein click an. Ein „Drag“ ohne Ablage und praktisch ohne Weg zählt deshalb als Klick.
+  const press = useRef<{ x: number; y: number } | null>(null);
+  const handledAsClick = useRef(false);
   return (
     <button
+      type="button"
       className="diagram-palette-item"
       style={{ borderLeftColor: color }}
       draggable
+      onPointerDown={(e) => {
+        press.current = e.button === 0 ? { x: e.clientX, y: e.clientY } : null;
+        handledAsClick.current = false;
+      }}
       onDragStart={(e) => {
         e.dataTransfer.setData(COMPONENT_DRAG_MIME, comp.id);
         e.dataTransfer.effectAllowed = "copy";
       }}
-      onClick={() => onAdd(comp.id)}
+      onDragEnd={(e) => {
+        const start = press.current;
+        press.current = null;
+        if (!start || e.dataTransfer.dropEffect !== "none") return;
+        if (isPaletteClick(start, { x: e.clientX, y: e.clientY })) {
+          handledAsClick.current = true;
+          onAdd(comp.id);
+        }
+      }}
+      onClick={() => {
+        press.current = null;
+        if (handledAsClick.current) {
+          handledAsClick.current = false;
+          return;
+        }
+        onAdd(comp.id);
+      }}
       title="Auf die Fläche ziehen oder klicken zum Hinzufügen"
     >
       {icon ?? <span className={`shape-glyph shape-glyph--${shape}`} style={{ borderColor: color }} />}
@@ -849,7 +930,7 @@ function CreateComponentDialog({
         />
         <div className="diagram-suggestion-actions">
           <button className="sb-save-btn" style={{ margin: 0 }} disabled={!canConfirm} onClick={confirm}>
-            {confirmLabel}
+            {saving ? "Wird angelegt …" : confirmLabel}
           </button>
           <button onClick={onCancel}>Abbrechen</button>
         </div>
@@ -941,9 +1022,13 @@ function DiagramEditorInner({
     buildNodes(diagram, components, componentTypes, null, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, canWrite)
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState(
-    buildEdges(diagram, connections, connectionTypes)
+    buildEdges(diagram, connections, connectionTypes, null, new Set(), componentRectLookup(diagram, components, componentTypes))
   );
   const [paletteOpen, setPaletteOpen] = useState(true);
+  // #128: Palette bei schmaler Editorfläche automatisch einklappen (und danach wieder öffnen).
+  const paletteAutoRef = useRef({ autoCollapsed: false, narrow: false });
+  const paletteOpenRef = useRef(paletteOpen);
+  paletteOpenRef.current = paletteOpen;
   const [pendingAdd, setPendingAdd] = useState<PendingAdd | null>(null);
   const [pendingAddError, setPendingAddError] = useState("");
   const [pendingAddSaving, setPendingAddSaving] = useState(false);
@@ -952,7 +1037,8 @@ function DiagramEditorInner({
   const [connectingFrom, dispatchConnectionMode] = useReducer(connectionModeReducer, null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  // #117: a permanent deletion is shown in red, everything else in green.
+  const [notice, setNotice] = useState<{ text: string; tone?: "danger" } | null>(null);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [showRulers, setShowRulers] = useState(true);
   snapRef.current = snapEnabled;
@@ -961,7 +1047,7 @@ function DiagramEditorInner({
   const [validationCollapsed, setValidationCollapsed] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, fitView, getViewport, setCenter, getZoom } = useReactFlow();
+  const { screenToFlowPosition, fitView, getViewport, setCenter, getZoom, getNode } = useReactFlow();
   const [linkHighlightId, setLinkHighlightId] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const activeViewpoint = viewpointFilterId ? viewpoints.find((viewpoint) => viewpoint.id === viewpointFilterId) : undefined;
@@ -1032,10 +1118,17 @@ function DiagramEditorInner({
     if (rest.length > 0) onEdgesChange(rest);
   }, [onEdgesChange]);
 
+  // Fehler-Toasts verschwinden nach einer Weile von selbst, lassen sich aber auch direkt schließen.
+  useEffect(() => {
+    if (!error) return;
+    const timer = window.setTimeout(() => setError(""), 8000);
+    return () => window.clearTimeout(timer);
+  }, [error]);
+
   // Short confirmation messages disappear on their own.
   useEffect(() => {
     if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(""), 3500);
+    const timer = window.setTimeout(() => setNotice(null), 3500);
     return () => window.clearTimeout(timer);
   }, [notice]);
 
@@ -1063,7 +1156,7 @@ function DiagramEditorInner({
     setViewpointFilterId(diagram.viewpointId ?? "");
     setValidationResult(null);
     setError("");
-    setNotice("");
+    setNotice(null);
     // Anderes Diagramm: keine Auswahl mitnehmen (gleiche Komponente kann in beiden liegen), nur das Panel-Element.
     setSelection(selectionForPanelElement(EMPTY_SELECTION, selectedElementIdRef.current, visibleIdsRef.current));
   }, [diagram.id, diagram.viewpointId]);
@@ -1089,7 +1182,7 @@ function DiagramEditorInner({
 
   useEffect(() => {
     setNodes(buildNodes(displayedDiagram, components, componentTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, canWrite, linkHighlightId, selectedNodeIds));
-    setEdges(buildEdges(displayedDiagram, connections, connectionTypes, linkHighlightId, selectedEdgeIds));
+    setEdges(buildEdges(displayedDiagram, connections, connectionTypes, linkHighlightId, selectedEdgeIds, componentRectLookup(displayedDiagram, components, componentTypes)));
   }, [canWrite, displayedDiagram, components, componentTypes, connections, connectionTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, setNodes, setEdges, linkHighlightId, selectedNodeIds, selectedEdgeIds]);
 
   useEffect(() => () => window.clearTimeout(hoverLeaveTimer.current), []);
@@ -1105,6 +1198,16 @@ function DiagramEditorInner({
     window.addEventListener("pointerdown", handler);
     return () => window.removeEventListener("pointerdown", handler);
   }, [contextMenu.visible]);
+
+  // #122: keep the menu inside the window; runs before paint, so it never shows cut off.
+  useLayoutEffect(() => {
+    if (!contextMenu.visible || !menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    const { x, y } = fitMenuInViewport(contextMenu, rect, { width: window.innerWidth, height: window.innerHeight });
+    if (x !== contextMenu.x || y !== contextMenu.y) {
+      setContextMenu((current) => ({ ...current, x, y }));
+    }
+  }, [contextMenu]);
 
   // ── Shared connection creation ──────────────────────────────────────────────
 
@@ -1141,13 +1244,13 @@ function DiagramEditorInner({
         onDiagramChange(result.diagram);
         setError("");
         const label = `„${connType.name}“ von ${srcComp.name} zu ${tgtComp.name}`;
-        setNotice(
-          result.created
+        setNotice({
+          text: result.created
             ? `Verbindung ${label} erstellt.`
             : wasInDiagram
               ? `Diese Verbindung ${label} gibt es bereits – es wurde keine neue angelegt.`
               : `Bestehende Verbindung ${label} zum Diagramm hinzugefügt.`
-        );
+        });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Verbindung konnte nicht erstellt werden.");
       }
@@ -1211,9 +1314,8 @@ function DiagramEditorInner({
       ));
       if (!result?.applied) return;
       onComponentDeleted(nodeId);
-      setValidationResult(null);
       setError("");
-      setNotice("Aus dem Repository gelöscht (auch aus allen anderen Diagrammen entfernt).");
+      setNotice({ text: `„${component.name}“ endgültig aus dem Repository gelöscht (auch aus allen anderen Diagrammen entfernt).`, tone: "danger" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Element konnte nicht aus dem Repository gelöscht werden.");
     }
@@ -1238,9 +1340,8 @@ function DiagramEditorInner({
       });
       if (!updated) return;
       onDiagramChange(updated);
-      setValidationResult(null);
       setError("");
-      setNotice(nodeIds.length === 1 ? "Aus dem Diagramm entfernt (bleibt im Modell erhalten)." : `${nodeIds.length} Elemente aus dem Diagramm entfernt (bleiben im Modell erhalten).`);
+      setNotice({ text: nodeIds.length === 1 ? "Aus dem Diagramm entfernt (bleibt im Modell erhalten)." : `${nodeIds.length} Elemente aus dem Diagramm entfernt (bleiben im Modell erhalten).` });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Element konnte nicht aus dem Diagramm entfernt werden.");
     } finally {
@@ -1271,9 +1372,8 @@ function DiagramEditorInner({
       if (!updated) return;
       onDiagramChange(updated);
       setSelection(EMPTY_SELECTION);
-      setValidationResult(null);
       setError("");
-      setNotice(removalNotice(target.nodeIds.length, target.edgeIds.length));
+      setNotice({ text: removalNotice(target.nodeIds.length, target.edgeIds.length) });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Auswahl konnte nicht aus dem Diagramm entfernt werden.");
     } finally {
@@ -1397,7 +1497,7 @@ function DiagramEditorInner({
       onDiagramChange(result.value.diagram);
       setPendingCreate(null);
       setError("");
-      setNotice(`Komponente „${name}“ angelegt und im Diagramm platziert.`);
+      setNotice({ text: `Komponente „${name}“ angelegt und im Diagramm platziert.` });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Komponente konnte nicht erstellt werden.");
     }
@@ -1416,7 +1516,19 @@ function DiagramEditorInner({
 
   // ── Smart add ───────────────────────────────────────────────────────────────
 
+  // #142: Solange ein Hinzufügen läuft, weitere Klicks ignorieren (sonst Konflikte mit veraltetem Diagrammstand).
+  const addingComponentRef = useRef(false);
   async function startAddComponent(compId: string, position?: DiagramPosition) {
+    if (addingComponentRef.current) return;
+    addingComponentRef.current = true;
+    try {
+      await startAddComponentNow(compId, position);
+    } finally {
+      addingComponentRef.current = false;
+    }
+  }
+
+  async function startAddComponentNow(compId: string, position?: DiagramPosition) {
     if (!canWrite) return;
     if (diagram.componentIds.includes(compId)) return;
     const component = components.find((item) => item.id === compId);
@@ -1472,7 +1584,7 @@ function DiagramEditorInner({
     if (!updated) return;
     onDiagramChange(updated);
     setError("");
-    setNotice(`${components.find((item) => item.id === compId)?.name ?? "Komponente"} zum Diagramm hinzugefügt.`);
+    setNotice({ text: `${components.find((item) => item.id === compId)?.name ?? "Komponente"} zum Diagramm hinzugefügt.` });
   }
 
   async function confirmAdd() {
@@ -1509,22 +1621,49 @@ function DiagramEditorInner({
     }
   }
 
-  async function runDiagramValidation() {
+  // #129: Jede Prüfung bekommt eine Nummer; nur die jüngste darf ihr Ergebnis anzeigen.
+  const validationRunRef = useRef(0);
+  const [validationStale, setValidationStale] = useState(false);
+
+  async function runDiagramValidation(options: { expand?: boolean } = {}) {
+    const run = ++validationRunRef.current;
     const local = validateDiagram(displayedDiagram, sidebarState);
     setValidationResult(local);
-    setValidationCollapsed(false);
+    setValidationStale(false);
+    if (options.expand ?? true) setValidationCollapsed(false);
     if (viewpointFilterId !== (diagram.viewpointId ?? "")) {
       setError("");
       return;
     }
     try {
       const server = await sidebarApi.validateDiagram(diagram.id);
+      if (run !== validationRunRef.current) return;
       setValidationResult(server);
       setError("");
     } catch (err) {
+      if (run !== validationRunRef.current) return;
       setError(err instanceof Error ? err.message : "Diagrammvalidierung konnte nicht ausgefuehrt werden.");
     }
   }
+
+  // #129: Ist das Prüfergebnis offen, wird es nach Modelländerungen neu berechnet statt stehen zu bleiben.
+  // Kurz entprellt, damit Verschieben oder mehrere schnelle Änderungen nur eine Prüfung auslösen.
+  const validationOpen = validationResult !== null;
+  const runValidationRef = useRef(runDiagramValidation);
+  runValidationRef.current = runDiagramValidation;
+  const lastValidatedRef = useRef<{ diagram: Diagram; state: typeof sidebarState } | null>(null);
+  useEffect(() => {
+    if (!validationOpen) {
+      lastValidatedRef.current = null;
+      return;
+    }
+    const last = lastValidatedRef.current;
+    lastValidatedRef.current = { diagram: displayedDiagram, state: sidebarState };
+    if (!last || (last.diagram === displayedDiagram && last.state === sidebarState)) return;
+    setValidationStale(true);
+    const timer = window.setTimeout(() => void runValidationRef.current({ expand: false }), 400);
+    return () => window.clearTimeout(timer);
+  }, [validationOpen, displayedDiagram, sidebarState]);
 
   /* ── REQ-11: Export als PNG/SVG ────────────────────────────────────────── */
   // Grundlage ist das gefilterte Diagramm: ein aktiver Ansichtsfilter gilt auch im Export.
@@ -1570,6 +1709,59 @@ function DiagramEditorInner({
     return () => window.clearTimeout(timer);
   }, [focusRequest, exportScene, setCenter, getZoom]);
 
+  // #128: Editorbreite beobachten – Palette einklappen, wenn sonst kaum Fläche übrig bleibt.
+  useEffect(() => {
+    const element = editorRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      const current = { open: paletteOpenRef.current, ...paletteAutoRef.current };
+      const next = paletteAfterResize(current, entry.contentRect.width);
+      if (next === current) return;
+      paletteAutoRef.current = { autoCollapsed: next.autoCollapsed, narrow: next.narrow };
+      if (next.open !== current.open) setPaletteOpen(next.open);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  // #128: Das im Detail-Panel geöffnete Element bleibt sichtbar – auch wenn das Panel die Fläche schmaler macht.
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const element = canvasRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      setCanvasSize({ width: Math.round(entry.contentRect.width), height: Math.round(entry.contentRect.height) });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    if (!selectedElementId || canvasSize.width === 0) return;
+    const timer = window.setTimeout(() => {
+      const rectOf = (id: string) => {
+        const node = getNode(id);
+        if (!node?.width || !node.height) return null;
+        const position = node.positionAbsolute ?? node.position;
+        return { x: position.x, y: position.y, width: node.width, height: node.height };
+      };
+      let target = rectOf(selectedElementId);
+      if (!target) {
+        const connection = connections.find((item) => item.id === selectedElementId);
+        const source = connection && rectOf(connection.sourceComponentId);
+        const goal = connection && rectOf(connection.targetComponentId);
+        if (!source || !goal) return;
+        const x = Math.min(source.x, goal.x);
+        const y = Math.min(source.y, goal.y);
+        target = { x, y, width: Math.max(source.x + source.width, goal.x + goal.width) - x, height: Math.max(source.y + source.height, goal.y + goal.height) - y };
+      }
+      if (isRectVisible(target, getViewport(), canvasSize)) return;
+      void setCenter(target.x + target.width / 2, target.y + target.height / 2, { zoom: getZoom(), duration: 300 });
+    }, 250);
+    return () => window.clearTimeout(timer);
+    // Bewusst nur bei neuem Panel-Element oder geänderter Flächengröße – nicht bei jedem Verschieben.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedElementId, canvasSize.width, canvasSize.height]);
+
   // Hervorhebung nach ein paar Sekunden wieder entfernen.
   useEffect(() => {
     if (!linkHighlightId) return;
@@ -1588,7 +1780,7 @@ function DiagramEditorInner({
   async function copyElementLink(elementId: string, name: string) {
     setContextMenu((m) => ({ ...m, visible: false }));
     const url = diagramLink(elementId);
-    if (await copyText(url)) setNotice(`Link zu „${name}“ kopiert`);
+    if (await copyText(url)) setNotice({ text: `Link zu „${name}“ kopiert` });
     else setError(`Kopieren nicht möglich – bitte manuell kopieren: ${url}`);
   }
 
@@ -1626,7 +1818,7 @@ function DiagramEditorInner({
       const { scale: safeScale } = clampPngScale(size, scale);
       downloadBlob(await svgToPngBlob(svg, size, safeScale), fileName);
     }
-    setNotice(`Exportiert als ${fileName}`);
+    setNotice({ text: `Exportiert als ${fileName}` });
   }
 
   const visibleComponentTypeIds = new Set(visibleComponentTypes.map((type) => type.id));
@@ -1661,12 +1853,15 @@ function DiagramEditorInner({
       <div className="diagram-toolbar">
         {canWrite && <button
           className="diagram-palette-toggle"
-          onClick={() => setPaletteOpen((v) => !v)}
+          onClick={() => {
+            paletteAutoRef.current = { ...paletteAutoRef.current, autoCollapsed: false };
+            setPaletteOpen((v) => !v);
+          }}
           title={paletteOpen ? "Palette ausblenden" : "Palette einblenden"}
           aria-pressed={paletteOpen}
         >
           {paletteOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
-          Palette
+          <span className="diagram-tb-label">Palette</span>
         </button>}
         <strong className="diagram-title">{diagram.name}</strong>
         <label className="diagram-viewpoint-filter">
@@ -1687,7 +1882,7 @@ function DiagramEditorInner({
           </select>
         </label>
         <button className="diagram-palette-toggle" onClick={fitDiagram} title="Alle Elemente einpassen und zentrieren">
-          <Maximize size={16} /> Ansicht einpassen
+          <Maximize size={16} /> <span className="diagram-tb-label">Ansicht einpassen</span>
         </button>
         <ShareMenu
           className="diagram-palette-toggle"
@@ -1701,7 +1896,7 @@ function DiagramEditorInner({
           aria-pressed={showRulers}
           title="Koordinatensystem mit Linealen und Achsen ein-/ausblenden"
         >
-          <Ruler size={16} /> Koordinaten
+          <Ruler size={16} /> <span className="diagram-tb-label">Koordinaten</span>
         </button>
         <button
           className={`diagram-palette-toggle${snapEnabled ? " diagram-toggle--on" : ""}`}
@@ -1709,10 +1904,10 @@ function DiagramEditorInner({
           aria-pressed={snapEnabled}
           title="Raster: sichtbare Rasterlinien, Elemente rasten beim Platzieren, Verschieben und Skalieren ein"
         >
-          <Grid3x3 size={16} /> Raster
+          <Grid3x3 size={16} /> <span className="diagram-tb-label">Raster</span>
         </button>
-        <button className="diagram-palette-toggle" onClick={runDiagramValidation}>
-          <SlidersHorizontal size={16} /> Ansicht prüfen
+        <button className="diagram-palette-toggle" onClick={() => void runDiagramValidation()} title="Diagramm gegen die Regeln der Ansicht prüfen">
+          <SlidersHorizontal size={16} /> <span className="diagram-tb-label">Ansicht prüfen</span>
         </button>
         <span className="muted diagram-hint">
           {activeViewpoint
@@ -1723,17 +1918,6 @@ function DiagramEditorInner({
         <button className="diagram-close-btn" onClick={onClose} title="Tab schließen"><X size={16} /></button>
       </div>
 
-      {error && (
-        <div className="error-banner diagram-error" role="alert">
-          <span>{error}</span>
-          <button type="button" className="diagram-banner-close" onClick={() => setError("")} aria-label="Meldung schließen"><X size={14} /></button>
-        </div>
-      )}
-      {notice && !error && (
-        <div className="diagram-notice" role="status">
-          <CircleCheck size={14} /> {notice}
-        </div>
-      )}
 
       {/* ── Connect mode banner ─────────────────────────────────────────────── */}
       {/* #124: schließbar, einklappbar, höhenbegrenzt (scrollt intern) – die Fläche bleibt nutzbar. */}
@@ -1746,6 +1930,7 @@ function DiagramEditorInner({
             <strong role="status">{validationStatus}</strong>
             <span className="diagram-validation-counts">
               {validationErrorCount} Fehler · {validationWarningCount} {validationWarningCount === 1 ? "Warnung" : "Warnungen"}
+              {validationStale && " · wird aktualisiert …"}
             </span>
             {validationGroups.length > 0 && (
               <button
@@ -1789,16 +1974,6 @@ function DiagramEditorInner({
         </section>
       )}
 
-      {connectingFrom && (() => {
-        const fromComp = components.find((c) => c.id === connectingFrom);
-        return (
-          <div className="diagram-connect-banner">
-            <GitBranch size={14} />
-            <span><strong>Verbindungsmodus:</strong> Von <strong>{fromComp?.name}</strong> aus – klicke auf die Ziel-Komponente (Esc zum Abbrechen)</span>
-            <button onClick={() => dispatchConnectionMode({ type: "cancel" })}>Abbrechen</button>
-          </div>
-        );
-      })()}
 
       {/* ── Palette + Canvas ────────────────────────────────────────────────── */}
       <div className="diagram-body">
@@ -1817,6 +1992,31 @@ function DiagramEditorInner({
           onDragLeave={onCanvasDragLeave}
           onDrop={canWrite ? onCanvasDrop : undefined}
         >
+          {/* #125/#127-Feedback: Hinweise, Fehler und Verbindungsmodus schweben als Toasts über der Fläche,
+              statt Toolbar und Fläche zu verschieben. Fehler bleiben anklickbar (schließen), Hinweise nicht. */}
+          <div className="diagram-toast-stack">
+          {connectingFrom && (() => {
+            const fromComp = components.find((c) => c.id === connectingFrom);
+            return (
+              <div className="diagram-connect-banner">
+                <GitBranch size={14} />
+                <span><strong>Verbindungsmodus:</strong> Von <strong>{fromComp?.name}</strong> aus – klicke auf die Ziel-Komponente (Esc zum Abbrechen)</span>
+                <button onClick={() => dispatchConnectionMode({ type: "cancel" })}>Abbrechen</button>
+              </div>
+            );
+          })()}
+          {error && (
+            <div className="diagram-error diagram-toast diagram-toast--danger" role="alert">
+              <span>{error}</span>
+              <button type="button" className="diagram-banner-close" onClick={() => setError("")} aria-label="Meldung schließen"><X size={14} /></button>
+            </div>
+          )}
+          {notice && !error && (
+            <div className={`diagram-notice${notice.tone === "danger" ? " diagram-notice--danger" : ""}`} role="status" aria-live="polite">
+              {notice.tone === "danger" ? <Trash2 size={14} /> : <CircleCheck size={14} />} {notice.text}
+            </div>
+          )}
+          </div>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -2030,6 +2230,15 @@ function DiagramEditorInner({
       )}
     </div>
   );
+}
+
+/** #126: Geometrischer Marker statt Textzeichen (✕/+/○), damit er unabhängig von Schriftart mittig sitzt. */
+function GatewayMarker({ shape, color }: { shape: string; color: string }) {
+  const common = { stroke: color, strokeWidth: 7, strokeLinecap: "round" as const, fill: "none" };
+  if (shape === "gateway-xor") return <path d="M37 37 L63 63 M63 37 L37 63" {...common} />;
+  if (shape === "gateway-and") return <path d="M50 32 L50 68 M32 50 L68 50" {...common} />;
+  if (shape === "gateway-or") return <circle cx={50} cy={50} r={15} {...common} strokeWidth={6} />;
+  return null;
 }
 
 export default function DiagramEditor(props: Props) {

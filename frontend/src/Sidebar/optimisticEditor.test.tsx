@@ -48,7 +48,8 @@ function nameInput(renderer: ReactTestRenderer) {
 }
 
 function saveButton(renderer: ReactTestRenderer) {
-  return renderer.root.findAllByType("button").find((button) => button.children.includes("Speichern"))!;
+  // By class: after a confirmed save the label briefly reads „Gespeichert“ (#117).
+  return renderer.root.findAllByType("button").find((button) => String(button.props.className).split(" ").includes("sb-save-btn"))!;
 }
 
 describe("optimistic editor integration", () => {

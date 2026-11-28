@@ -153,3 +153,56 @@ describe("REQ-11 diagram export", () => {
     expect(wrapText("Ist - Soll", 200, 11, 1)).toEqual(["Ist - Soll"]);
   });
 });
+
+describe("gatewayMarkerSvg (#126)", () => {
+  it("zeichnet das XOR-Kreuz symmetrisch um den Mittelpunkt der Raute", async () => {
+    const { gatewayMarkerSvg } = await import("./diagramExport");
+    const svg = gatewayMarkerSvg("gateway-xor", 100, 50, 40, "#000");
+    const nums = [...svg.matchAll(/(x1|y1|x2|y2)="([\d.]+)"/g)].map((m) => Number(m[2]));
+    const xs = nums.filter((_, i) => i % 2 === 0);
+    const ys = nums.filter((_, i) => i % 2 === 1);
+    expect((Math.min(...xs) + Math.max(...xs)) / 2).toBeCloseTo(100);
+    expect((Math.min(...ys) + Math.max(...ys)) / 2).toBeCloseTo(50);
+    expect(svg).not.toContain("✕");
+  });
+
+  it("liefert für AND/OR passende Marker und für das neutrale Gateway nichts", async () => {
+    const { gatewayMarkerSvg } = await import("./diagramExport");
+    expect(gatewayMarkerSvg("gateway-and", 0, 0, 40, "#000")).toContain("<line");
+    expect(gatewayMarkerSvg("gateway-or", 0, 0, 40, "#000")).toContain("<circle");
+    expect(gatewayMarkerSvg("gateway", 0, 0, 40, "#000")).toBe("");
+  });
+});
+
+describe("Export-Pfeile wie im Editor (#127)", () => {
+  const pathStart = (svg: string) => {
+    const m = /<g data-id="c1"><path d="M\s*([\d.-]+)[ ,]+([\d.-]+)/.exec(svg);
+    return m ? { x: Number(m[1]), y: Number(m[2]) } : null;
+  };
+  const nodeBox = (svg: string, id: string) => {
+    const from = svg.indexOf(`<g data-id="${id}"`);
+    const m = /<rect x="([\d.-]+)" y="([\d.-]+)" width="([\d.-]+)" height="([\d.-]+)"/.exec(svg.slice(from));
+    return from >= 0 && m ? { x: Number(m[1]), y: Number(m[2]), w: Number(m[3]), h: Number(m[4]) } : null;
+  };
+
+  it("verbindet übereinanderliegende Knoten im Export unten→oben", () => {
+    const stacked: Diagram = { ...diagram, componentIds: ["crm", "store"], positions: { crm: { x: 60, y: 0 }, store: { x: 60, y: 300 } } };
+    const scene = buildExportScene(stacked, components, types, connections, connectionTypes);
+    const { svg } = renderDiagramSvg(scene, sceneBounds(scene)!, "Stapel");
+    const start = pathStart(svg);
+    const crm = nodeBox(svg, "crm");
+    expect(start).not.toBeNull();
+    expect(crm).not.toBeNull();
+    expect(start!.x).toBeCloseTo(crm!.x + crm!.w / 2, 0);
+    expect(start!.y).toBeCloseTo(crm!.y + crm!.h, 0);
+  });
+
+  it("bleibt bei nebeneinanderliegenden Knoten rechts→links", () => {
+    const scene = buildExportScene({ ...diagram, componentIds: ["crm", "store"] }, components, types, connections, connectionTypes);
+    const { svg } = renderDiagramSvg(scene, sceneBounds(scene)!, "Reihe");
+    const start = pathStart(svg);
+    const crm = nodeBox(svg, "crm");
+    expect(start!.x).toBeCloseTo(crm!.x + crm!.w, 0);
+    expect(start!.y).toBeCloseTo(crm!.y + crm!.h / 2, 0);
+  });
+});
