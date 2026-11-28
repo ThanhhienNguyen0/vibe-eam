@@ -499,12 +499,15 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
   }
 
   if (shape === "gateway" || shape === "gateway-xor" || shape === "gateway-and" || shape === "gateway-or") {
-    const marker = shape === "gateway-xor" ? "✕" : shape === "gateway-and" ? "+" : shape === "gateway-or" ? "○" : null;
+    // #126: Raute und Marker als ein SVG – bleibt quadratisch und zentriert, egal wie groß der Knoten ist.
     return (
       <div className={shellClass("shaped-node shape-gateway")}>
         {interactionOverlay}
-        <div className="shape-gateway-diamond" style={{ borderColor: color }}>
-          {marker && <span className="shape-gateway-marker" style={{ color }}>{marker}</span>}
+        <div className="shape-gateway-diamond">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
+            <polygon className="shape-gateway-outline" points="50,3 97,50 50,97 3,50" fill="#ffffff" stroke={color} strokeWidth={4} strokeLinejoin="round" />
+            <GatewayMarker shape={shape} color={color} />
+          </svg>
         </div>
         <div className="shape-gateway-label">
           <strong>{name}</strong>
@@ -2042,6 +2045,15 @@ function DiagramEditorInner({
       )}
     </div>
   );
+}
+
+/** #126: Geometrischer Marker statt Textzeichen (✕/+/○), damit er unabhängig von Schriftart mittig sitzt. */
+function GatewayMarker({ shape, color }: { shape: string; color: string }) {
+  const common = { stroke: color, strokeWidth: 7, strokeLinecap: "round" as const, fill: "none" };
+  if (shape === "gateway-xor") return <path d="M37 37 L63 63 M63 37 L37 63" {...common} />;
+  if (shape === "gateway-and") return <path d="M50 32 L50 68 M32 50 L68 50" {...common} />;
+  if (shape === "gateway-or") return <circle cx={50} cy={50} r={15} {...common} strokeWidth={6} />;
+  return null;
 }
 
 export default function DiagramEditor(props: Props) {
