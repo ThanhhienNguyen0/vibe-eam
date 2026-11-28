@@ -12,6 +12,7 @@ import {
   type FocusTarget
 } from "./deepLink";
 import Sidebar, { type SidebarSelection } from "./Sidebar/Sidebar";
+import { selectionAfterContextChange } from "./panelSelection";
 import SidebarPanels from "./Sidebar/SidebarPanels";
 import DiagramEditor from "./DiagramEditor";
 import { findDuplicatesByName, removeComponentFromState } from "./Sidebar/repositoryReferences";
@@ -229,6 +230,16 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
     setActiveDiagramId(null);
     setActiveCatalogId(id);
     setWorkspaceView("diagrams");
+    // #114: Elemente aus einem anderen Kontext nicht im Panel stehen lassen; der eigene Katalog bleibt gewählt.
+    setSidebarSelection((selection) => (selection?.kind === "catalog" && selection.id === id ? selection : null));
+  }
+
+  /** #114: Hauptbereich wechseln – Detail-Panel gehört zum alten Bereich und wird geleert. */
+  function switchArea(view: typeof workspaceView) {
+    setActiveDiagramId(null);
+    setActiveCatalogId(null);
+    setWorkspaceView(view);
+    setSidebarSelection((selection) => selectionAfterContextChange(selection, { kind: "area" }));
   }
 
   async function createCatalog() {
@@ -243,6 +254,9 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
     setActiveCatalogId(null);
     setActiveDiagramId(id);
     setWorkspaceView("diagrams");
+    // #114: Nur behalten, was im geöffneten Diagramm wirklich vorkommt.
+    const target = sidebarState.diagrams.find((d) => d.id === id);
+    setSidebarSelection((selection) => selectionAfterContextChange(selection, { kind: "diagram", diagram: target }));
     // Normales Öffnen: keine Link-Aufträge eines früheren Links wiederverwenden.
     setFocusRequest(null);
     setViewRequest(null);
@@ -268,24 +282,24 @@ export function EamWorkspace({ user, onLogout, onRoleChanged }: { user: AuthUser
         <nav className="tabs" aria-label="Workspace">
           <button
             className={`tabs-diagram-tab${!activeDiagram && !activeCatalog && workspaceView === "diagrams" ? " active" : ""}`}
-            onClick={() => { setActiveDiagramId(null); setActiveCatalogId(null); setWorkspaceView("diagrams"); }}
+            onClick={() => switchArea("diagrams")}
           >
             <LayoutDashboard size={14} /> Diagramme
           </button>
           <button
             className={`tabs-diagram-tab${!activeDiagram && !activeCatalog && workspaceView === "catalogs" ? " active" : ""}`}
-            onClick={() => { setActiveDiagramId(null); setActiveCatalogId(null); setWorkspaceView("catalogs"); }}
+            onClick={() => switchArea("catalogs")}
           >
             <Table2 size={14} /> Kataloge
           </button>
           {canManageMetamodel && <button
             className={`tabs-diagram-tab${!activeDiagram && workspaceView === "metamodel" ? " active" : ""}`}
-            onClick={() => { setActiveDiagramId(null); setActiveCatalogId(null); setWorkspaceView("metamodel"); }}
+            onClick={() => switchArea("metamodel")}
           >
             <GitBranch size={14} /> Metamodel
           </button>}
-          {canManageUsers && <button className={`tabs-diagram-tab${workspaceView === "users" ? " active" : ""}`} onClick={() => { setActiveDiagramId(null); setActiveCatalogId(null); setWorkspaceView("users"); }}>Nutzerverwaltung</button>}
-          {canReadAudit && <button className={`tabs-diagram-tab${!activeDiagram && workspaceView === "audit" ? " active" : ""}`} onClick={() => { setActiveDiagramId(null); setActiveCatalogId(null); setWorkspaceView("audit"); }}><ScrollText size={14} /> Protokoll</button>}
+          {canManageUsers && <button className={`tabs-diagram-tab${workspaceView === "users" ? " active" : ""}`} onClick={() => switchArea("users")}>Nutzerverwaltung</button>}
+          {canReadAudit && <button className={`tabs-diagram-tab${!activeDiagram && workspaceView === "audit" ? " active" : ""}`} onClick={() => switchArea("audit")}><ScrollText size={14} /> Protokoll</button>}
         </nav>
         {activeDiagram && (
           <nav className="tabs" aria-label="Geöffnetes Diagramm">
