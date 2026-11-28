@@ -4567,3 +4567,9 @@ tr.attention td {
     border: 0;
   }
 }
+
+/* #127: zusätzliche Andockpunkte nur für automatisch gewählte Seiten – unsichtbar und nicht anklickbar. */
+.react-flow__handle.diagram-auto-handle {
+  opacity: 0;
+  pointer-events: none;
+}

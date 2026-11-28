@@ -465,6 +465,13 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
     <>
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
+      {/* #127: Unsichtbare Andockpunkte, damit Verbindungen an der Seite ansetzen, die zum Gegenüber zeigt. */}
+      <Handle id="s-top" type="source" position={Position.Top} className="diagram-auto-handle" isConnectable={false} />
+      <Handle id="s-bottom" type="source" position={Position.Bottom} className="diagram-auto-handle" isConnectable={false} />
+      <Handle id="s-left" type="source" position={Position.Left} className="diagram-auto-handle" isConnectable={false} />
+      <Handle id="t-top" type="target" position={Position.Top} className="diagram-auto-handle" isConnectable={false} />
+      <Handle id="t-bottom" type="target" position={Position.Bottom} className="diagram-auto-handle" isConnectable={false} />
+      <Handle id="t-right" type="target" position={Position.Right} className="diagram-auto-handle" isConnectable={false} />
     </>
   );
 
@@ -560,6 +567,23 @@ function ShapedNode({ id, data, selected }: NodeProps<ShapedNodeData>) {
 
 const nodeTypes = { shaped: ShapedNode };
 
+/** #127: Lage und Größe eines Knotens aus gespeicherter Position und Formstandard – Grundlage für die Andockseite. */
+export function componentRectLookup(
+  diagram: Diagram,
+  components: ComponentInstance[],
+  componentTypes: ComponentType[]
+): (componentId: string) => Rect | null {
+  return (componentId) => {
+    if (!diagram.componentIds.includes(componentId)) return null;
+    const comp = components.find((c) => c.id === componentId);
+    const shape = componentTypes.find((t) => t.id === comp?.componentTypeId)?.shape ?? "box";
+    if (shape === "pool") return null; // Pools umschließen andere Knoten – dort bleibt es bei links/rechts.
+    const pos = diagram.positions[componentId] ?? fallbackPosition(Math.max(diagram.componentIds.indexOf(componentId), 0));
+    const defaults = shapeDefaultSize(shape);
+    return { x: pos.x, y: pos.y, width: pos.width ?? defaults.width, height: pos.height ?? defaults.height };
+  };
+}
+
 export function buildNodes(
   diagram: Diagram,
   components: ComponentInstance[],
@@ -612,12 +636,41 @@ export function buildNodes(
   });
 }
 
+type Side = "top" | "right" | "bottom" | "left";
+const OPPOSITE: Record<Side, Side> = { top: "bottom", bottom: "top", left: "right", right: "left" };
+
+/**
+ * #127: Seite, an der eine Verbindung den Quell- und den Zielknoten verlässt bzw. erreicht.
+ * Liegen die Knoten übereinander (z. B. Capabilities untereinander), wird oben/unten angedockt,
+ * sonst links/rechts – so laufen Linien nicht um Knoten herum und überlagern sich weniger.
+ */
+export function edgeSides(source: Rect, target: Rect): { source: Side; target: Side } {
+  const scx = source.x + source.width / 2;
+  const scy = source.y + source.height / 2;
+  const tcx = target.x + target.width / 2;
+  const tcy = target.y + target.height / 2;
+  const overlapX = target.x < source.x + source.width && target.x + target.width > source.x;
+  const overlapY = target.y < source.y + source.height && target.y + target.height > source.y;
+  const vertical = overlapX && !overlapY ? true : overlapY && !overlapX ? false : Math.abs(tcy - scy) > Math.abs(tcx - scx);
+  const side: Side = vertical ? (tcy >= scy ? "bottom" : "top") : (tcx >= scx ? "right" : "left");
+  return { source: side, target: OPPOSITE[side] };
+}
+
+/** Handle-IDs zu den Seiten; rechts (Quelle) und links (Ziel) sind die sichtbaren Standard-Handles ohne ID. */
+export function edgeHandles(sides: { source: Side; target: Side }): { sourceHandle?: string; targetHandle?: string } {
+  return {
+    ...(sides.source === "right" ? {} : { sourceHandle: `s-${sides.source}` }),
+    ...(sides.target === "left" ? {} : { targetHandle: `t-${sides.target}` })
+  };
+}
+
 export function buildEdges(
   diagram: Diagram,
   connections: ConnectionInstance[],
   connectionTypes: ConnectionType[],
   highlightId: string | null = null,
-  selectedEdgeIds: ReadonlySet<string> = new Set()
+  selectedEdgeIds: ReadonlySet<string> = new Set(),
+  rectOf?: (componentId: string) => Rect | null
 ): Edge[] {
   return diagram.connectionIds.flatMap((id) => {
     const conn = connections.find((c) => c.id === id);
@@ -628,9 +681,15 @@ export function buildEdges(
     const selected = selectedEdgeIds.has(id);
     // #123: Die Typfarbe steht inline am Pfad und schlägt jedes CSS – deshalb Auswahlfarbe hier setzen.
     const stroke = selected ? SELECTION_COLOR : type?.color ?? "#475569";
+    const sourceRect = rectOf?.(conn.sourceComponentId);
+    const targetRect = rectOf?.(conn.targetComponentId);
+    const handles = sourceRect && targetRect && conn.sourceComponentId !== conn.targetComponentId
+      ? edgeHandles(edgeSides(sourceRect, targetRect))
+      : {};
     return [
       {
         id: conn.id,
+        ...handles,
         selected,
         ...(highlighted ? { className: "is-link-target", animated: true } : {}),
         source: conn.sourceComponentId,
@@ -980,7 +1039,7 @@ function DiagramEditorInner({
     buildNodes(diagram, components, componentTypes, null, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, canWrite)
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState(
-    buildEdges(diagram, connections, connectionTypes)
+    buildEdges(diagram, connections, connectionTypes, null, new Set(), componentRectLookup(diagram, components, componentTypes))
   );
   const [paletteOpen, setPaletteOpen] = useState(true);
   // #128: Palette bei schmaler Editorfläche automatisch einklappen (und danach wieder öffnen).
@@ -1133,7 +1192,7 @@ function DiagramEditorInner({
 
   useEffect(() => {
     setNodes(buildNodes(displayedDiagram, components, componentTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, canWrite, linkHighlightId, selectedNodeIds));
-    setEdges(buildEdges(displayedDiagram, connections, connectionTypes, linkHighlightId, selectedEdgeIds));
+    setEdges(buildEdges(displayedDiagram, connections, connectionTypes, linkHighlightId, selectedEdgeIds, componentRectLookup(displayedDiagram, components, componentTypes)));
   }, [canWrite, displayedDiagram, components, componentTypes, connections, connectionTypes, connectingFrom, hoveredNodeId, activeNodeId, onInteractionStart, onNodeTransformEnd, setNodes, setEdges, linkHighlightId, selectedNodeIds, selectedEdgeIds]);
 
   useEffect(() => () => window.clearTimeout(hoverLeaveTimer.current), []);
