@@ -4243,21 +4243,43 @@ tr.attention td {
   cursor: pointer;
 }
 
+/* #125: Meldung schwebt als Toast über der Fläche – kein Layoutsprung, Klickziele bleiben stabil. */
 .diagram-notice {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  z-index: 30;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(560px, calc(100% - 32px));
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
+  gap: 8px;
+  padding: 9px 14px;
   background: #ecfdf5;
-  border-bottom: 1px solid #a7f3d0;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 16%);
   color: #047857;
   font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  pointer-events: none;
+  animation: diagram-notice-in 160ms ease-out;
 }
+.diagram-notice > svg { flex: none; }
 
 .diagram-notice--danger {
   background: #fef2f2;
-  border-bottom-color: #fecaca;
+  border-color: #fecaca;
   color: #b91c1c;
+}
+
+@keyframes diagram-notice-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .diagram-notice { animation: none; }
 }
 
 @media (max-width: 768px) {

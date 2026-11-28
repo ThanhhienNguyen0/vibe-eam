@@ -1742,7 +1742,7 @@ function DiagramEditorInner({
         </div>
       )}
       {notice && !error && (
-        <div className={`diagram-notice${notice.tone === "danger" ? " diagram-notice--danger" : ""}`} role="status">
+        <div className={`diagram-notice${notice.tone === "danger" ? " diagram-notice--danger" : ""}`} role="status" aria-live="polite">
           {notice.tone === "danger" ? <Trash2 size={14} /> : <CircleCheck size={14} />} {notice.text}
         </div>
       )}
