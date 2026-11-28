@@ -57,6 +57,7 @@ import {
   type SelectChange
 } from "./diagramSelection";
 import { isRectVisible, paletteAfterResize } from "./viewportFit";
+import { edgeSides, type Side } from "./edgeRouting";
 import { GRID_SIZE as GRID_BG, changedNodeLayout, fallbackPosition, findFreePosition, shapeDefaultSize, snapPoint, type Rect } from "./diagramLayout";
 import { sidebarApi } from "./Sidebar/sidebarApi";
 import { runOptimisticMutation } from "./optimisticConflict";
@@ -636,25 +637,7 @@ export function buildNodes(
   });
 }
 
-type Side = "top" | "right" | "bottom" | "left";
-const OPPOSITE: Record<Side, Side> = { top: "bottom", bottom: "top", left: "right", right: "left" };
-
-/**
- * #127: Seite, an der eine Verbindung den Quell- und den Zielknoten verlässt bzw. erreicht.
- * Liegen die Knoten übereinander (z. B. Capabilities untereinander), wird oben/unten angedockt,
- * sonst links/rechts – so laufen Linien nicht um Knoten herum und überlagern sich weniger.
- */
-export function edgeSides(source: Rect, target: Rect): { source: Side; target: Side } {
-  const scx = source.x + source.width / 2;
-  const scy = source.y + source.height / 2;
-  const tcx = target.x + target.width / 2;
-  const tcy = target.y + target.height / 2;
-  const overlapX = target.x < source.x + source.width && target.x + target.width > source.x;
-  const overlapY = target.y < source.y + source.height && target.y + target.height > source.y;
-  const vertical = overlapX && !overlapY ? true : overlapY && !overlapX ? false : Math.abs(tcy - scy) > Math.abs(tcx - scx);
-  const side: Side = vertical ? (tcy >= scy ? "bottom" : "top") : (tcx >= scx ? "right" : "left");
-  return { source: side, target: OPPOSITE[side] };
-}
+export { edgeSides } from "./edgeRouting";
 
 /** Handle-IDs zu den Seiten; rechts (Quelle) und links (Ziel) sind die sichtbaren Standard-Handles ohne ID. */
 export function edgeHandles(sides: { source: Side; target: Side }): { sourceHandle?: string; targetHandle?: string } {
@@ -1134,6 +1117,13 @@ function DiagramEditorInner({
     const rest = changes.filter((change) => change.type !== "select");
     if (rest.length > 0) onEdgesChange(rest);
   }, [onEdgesChange]);
+
+  // Fehler-Toasts verschwinden nach einer Weile von selbst, lassen sich aber auch direkt schließen.
+  useEffect(() => {
+    if (!error) return;
+    const timer = window.setTimeout(() => setError(""), 8000);
+    return () => window.clearTimeout(timer);
+  }, [error]);
 
   // Short confirmation messages disappear on their own.
   useEffect(() => {
@@ -1928,17 +1918,6 @@ function DiagramEditorInner({
         <button className="diagram-close-btn" onClick={onClose} title="Tab schließen"><X size={16} /></button>
       </div>
 
-      {error && (
-        <div className="error-banner diagram-error" role="alert">
-          <span>{error}</span>
-          <button type="button" className="diagram-banner-close" onClick={() => setError("")} aria-label="Meldung schließen"><X size={14} /></button>
-        </div>
-      )}
-      {notice && !error && (
-        <div className={`diagram-notice${notice.tone === "danger" ? " diagram-notice--danger" : ""}`} role="status" aria-live="polite">
-          {notice.tone === "danger" ? <Trash2 size={14} /> : <CircleCheck size={14} />} {notice.text}
-        </div>
-      )}
 
       {/* ── Connect mode banner ─────────────────────────────────────────────── */}
       {/* #124: schließbar, einklappbar, höhenbegrenzt (scrollt intern) – die Fläche bleibt nutzbar. */}
@@ -1995,16 +1974,6 @@ function DiagramEditorInner({
         </section>
       )}
 
-      {connectingFrom && (() => {
-        const fromComp = components.find((c) => c.id === connectingFrom);
-        return (
-          <div className="diagram-connect-banner">
-            <GitBranch size={14} />
-            <span><strong>Verbindungsmodus:</strong> Von <strong>{fromComp?.name}</strong> aus – klicke auf die Ziel-Komponente (Esc zum Abbrechen)</span>
-            <button onClick={() => dispatchConnectionMode({ type: "cancel" })}>Abbrechen</button>
-          </div>
-        );
-      })()}
 
       {/* ── Palette + Canvas ────────────────────────────────────────────────── */}
       <div className="diagram-body">
@@ -2023,6 +1992,31 @@ function DiagramEditorInner({
           onDragLeave={onCanvasDragLeave}
           onDrop={canWrite ? onCanvasDrop : undefined}
         >
+          {/* #125/#127-Feedback: Hinweise, Fehler und Verbindungsmodus schweben als Toasts über der Fläche,
+              statt Toolbar und Fläche zu verschieben. Fehler bleiben anklickbar (schließen), Hinweise nicht. */}
+          <div className="diagram-toast-stack">
+          {connectingFrom && (() => {
+            const fromComp = components.find((c) => c.id === connectingFrom);
+            return (
+              <div className="diagram-connect-banner">
+                <GitBranch size={14} />
+                <span><strong>Verbindungsmodus:</strong> Von <strong>{fromComp?.name}</strong> aus – klicke auf die Ziel-Komponente (Esc zum Abbrechen)</span>
+                <button onClick={() => dispatchConnectionMode({ type: "cancel" })}>Abbrechen</button>
+              </div>
+            );
+          })()}
+          {error && (
+            <div className="diagram-error diagram-toast diagram-toast--danger" role="alert">
+              <span>{error}</span>
+              <button type="button" className="diagram-banner-close" onClick={() => setError("")} aria-label="Meldung schließen"><X size={14} /></button>
+            </div>
+          )}
+          {notice && !error && (
+            <div className={`diagram-notice${notice.tone === "danger" ? " diagram-notice--danger" : ""}`} role="status" aria-live="polite">
+              {notice.tone === "danger" ? <Trash2 size={14} /> : <CircleCheck size={14} />} {notice.text}
+            </div>
+          )}
+          </div>
           <ReactFlow
             nodes={nodes}
             edges={edges}

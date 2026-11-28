@@ -13,8 +13,9 @@
  * Alles bis auf `svgToPngBlob`/`downloadBlob` ist rein (ohne DOM) und daher direkt testbar.
  */
 import { createElement } from "react";
+import { edgeSides, sideAnchor } from "./edgeRouting";
 import type { LucideIcon } from "lucide-react";
-import { Position, getBezierPath } from "reactflow";
+import { getBezierPath } from "reactflow";
 import { resolveComponentIcon } from "./componentIcons";
 import { boundsOf, fallbackPosition, shapeDefaultSize, type Rect } from "./diagramLayout";
 import type {
@@ -416,14 +417,19 @@ function renderEdge(edge: ExportEdge, nodes: Map<string, ExportNode>): string {
   const source = nodes.get(edge.sourceId);
   const target = nodes.get(edge.targetId);
   if (!source || !target) return "";
-  // Gleiche Anker wie im Canvas: Ausgang rechts, Eingang links, jeweils mittig.
+  // #127: Gleiche Andockseiten wie im Editor (oben/unten bei übereinanderliegenden Knoten); Pools bleiben rechts→links.
+  const sides = source.shape === "pool" || target.shape === "pool" || source.id === target.id
+    ? { source: "right" as const, target: "left" as const }
+    : edgeSides(source, target);
+  const from = sideAnchor(source, sides.source);
+  const to = sideAnchor(target, sides.target);
   const [path, labelX, labelY] = getBezierPath({
-    sourceX: source.x + source.width,
-    sourceY: source.y + source.height / 2,
-    sourcePosition: Position.Right,
-    targetX: target.x,
-    targetY: target.y + target.height / 2,
-    targetPosition: Position.Left
+    sourceX: from.x,
+    sourceY: from.y,
+    sourcePosition: from.position,
+    targetX: to.x,
+    targetY: to.y,
+    targetPosition: to.position
   });
   const line = `<path d="${path}" fill="none" stroke="${edge.color}" stroke-width="2"${edge.dash ? ` stroke-dasharray="${edge.dash}"` : ""} marker-end="url(#${markerId(edge.color)})"/>`;
   if (!edge.label) return `<g data-id="${escapeXml(edge.id)}">${line}</g>`;

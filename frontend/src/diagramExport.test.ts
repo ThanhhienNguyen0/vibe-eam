@@ -173,3 +173,36 @@ describe("gatewayMarkerSvg (#126)", () => {
     expect(gatewayMarkerSvg("gateway", 0, 0, 40, "#000")).toBe("");
   });
 });
+
+describe("Export-Pfeile wie im Editor (#127)", () => {
+  const pathStart = (svg: string) => {
+    const m = /<g data-id="c1"><path d="M\s*([\d.-]+)[ ,]+([\d.-]+)/.exec(svg);
+    return m ? { x: Number(m[1]), y: Number(m[2]) } : null;
+  };
+  const nodeBox = (svg: string, id: string) => {
+    const from = svg.indexOf(`<g data-id="${id}"`);
+    const m = /<rect x="([\d.-]+)" y="([\d.-]+)" width="([\d.-]+)" height="([\d.-]+)"/.exec(svg.slice(from));
+    return from >= 0 && m ? { x: Number(m[1]), y: Number(m[2]), w: Number(m[3]), h: Number(m[4]) } : null;
+  };
+
+  it("verbindet übereinanderliegende Knoten im Export unten→oben", () => {
+    const stacked: Diagram = { ...diagram, componentIds: ["crm", "store"], positions: { crm: { x: 60, y: 0 }, store: { x: 60, y: 300 } } };
+    const scene = buildExportScene(stacked, components, types, connections, connectionTypes);
+    const { svg } = renderDiagramSvg(scene, sceneBounds(scene)!, "Stapel");
+    const start = pathStart(svg);
+    const crm = nodeBox(svg, "crm");
+    expect(start).not.toBeNull();
+    expect(crm).not.toBeNull();
+    expect(start!.x).toBeCloseTo(crm!.x + crm!.w / 2, 0);
+    expect(start!.y).toBeCloseTo(crm!.y + crm!.h, 0);
+  });
+
+  it("bleibt bei nebeneinanderliegenden Knoten rechts→links", () => {
+    const scene = buildExportScene({ ...diagram, componentIds: ["crm", "store"] }, components, types, connections, connectionTypes);
+    const { svg } = renderDiagramSvg(scene, sceneBounds(scene)!, "Reihe");
+    const start = pathStart(svg);
+    const crm = nodeBox(svg, "crm");
+    expect(start!.x).toBeCloseTo(crm!.x + crm!.w, 0);
+    expect(start!.y).toBeCloseTo(crm!.y + crm!.h / 2, 0);
+  });
+});
