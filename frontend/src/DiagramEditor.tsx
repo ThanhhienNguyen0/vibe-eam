@@ -56,6 +56,7 @@ import {
   type DiagramSelection,
   type SelectChange
 } from "./diagramSelection";
+import { isRectVisible, paletteAfterResize } from "./viewportFit";
 import { GRID_SIZE as GRID_BG, changedNodeLayout, fallbackPosition, findFreePosition, shapeDefaultSize, snapPoint, type Rect } from "./diagramLayout";
 import { sidebarApi } from "./Sidebar/sidebarApi";
 import { runOptimisticMutation } from "./optimisticConflict";
@@ -982,6 +983,10 @@ function DiagramEditorInner({
     buildEdges(diagram, connections, connectionTypes)
   );
   const [paletteOpen, setPaletteOpen] = useState(true);
+  // #128: Palette bei schmaler Editorfläche automatisch einklappen (und danach wieder öffnen).
+  const paletteAutoRef = useRef({ autoCollapsed: false, narrow: false });
+  const paletteOpenRef = useRef(paletteOpen);
+  paletteOpenRef.current = paletteOpen;
   const [pendingAdd, setPendingAdd] = useState<PendingAdd | null>(null);
   const [pendingAddError, setPendingAddError] = useState("");
   const [pendingAddSaving, setPendingAddSaving] = useState(false);
@@ -1000,7 +1005,7 @@ function DiagramEditorInner({
   const [validationCollapsed, setValidationCollapsed] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, fitView, getViewport, setCenter, getZoom } = useReactFlow();
+  const { screenToFlowPosition, fitView, getViewport, setCenter, getZoom, getNode } = useReactFlow();
   const [linkHighlightId, setLinkHighlightId] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const activeViewpoint = viewpointFilterId ? viewpoints.find((viewpoint) => viewpoint.id === viewpointFilterId) : undefined;
@@ -1655,6 +1660,59 @@ function DiagramEditorInner({
     return () => window.clearTimeout(timer);
   }, [focusRequest, exportScene, setCenter, getZoom]);
 
+  // #128: Editorbreite beobachten – Palette einklappen, wenn sonst kaum Fläche übrig bleibt.
+  useEffect(() => {
+    const element = editorRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      const current = { open: paletteOpenRef.current, ...paletteAutoRef.current };
+      const next = paletteAfterResize(current, entry.contentRect.width);
+      if (next === current) return;
+      paletteAutoRef.current = { autoCollapsed: next.autoCollapsed, narrow: next.narrow };
+      if (next.open !== current.open) setPaletteOpen(next.open);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  // #128: Das im Detail-Panel geöffnete Element bleibt sichtbar – auch wenn das Panel die Fläche schmaler macht.
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const element = canvasRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      setCanvasSize({ width: Math.round(entry.contentRect.width), height: Math.round(entry.contentRect.height) });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    if (!selectedElementId || canvasSize.width === 0) return;
+    const timer = window.setTimeout(() => {
+      const rectOf = (id: string) => {
+        const node = getNode(id);
+        if (!node?.width || !node.height) return null;
+        const position = node.positionAbsolute ?? node.position;
+        return { x: position.x, y: position.y, width: node.width, height: node.height };
+      };
+      let target = rectOf(selectedElementId);
+      if (!target) {
+        const connection = connections.find((item) => item.id === selectedElementId);
+        const source = connection && rectOf(connection.sourceComponentId);
+        const goal = connection && rectOf(connection.targetComponentId);
+        if (!source || !goal) return;
+        const x = Math.min(source.x, goal.x);
+        const y = Math.min(source.y, goal.y);
+        target = { x, y, width: Math.max(source.x + source.width, goal.x + goal.width) - x, height: Math.max(source.y + source.height, goal.y + goal.height) - y };
+      }
+      if (isRectVisible(target, getViewport(), canvasSize)) return;
+      void setCenter(target.x + target.width / 2, target.y + target.height / 2, { zoom: getZoom(), duration: 300 });
+    }, 250);
+    return () => window.clearTimeout(timer);
+    // Bewusst nur bei neuem Panel-Element oder geänderter Flächengröße – nicht bei jedem Verschieben.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedElementId, canvasSize.width, canvasSize.height]);
+
   // Hervorhebung nach ein paar Sekunden wieder entfernen.
   useEffect(() => {
     if (!linkHighlightId) return;
@@ -1746,12 +1804,15 @@ function DiagramEditorInner({
       <div className="diagram-toolbar">
         {canWrite && <button
           className="diagram-palette-toggle"
-          onClick={() => setPaletteOpen((v) => !v)}
+          onClick={() => {
+            paletteAutoRef.current = { ...paletteAutoRef.current, autoCollapsed: false };
+            setPaletteOpen((v) => !v);
+          }}
           title={paletteOpen ? "Palette ausblenden" : "Palette einblenden"}
           aria-pressed={paletteOpen}
         >
           {paletteOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
-          Palette
+          <span className="diagram-tb-label">Palette</span>
         </button>}
         <strong className="diagram-title">{diagram.name}</strong>
         <label className="diagram-viewpoint-filter">
@@ -1772,7 +1833,7 @@ function DiagramEditorInner({
           </select>
         </label>
         <button className="diagram-palette-toggle" onClick={fitDiagram} title="Alle Elemente einpassen und zentrieren">
-          <Maximize size={16} /> Ansicht einpassen
+          <Maximize size={16} /> <span className="diagram-tb-label">Ansicht einpassen</span>
         </button>
         <ShareMenu
           className="diagram-palette-toggle"
@@ -1786,7 +1847,7 @@ function DiagramEditorInner({
           aria-pressed={showRulers}
           title="Koordinatensystem mit Linealen und Achsen ein-/ausblenden"
         >
-          <Ruler size={16} /> Koordinaten
+          <Ruler size={16} /> <span className="diagram-tb-label">Koordinaten</span>
         </button>
         <button
           className={`diagram-palette-toggle${snapEnabled ? " diagram-toggle--on" : ""}`}
@@ -1794,10 +1855,10 @@ function DiagramEditorInner({
           aria-pressed={snapEnabled}
           title="Raster: sichtbare Rasterlinien, Elemente rasten beim Platzieren, Verschieben und Skalieren ein"
         >
-          <Grid3x3 size={16} /> Raster
+          <Grid3x3 size={16} /> <span className="diagram-tb-label">Raster</span>
         </button>
-        <button className="diagram-palette-toggle" onClick={() => void runDiagramValidation()}>
-          <SlidersHorizontal size={16} /> Ansicht prüfen
+        <button className="diagram-palette-toggle" onClick={() => void runDiagramValidation()} title="Diagramm gegen die Regeln der Ansicht prüfen">
+          <SlidersHorizontal size={16} /> <span className="diagram-tb-label">Ansicht prüfen</span>
         </button>
         <span className="muted diagram-hint">
           {activeViewpoint
