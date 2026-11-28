@@ -416,3 +416,87 @@ Auftrag: Platzhalternamen wie „Neue Komponente“ nicht hart ablehnen, sondern
 ### CodeQL-Befund im PR (26.11.2026)
 
 CodeQL meldete `js/polynomial-redos` (High) für `/\(?\d+\)?$/` in `nameRules.ts`: Der nicht verankerte Ausdruck probiert jede Startposition und ist bei langen Ziffernfolgen quadratisch. Gemessen: 357 ms für 20 000 Ziffern; ein Name bis zur JSON-Grenze von 2 MB hätte das Backend lange blockiert. Ersetzt in Backend und Frontend durch einen einzigen Rückwärtsdurchlauf (`withoutTrailingNumber`, 0,1 ms für 200 000 Ziffern). Gleichwertigkeit mit dem alten Ausdruck: 19 Randfälle und 200 000 Zufallsstrings ohne Abweichung. Regressionstests für Randfälle und Laufzeit ergänzt. Nachweis: alle Schritte von `npm run check` außer `db:generate` mit Exit 0 (209 bestandene und 39 übersprungene Backendtests, 121 Frontendtests). `db:generate` scheiterte lokal mit EPERM, weil der laufende Dev-Server die Prisma-Engine-DLL gesperrt hielt; das Prisma-Schema ist unverändert.
+
+## #122: Kontextmenü innerhalb des Viewports am 25.11.2026
+
+Auftrag: Issue #122 umsetzen. Das Rechtsklick-Menü ragte unten aus dem Bild, „Aus Repository löschen…“ war dadurch nicht anklickbar. Ausgangsstand war `main` auf `9a669217c6d43ac78dcd5ff818b5b6edab30465a`. Die Nutzerin/der Nutzer fragte, ob #122 und #117 zusammen umgesetzt werden können. Wegen „kleine, fachlich zusammenhängende Änderungen“ (CONTRIBUTING) entstanden sie zuerst auf zwei getrennten Branches von `main`. Auf Wunsch der Nutzerin/des Nutzers wurden beide Commits danach auf den gemeinsamen Branch `feedback_speicherstatus_und_kontextmenue` übertragen, der auf `feedback_speicherung_und_validierung` (PR #146) aufsetzt.
+
+Befund vor der Umsetzung: Das Kontextmenü im Diagramm-Editor wurde mit `position: fixed` genau an der Cursorposition geöffnet und nie verschoben. Das Kontextmenü der Seitenleiste hielt sich bereits per `useLayoutEffect` im Fenster, klappte aber nicht um und war bei sehr kleinen Fenstern über `overflow: hidden` abgeschnitten.
+
+Umgesetzt wurde:
+
+- Neue reine Funktion `fitMenuInViewport` (`contextMenuPosition.ts`): Reicht der Platz unten oder rechts nicht, öffnet das Menü über bzw. links vom Cursor; danach wird es mit 8 px Abstand in das Fenster geschoben. Die Funktion ist idempotent, ein zweiter Durchlauf verschiebt nichts.
+- Diagramm-Editor: Ein `useLayoutEffect` misst das Menü vor dem Zeichnen und setzt die passende Position. Die Seitenleiste nutzt dieselbe Funktion statt ihrer eigenen Rechnung.
+- CSS `.diagram-context-menu`: `max-height`/`max-width` auf Fenstergröße minus Rand und `overflow-y: auto`, damit in sehr kleinen Fenstern gescrollt statt abgeschnitten wird.
+- Tests: 8 Tests in `contextMenuPosition.test.ts` (alle vier Ränder, Ecke, Umklappen, Menü größer als Fenster, Idempotenz).
+
+Nachweise vom 25.11.2026: Lint, Typechecks, 184 bestandene und 39 übersprungene Backendtests, 112 bestandene Frontendtests, Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfiguration, jeweils Exit 0. `db:generate` scheiterte lokal mit EPERM, weil der laufende Dev-Server die Prisma-Engine-DLL gesperrt hielt; das Prisma-Schema ist unverändert, die übrigen Schritte von `npm run check` wurden einzeln ausgeführt. Nicht belegt: Browser-E2E, manueller Test, unabhängige Kontrolle, Remote-CI, Review und Merge.
+
+## #117: Speicherstatus und fehlgeschlagene Speicherung sichtbar machen am 25.11.2026
+
+Auftrag: Issue #117 umsetzen. Nutzer konnten nicht erkennen, ob Änderungen gespeichert sind oder ein Speichern fehlgeschlagen ist. Ausgangsstand war `main` auf `9a669217c6d43ac78dcd5ff818b5b6edab30465a`; zum Branch siehe #122.
+
+Befund vor der Umsetzung: Es gab keine zentrale Speicheranzeige. Einzelne Formulare zeigten „Speichere…“ am eigenen Button; Fehler erschienen nur dort, wo der Aufrufer sie abfing. Das Verschieben von Knoten speicherte ohne jede Rückmeldung, ein Fehler dabei blieb unsichtbar. Alle Schreibzugriffe auf das Repository laufen über `sidebarApi` und damit über eine Stelle.
+
+Umgesetzt wurde:
+
+- `saveTracker.ts`: zählt jeden schreibenden Request von `sidebarApi` (alles außer GET). Zustände „Alles gespeichert“, „Speichern läuft …“, „Speichern fehlgeschlagen“. Gespeichert gilt erst nach einer 2xx-Antwort; die Routen antworten erst nach dem Datenbankschreiben.
+- Vorübergehende Fehler (keine Antwort, 408, 429, 5xx) werden festgehalten: Der Aufrufer wartet weiter, „Erneut versuchen“ sendet den identischen Request in der ursprünglichen Reihenfolge erneut. Bei Erfolg läuft der Aufrufer normal weiter, sein Zustand bleibt konsistent. „Verwerfen“ gibt dem Aufrufer den ursprünglichen Fehler und lädt den gespeicherten Stand neu.
+- Endgültige Antworten (4xx: Validierung, Konflikt, Berechtigung) gehen sofort an den Aufrufer wie bisher. Die Anzeige bleibt auf „fehlgeschlagen“ mit dem Servergrund, bis der nächste Schreibvorgang startet oder die Meldung geschlossen wird.
+- `SaveStatus.tsx`: Statusanzeige im Kopfbereich (`role="status"`) und ein Fehlerbanner (`role="alert"`) mit Grund und Aktionen. Das Banner liegt über allen Dialogen, weil ein Dialog auf den festgehaltenen Request warten kann.
+- Beim Schließen oder Neuladen des Tabs fragt der Browser nach, solange etwas läuft oder nicht gespeichert ist.
+- Beim Abmelden und bei abgelaufener Anmeldung (401) wird der Tracker zurückgesetzt. Festgehaltene Requests werden verworfen und nie mit einer anderen Anmeldung erneut gesendet.
+- Tests: 26 Tests in `saveTracker.test.ts` (Zustände, Wiederholung, Reihenfolge, Verwerfen, Ablehnung, Abmelden, Fehlerklassifikation, Integration mit `sidebarApi` über gemocktes `fetch`) und 8 Tests in `SaveStatus.test.tsx` (Anzeige und Banner-Aktionen).
+
+Nachweise vom 25.11.2026: Lint, Typechecks, 184 bestandene und 39 übersprungene Backendtests, 138 bestandene Frontendtests, Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfiguration, jeweils Exit 0. `db:generate` wurde wie bei #122 wegen der vom laufenden Dev-Server gesperrten Prisma-Engine-DLL ausgelassen; das Prisma-Schema ist unverändert. Ein erster Testlauf scheiterte, weil `saveStatus.ts` und `SaveStatus.tsx` auf Windows kollidierten (umbenannt in `saveTracker.ts`), ein zweiter an einer Testhilfe, die Icon-Knoten serialisieren wollte. Nicht belegt: Browser-E2E, manueller Test, unabhängige Kontrolle, Remote-CI, Review und Merge.
+
+### Zusammenführung von #122 und #117 auf dem Stand von PR #146 (25.11.2026)
+
+Beide Commits wurden per Cherry-Pick auf `feedback_speicherstatus_und_kontextmenue` übertragen (Basis `feedback_speicherung_und_validierung` auf `c4e9fb19b9e251d636b4a790c09b4936bf6e9d72`). Der Code ließ sich ohne Konflikte übernehmen; nur die Einträge am Ende dieses Logs und des Reflexionslogs kollidierten und wurden aneinandergehängt. Geprüft wurde außerdem, dass kein Ablauf aus #146 absichtlich eine 4xx-Antwort auslöst: Platzhalter- und Duplikatbestätigungen entscheidet der Client vor dem Senden, das Fehlerbanner erscheint dabei also nicht fälschlich.
+
+Nachweise auf dem zusammengeführten Stand: Lint, Typechecks, 209 bestandene und 39 übersprungene Backendtests, 163 bestandene Frontendtests (121 aus #146 plus 8 für #122 und 34 für #117), Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfiguration, jeweils Exit 0; `db:generate` wieder wegen der gesperrten Prisma-Engine-DLL ausgelassen. Vor dem Übertragen auf den Ausgangsständen: `npm run scan:dependencies` ohne hohe oder kritische Befunde (9 moderate, wie dokumentiert), `npm run scan:secrets` ohne Fund über die gesamte Historie. Solange PR #146 nicht gemergt ist, enthält ein PR dieses Branches gegen `main` auch dessen Commits.
+
+### #117: Nachkorrektur nach Rückmeldung (25.11.2026)
+
+Auftrag: „Alles gespeichert“ nicht dauerhaft irgendwo im Kopfbereich anzeigen, sondern direkt am Button oder als kleine Meldung im Detail-Panel, beim Speichern, bei Änderungen und beim Anlegen. Die Meldung soll von selbst wieder verschwinden.
+
+- Die dauerhafte Statusanzeige im Kopfbereich wurde entfernt.
+- Neuer `SaveButton` für alle Speichern-Buttons im Detail-Panel (Komponente, Verbindung, Diagramm, Komponenten- und Verbindungstyp, Connection Rule, Viewpoint, Katalog): „Speichern …“ mit Drehsymbol, solange der Server nicht geantwortet hat, danach 2,5 Sekunden „✓ Gespeichert“ in Grün. Ändert man in dieser Zeit wieder etwas, zeigt der Button sofort wieder „Speichern“.
+- `savedFeedback.ts` hält diese Rückmeldung außerhalb des Panels, weil Komponenten-, Verbindungs- und Diagramm-Panels nach dem Speichern mit der neuen Version neu aufgebaut werden. Gemeldet wird nur nach bestätigtem Speichern; endet ein Konflikt mit „Neu laden“, erscheint nichts.
+- Nach dem Anlegen über die Seitenleiste (Komponente, Verbindung, Diagramm, Typen, Connection Rule, Viewpoint, Katalog) und nach dem Umbenennen erscheint unten im Detail-Panel kurz eine Meldung wie „Komponente „CRM“ angelegt und gespeichert.“. Auf der Diagrammfläche gab es solche Meldungen schon.
+- Die Anlegedialoge zeigen während des Speicherns „Wird angelegt …“.
+- Unverändert bleibt das Fehlerbanner stehen, bis man reagiert. Seine Überschrift beginnt jetzt mit „Speichern fehlgeschlagen:“.
+- Tests: 7 neue Tests in `SaveButton.test.tsx` (Button-Zustände, Ablauf, Meldung, Ablauf im echten Detail-Panel mit Neuaufbau, kein „Gespeichert“ nach „Neu laden“); die 4 Tests der entfernten Kopfanzeige entfallen. In `optimisticEditor.test.tsx` findet die Testhilfe den Speichern-Button jetzt über die CSS-Klasse statt über den Text, weil er nach dem Speichern kurz „Gespeichert“ zeigt; die geprüften Aussagen sind unverändert.
+
+Nachweise vom 25.11.2026: Lint, Typechecks, 209 bestandene und 39 übersprungene Backendtests, 166 bestandene Frontendtests, Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfiguration, jeweils Exit 0; `db:generate` wegen der gesperrten Prisma-Engine-DLL ausgelassen. Der erste Testlauf scheiterte an den zwei Tests in `optimisticEditor.test.tsx`, die den Button am Text „Speichern“ suchten. Nicht belegt: Browser-E2E und manueller Test.
+
+### #117: Bestätigung von Sidebar-Aktionen in der Sidebar (25.11.2026)
+
+Auftrag: Beim Umbenennen in der Seitenleiste erschien die Meldung rechts im Detail-Panel, beim Anlegen ebenfalls dort. Was in der Seitenleiste geändert wird, soll auch dort bestätigt werden, wo man es sieht.
+
+- Anlegen und Umbenennen in der Seitenleiste lassen die betroffene Zeile im Baum 2,5 Sekunden grün mit Häkchen aufleuchten; die Zeile wird bei Bedarf in den sichtbaren Bereich gescrollt. Zusätzlich erscheint unten in der Seitenleiste kurz die Meldung, z. B. „Komponente „Billing“ angelegt und gespeichert.“, auch wenn die Zeile in einer zugeklappten Gruppe liegt.
+- Im Detail-Panel erscheint dafür nichts mehr; dort bestätigt nur noch der Speichern-Button Änderungen, die im Panel gemacht wurden.
+- Das Anlegen eines Katalogs aus der Katalogübersicht meldet nichts zusätzlich: Der neue Katalog öffnet sich direkt im Hauptbereich.
+- Tests: `SaveButton.test.tsx` prüft jetzt Umbenennen und Anlegen in der echten Seitenleiste (Zeile markiert, Meldung unten, beides verschwindet nach 2,5 Sekunden) und dass der Panel-Button Sidebar-Aktionen nicht bestätigt; die Tests der entfernten Panel-Meldung entfallen.
+
+Nachweise vom 25.11.2026: Lint, Typechecks, 209 bestandene und 39 übersprungene Backendtests, 167 bestandene Frontendtests, Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfiguration, jeweils Exit 0; `db:generate` wegen der gesperrten Prisma-Engine-DLL ausgelassen. Nicht belegt: Browser-E2E und manueller Test.
+
+### #117: Meldung nach endgültigem Löschen (25.11.2026)
+
+Auftrag: Nach dem Löschen ebenfalls kurz melden, dass endgültig gelöscht wurde.
+
+- Seitenleiste (Papierkorb und Kontextmenü, alle acht Elementarten): Nach der Bestätigung durch den Server erscheint unten in der Seitenleiste kurz z. B. „Komponente „CRM“ endgültig aus dem Repository gelöscht.“. Beim Diagramm steht dazu, dass seine Elemente im Repository bleiben. Bricht man den Bestätigungsdialog ab oder endet ein Konflikt mit „Neu laden“, erscheint nichts.
+- Diagrammfläche („Aus Repository löschen…“): Die vorhandene Meldung nennt jetzt den Namen und „endgültig“. „Aus Diagramm entfernen“ bleibt bewusst bei „bleibt im Modell erhalten“, weil dort nichts gelöscht wird.
+- Tests: zwei neue Tests in `SaveButton.test.tsx` (Meldung nach dem Löschen; keine Meldung nach Abbruch oder vor der Serverantwort).
+
+Nachweise vom 25.11.2026: Lint, Typechecks, 209 bestandene und 39 übersprungene Backendtests, 169 bestandene Frontendtests, Builds, 113 Compose-, 169 Workflow- und 17 Securityprüfungen sowie Prisma-Konfiguration, jeweils Exit 0; `db:generate` wegen der gesperrten Prisma-Engine-DLL ausgelassen. Ein erster Testentwurf für einen abgelehnten Löschversuch erzeugte eine unbehandelte Promise-Ablehnung, weil der Papierkorb-Button Fehler nicht abfängt (vorbestehend; in der App zeigt das Fehlerbanner den Grund). Er wurde durch einen Test ersetzt, der belegt, dass vor der Serverantwort nichts gemeldet wird. Nicht belegt: Browser-E2E und manueller Test.
+
+### #117: Löschmeldung in Rot (25.11.2026)
+
+Auftrag: Die Meldung nach dem Löschen rot statt grün anzeigen.
+
+- Seitenleiste: Die acht Löschmeldungen erscheinen rot mit Papierkorb-Symbol; Anlegen und Umbenennen bleiben grün mit Häkchen. `announceInSidebar` nimmt dafür den Ton `"danger"`.
+- Diagrammfläche: Die Meldung ist jetzt ein Objekt `{ text, tone }`. „Aus Repository löschen…“ setzt `tone: "danger"` und erscheint rot; alle anderen Meldungen bleiben grün. „Aus Diagramm entfernen“ bleibt grün, weil nichts gelöscht wird.
+- Tests: Die Sidebar-Tests prüfen, dass die Löschmeldung rot und die Anlegemeldung nicht rot ist.
+
+Nachweise vom 25.11.2026: Lint, Typechecks, 209 bestandene und 39 übersprungene Backendtests, 169 bestandene Frontendtests, Builds und alle Validatoren mit Exit 0; `db:generate` wegen der gesperrten Prisma-Engine-DLL ausgelassen. Nicht belegt: Browser-E2E und manueller Test.

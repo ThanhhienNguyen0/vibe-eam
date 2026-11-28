@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ELEMENT_COLUMNS, RELATION_COLUMNS, availablePropertyKeys } from "../../../backend/src/catalog/catalogModel";
 import type { Catalog, SidebarState } from "./sidebarTypes";
+import { SaveButton } from "./SaveButton";
 
 interface Props {
   catalog: Catalog;
@@ -113,7 +114,7 @@ export default function CatalogEditor({ catalog, sidebarState, canWrite, onSave,
       </fieldset>
 
       {saveError && <p className="sb-error" role="alert">{saveError}</p>}
-      {canWrite && <button className="sb-save-btn" disabled={!dirty || saving || !draft.name.trim()} onClick={() => void save()}>{saving ? "Speichere…" : "Speichern"}</button>}
+      {canWrite && <SaveButton dirty={dirty} disabled={!dirty || saving || !draft.name.trim()} onSave={save} />}
       <button className="sb-open-btn" onClick={onOpen}>Katalog öffnen</button>
     </div>
   );

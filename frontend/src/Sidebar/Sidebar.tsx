@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  Check,
   ChevronDown,
   ChevronRight,
   Eye,
@@ -18,6 +19,8 @@ import {
 } from "lucide-react";
 import { sidebarApi } from "./sidebarApi";
 import { runOptimisticMutation } from "../optimisticConflict";
+import { fitMenuInViewport } from "../contextMenuPosition";
+import { announceInSidebar, feedbackTarget, useSidebarFeedback } from "../savedFeedback";
 import { COMPONENT_DRAG_MIME, COMPONENT_TYPE_DRAG_MIME, DEFAULT_TYPE_CATEGORY } from "./sidebarTypes";
 import type { ComponentType, SidebarState } from "./sidebarTypes";
 import { useAccess } from "../access";
@@ -155,6 +158,8 @@ interface RowProps {
   onDragStart?: (e: React.DragEvent) => void;
   dragHint?: string;
   renaming?: boolean;
+  /** #117: just created or renamed here; briefly highlighted and scrolled into view. */
+  saved?: boolean;
   /** REQ-02: returns a warning for the typed name, e.g. a possible duplicate. */
   renameWarning?: (name: string) => string | null;
   /** #108: blocks the rename, e.g. an empty name. */
@@ -168,17 +173,22 @@ interface RowProps {
 function Row({
   structural,
   label, icon, color, active, onClick, onDoubleClick, onDelete, deleteTitle, onOpen, openTitle,
-  onContextMenu, draggable, onDragStart, dragHint, renaming, renameWarning, renameError, renamePlaceholder, onRenameSubmit, onRenameCancel
+  onContextMenu, draggable, onDragStart, dragHint, renaming, saved, renameWarning, renameError, renamePlaceholder, onRenameSubmit, onRenameCancel
 }: RowProps) {
   const { canWrite, canManageMetamodel } = useAccess();
   const canEdit = structural ? canManageMetamodel : canWrite;
+  const rowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (saved) rowRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [saved]);
   if (renaming) {
     return <RenameRow label={label} icon={icon} color={color} active={active} warning={renameWarning} error={renameError} placeholder={renamePlaceholder} onSubmit={onRenameSubmit} onCancel={onRenameCancel} />;
   }
 
   return (
     <div
-      className={`sb-row${active ? " sb-active" : ""}${draggable ? " sb-row--draggable" : ""}`}
+      ref={rowRef}
+      className={`sb-row${active ? " sb-active" : ""}${draggable ? " sb-row--draggable" : ""}${saved ? " sb-row--saved" : ""}`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onContextMenu={canEdit ? onContextMenu : undefined}
@@ -192,6 +202,7 @@ function Row({
       {icon && color ? <span className="sb-row-icon" style={{ color }}>{icon}</span> : color && <span className="sb-color-dot" style={{ background: color }} />}
       {!color && icon && <span className="sb-row-icon">{icon}</span>}
       <span className="sb-row-label">{label}</span>
+      {saved && <Check size={13} className="sb-row-saved-mark" aria-hidden="true" />}
       {onOpen && (
         <button
           className="sb-open-icon-btn"
@@ -297,6 +308,8 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
   const searching = q.length > 0;
 
   const [contextMenu, setContextMenu] = useState<TreeContextMenu | null>(null);
+  // #117: creating and renaming here is confirmed here, not in the detail panel.
+  const sidebarFeedback = useSidebarFeedback();
   const [renaming, setRenaming] = useState<{ kind: ItemKind; id: string } | null>(null);
   const [creating, setCreating] = useState<"component" | "diagram" | null>(null);
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
@@ -322,10 +335,8 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
 
   useLayoutEffect(() => {
     if (!contextMenu || !menuRef.current) return;
-    const margin = 8;
     const rect = menuRef.current.getBoundingClientRect();
-    const x = Math.max(margin, Math.min(contextMenu.x, window.innerWidth - rect.width - margin));
-    const y = Math.max(margin, Math.min(contextMenu.y, window.innerHeight - rect.height - margin));
+    const { x, y } = fitMenuInViewport(contextMenu, rect, { width: window.innerWidth, height: window.innerHeight });
     if (x !== contextMenu.x || y !== contextMenu.y) {
       setContextMenu((current) => current ? { ...current, x, y } : null);
     }
@@ -393,6 +404,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     });
     onStateChange({ ...sidebarState, componentTypes: [...componentTypes, ct] });
     onSelect({ kind: "componentType", id: ct.id });
+    announceInSidebar(feedbackTarget("componentType", ct.id), `Komponenten-Typ „${ct.name}“ angelegt und gespeichert.`);
     setRenaming({ kind: "componentType", id: ct.id });
   }
 
@@ -407,6 +419,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     });
     onStateChange({ ...sidebarState, connectionTypes: [...connectionTypes, ct] });
     onSelect({ kind: "connectionType", id: ct.id });
+    announceInSidebar(feedbackTarget("connectionType", ct.id), `Verbindungstyp „${ct.name}“ angelegt und gespeichert.`);
     setRenaming({ kind: "connectionType", id: ct.id });
   }
 
@@ -425,6 +438,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     });
     onStateChange({ ...sidebarState, connectionRules: [...connectionRules, rule] });
     onSelect({ kind: "connectionRule", id: rule.id });
+    announceInSidebar(feedbackTarget("connectionRule", rule.id), "Connection Rule angelegt und gespeichert.");
   }
 
   async function addViewpoint() {
@@ -440,6 +454,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     });
     onStateChange({ ...sidebarState, viewpoints: [...viewpoints, vp] });
     onSelect({ kind: "viewpoint", id: vp.id });
+    announceInSidebar(feedbackTarget("viewpoint", vp.id), `Viewpoint „${vp.name}“ angelegt und gespeichert.`);
     setRenaming({ kind: "viewpoint", id: vp.id });
   }
 
@@ -457,6 +472,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     setCreating(null);
     onStateChange({ ...sidebarState, components: [...components, comp] });
     onSelect({ kind: "component", id: comp.id });
+    announceInSidebar(feedbackTarget("component", comp.id), `Komponente „${comp.name}“ angelegt und gespeichert.`);
   }
 
   function allowedConnectionTypesFor(sourceComponentId: string, targetComponentId: string) {
@@ -526,12 +542,17 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
           diagrams: diagrams.map((diagram) => diagram.id === result.diagram.id ? result.diagram : diagram)
         });
         onSelect({ kind: "connection", id: result.connection.id });
+        announceInSidebar(
+          feedbackTarget("connection", result.connection.id),
+          result.created ? "Verbindung angelegt und gespeichert." : "Diese Verbindung gab es schon; sie ist jetzt im Diagramm."
+        );
         setConnectionDraft(null);
         return;
       }
       const conn = await sidebarApi.createConnection(input);
       onStateChange({ ...sidebarState, connections: [...connections, conn] });
       onSelect({ kind: "connection", id: conn.id });
+      announceInSidebar(feedbackTarget("connection", conn.id), "Verbindung angelegt und gespeichert.");
       setConnectionDraft(null);
     } catch (error) {
       setConnectionCreateError(error instanceof Error ? error.message : "Verbindung konnte nicht erstellt werden.");
@@ -549,12 +570,14 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     setCreating(null);
     onStateChange({ ...sidebarState, diagrams: [...diagrams, d] });
     onSelect({ kind: "diagram", id: d.id });
+    announceInSidebar(feedbackTarget("diagram", d.id), `Diagramm „${d.name}“ angelegt und gespeichert.`);
   }
 
   async function addCatalog() {
     const created = await sidebarApi.createCatalog({ name: "Neuer Katalog", kind: "elements", columns: ["type", "description"] });
     onStateChange({ ...sidebarState, catalogs: [...catalogs, created] });
     onSelect({ kind: "catalog", id: created.id });
+    announceInSidebar(feedbackTarget("catalog", created.id), `Katalog „${created.name}“ angelegt und gespeichert.`);
     setRenaming({ kind: "catalog", id: created.id });
   }
 
@@ -565,6 +588,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     if (!await confirm(simpleDeleteConfirmation("Komponenten-Typ", name))) return;
     await sidebarApi.deleteComponentType(id);
     onStateChange({ ...sidebarState, componentTypes: componentTypes.filter((c) => c.id !== id) });
+    announceInSidebar(feedbackTarget("componentType", id), `Komponenten-Typ „${name}“ endgültig gelöscht.`, "danger");
   }
 
   async function deleteConnectionType(id: string) {
@@ -572,6 +596,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     if (!await confirm(simpleDeleteConfirmation("Verbindungs-Typ", name))) return;
     await sidebarApi.deleteConnectionType(id);
     onStateChange({ ...sidebarState, connectionTypes: connectionTypes.filter((c) => c.id !== id) });
+    announceInSidebar(feedbackTarget("connectionType", id), `Verbindungs-Typ „${name}“ endgültig gelöscht.`, "danger");
   }
 
   async function deleteViewpoint(id: string) {
@@ -583,6 +608,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
       viewpoints: viewpoints.filter((v) => v.id !== id),
       diagrams: diagrams.map((d) => (d.viewpointId === id ? { ...d, viewpointId: undefined } : d))
     });
+    announceInSidebar(feedbackTarget("viewpoint", id), `Viewpoint „${name}“ endgültig gelöscht.`, "danger");
   }
 
   async function deleteConnectionRule(id: string) {
@@ -591,6 +617,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     if (!await confirm(simpleDeleteConfirmation("Connection Rule", name))) return;
     await sidebarApi.deleteConnectionRule(id);
     onStateChange({ ...sidebarState, connectionRules: connectionRules.filter((ruleItem) => ruleItem.id !== id) });
+    announceInSidebar(feedbackTarget("connectionRule", id), `Connection Rule „${name}“ endgültig gelöscht.`, "danger");
   }
 
   async function deleteComponent(id: string) {
@@ -604,12 +631,14 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     );
     if (!result.applied) return;
     onStateChange(removeComponentFromState(sidebarState, id));
+    announceInSidebar(feedbackTarget("component", id), `Komponente „${component.name}“ endgültig aus dem Repository gelöscht.`, "danger");
   }
 
   async function deleteConnection(id: string) {
     const connection = connections.find((item) => item.id === id);
     if (!connection) return;
-    if (!await confirm(deleteConnectionConfirmation(connectionLabel(id), id, diagrams))) return;
+    const label = connectionLabel(id);
+    if (!await confirm(deleteConnectionConfirmation(label, id, diagrams))) return;
     const result = await runOptimisticMutation(
       connection.version ?? 1,
       (version) => sidebarApi.deleteConnection(id, version),
@@ -617,6 +646,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     );
     if (!result.applied) return;
     onStateChange(removeConnectionFromState(sidebarState, id));
+    announceInSidebar(feedbackTarget("connection", id), `Verbindung „${label}“ endgültig aus dem Repository gelöscht.`, "danger");
   }
 
   async function deleteDiagram(id: string) {
@@ -630,6 +660,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     );
     if (!result.applied) return;
     onStateChange({ ...sidebarState, diagrams: diagrams.filter((d) => d.id !== id) });
+    announceInSidebar(feedbackTarget("diagram", id), `Diagramm „${diagram.name}“ endgültig gelöscht. Seine Elemente bleiben im Repository.`, "danger");
   }
 
   async function deleteCatalog(id: string) {
@@ -637,6 +668,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
     if (!await confirm(simpleDeleteConfirmation("Katalog", name))) return;
     await sidebarApi.deleteCatalog(id);
     onStateChange({ ...sidebarState, catalogs: catalogs.filter((c) => c.id !== id) });
+    announceInSidebar(feedbackTarget("catalog", id), `Katalog „${name}“ endgültig gelöscht.`, "danger");
   }
 
   // ── Rename (inline) ───────────────────────────────────────────────────────
@@ -664,12 +696,14 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
       const result = await runOptimisticMutation(item.version ?? 1, (version) => placeholderFlag
         ? sidebarApi.updateComponent(id, { name }, version, placeholderFlag)
         : sidebarApi.updateComponent(id, { name }, version), async () => onStateChange(await sidebarApi.getAll()));
-      if (result.applied) onStateChange({ ...sidebarState, components: components.map((c) => (c.id === id ? result.value : c)) });
+      if (!result.applied) return;
+      onStateChange({ ...sidebarState, components: components.map((c) => (c.id === id ? result.value : c)) });
     } else if (kind === "connection") {
       const item = connections.find((c) => c.id === id);
       if (!item) return;
       const result = await runOptimisticMutation(item.version ?? 1, (version) => sidebarApi.updateConnection(id, { name }, version), async () => onStateChange(await sidebarApi.getAll()));
-      if (result.applied) onStateChange({ ...sidebarState, connections: connections.map((c) => (c.id === id ? result.value : c)) });
+      if (!result.applied) return;
+      onStateChange({ ...sidebarState, connections: connections.map((c) => (c.id === id ? result.value : c)) });
     } else if (kind === "catalog") {
       const u = await sidebarApi.updateCatalog(id, { name });
       onStateChange({ ...sidebarState, catalogs: catalogs.map((c) => (c.id === id ? u : c)) });
@@ -679,11 +713,14 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
       const result = await runOptimisticMutation(item.version ?? 1, (version) => placeholderFlag
         ? sidebarApi.updateDiagram(id, { name }, version, placeholderFlag)
         : sidebarApi.updateDiagram(id, { name }, version), async () => onStateChange(await sidebarApi.getAll()));
-      if (result.applied) onStateChange({ ...sidebarState, diagrams: diagrams.map((d) => (d.id === id ? result.value : d)) });
+      if (!result.applied) return;
+      onStateChange({ ...sidebarState, diagrams: diagrams.map((d) => (d.id === id ? result.value : d)) });
     }
+    announceInSidebar(feedbackTarget(kind, id), `„${name}“ gespeichert.`);
   }
 
   const isRenaming = (kind: ItemKind, id: string) => renaming?.kind === kind && renaming?.id === id;
+  const isSaved = (kind: ItemKind, id: string) => sidebarFeedback?.target === feedbackTarget(kind, id);
 
   function openContextMenu(e: React.MouseEvent, kind: ItemKind, id: string, label: string) {
     e.preventDefault();
@@ -776,6 +813,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               }}
               dragHint="In ein offenes Diagramm ziehen, um eine neue Komponente dieses Typs zu erstellen"
               renaming={isRenaming("componentType", ct.id)}
+              saved={isSaved("componentType", ct.id)}
               renameWarning={(name) => duplicateHint(findDuplicatesByName(componentTypes, name, ct.id))}
               onRenameSubmit={(name) => renameItem("componentType", ct.id, name)}
               onRenameCancel={() => setRenaming(null)}
@@ -850,6 +888,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               onDelete={() => deleteConnectionType(ct.id)}
               onContextMenu={(e) => openContextMenu(e, "connectionType", ct.id, ct.name)}
               renaming={isRenaming("connectionType", ct.id)}
+              saved={isSaved("connectionType", ct.id)}
               renameWarning={(name) => duplicateHint(findDuplicatesByName(connectionTypes, name, ct.id))}
               onRenameSubmit={(name) => renameItem("connectionType", ct.id, name)}
               onRenameCancel={() => setRenaming(null)}
@@ -924,6 +963,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               onDelete={() => deleteConnectionRule(rule.id)}
               onContextMenu={(e) => openContextMenu(e, "connectionRule", rule.id, label)}
               renaming={isRenaming("connectionRule", rule.id)}
+              saved={isSaved("connectionRule", rule.id)}
               onRenameSubmit={(name) => renameItem("connectionRule", rule.id, name)}
               onRenameCancel={() => setRenaming(null)}
             />
@@ -956,6 +996,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
             onDelete={() => deleteViewpoint(vp.id)}
             onContextMenu={(e) => openContextMenu(e, "viewpoint", vp.id, vp.name)}
             renaming={isRenaming("viewpoint", vp.id)}
+            saved={isSaved("viewpoint", vp.id)}
             onRenameSubmit={(name) => renameItem("viewpoint", vp.id, name)}
             onRenameCancel={() => setRenaming(null)}
           />
@@ -1008,6 +1049,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               }}
               dragHint="In ein offenes Diagramm ziehen, um sie hinzuzufügen"
               renaming={isRenaming("component", comp.id)}
+              saved={isSaved("component", comp.id)}
               renameWarning={(name) => {
                 const sameType = duplicateHint(findDuplicateComponents(components, { name, componentTypeId: comp.componentTypeId }, comp.id));
                 if (sameType) return sameType;
@@ -1086,6 +1128,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               deleteTitle="Aus Repository löschen"
               onContextMenu={(e) => openContextMenu(e, "connection", conn.id, label)}
               renaming={isRenaming("connection", conn.id)}
+              saved={isSaved("connection", conn.id)}
               onRenameSubmit={(name) => renameItem("connection", conn.id, name)}
               onRenameCancel={() => setRenaming(null)}
             />
@@ -1119,6 +1162,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
             openTitle="Diagramm öffnen (oder Doppelklick)"
             onContextMenu={(e) => openContextMenu(e, "diagram", d.id, d.name)}
             renaming={isRenaming("diagram", d.id)}
+            saved={isSaved("diagram", d.id)}
             renameError={elementNameError}
             renamePlaceholder={(name) => placeholderWarning(name, d.name)}
             onRenameSubmit={(name, acknowledgePlaceholder) => renameItem("diagram", d.id, name, acknowledgePlaceholder)}
@@ -1153,6 +1197,7 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
             openTitle="Katalog öffnen (oder Doppelklick)"
             onContextMenu={(e) => openContextMenu(e, "catalog", c.id, c.name)}
             renaming={isRenaming("catalog", c.id)}
+            saved={isSaved("catalog", c.id)}
             onRenameSubmit={(name) => renameItem("catalog", c.id, name)}
             onRenameCancel={() => setRenaming(null)}
           />
@@ -1229,6 +1274,16 @@ export default function Sidebar({ onSelect, selection, sidebarState, onStateChan
               <button disabled={connectionCreating} onClick={() => setConnectionDraft(null)}>Abbrechen</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {sidebarFeedback && (
+        <div
+          key={sidebarFeedback.id}
+          className={`sb-sidebar-notice${sidebarFeedback.tone === "danger" ? " sb-sidebar-notice--danger" : ""}`}
+          role="status"
+        >
+          {sidebarFeedback.tone === "danger" ? <Trash2 size={14} aria-hidden="true" /> : <Check size={14} aria-hidden="true" />} {sidebarFeedback.text}
         </div>
       )}
 

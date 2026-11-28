@@ -24,6 +24,7 @@ import { ChevronDown, ChevronUp, CircleCheck, GitBranch, Grid3x3, Link2, Maximiz
 import DiagramCoordinates from "./DiagramCoordinates";
 import DiagramExportDialog, { type ExportChoice } from "./DiagramExportDialog";
 import { copyText } from "./CopyLinkButton";
+import { fitMenuInViewport } from "./contextMenuPosition";
 import ShareMenu from "./ShareMenu";
 import { absoluteLink, viewParam, type FocusTarget } from "./deepLink";
 import {
@@ -849,7 +850,7 @@ function CreateComponentDialog({
         />
         <div className="diagram-suggestion-actions">
           <button className="sb-save-btn" style={{ margin: 0 }} disabled={!canConfirm} onClick={confirm}>
-            {confirmLabel}
+            {saving ? "Wird angelegt …" : confirmLabel}
           </button>
           <button onClick={onCancel}>Abbrechen</button>
         </div>
@@ -952,7 +953,8 @@ function DiagramEditorInner({
   const [connectingFrom, dispatchConnectionMode] = useReducer(connectionModeReducer, null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  // #117: a permanent deletion is shown in red, everything else in green.
+  const [notice, setNotice] = useState<{ text: string; tone?: "danger" } | null>(null);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [showRulers, setShowRulers] = useState(true);
   snapRef.current = snapEnabled;
@@ -1035,7 +1037,7 @@ function DiagramEditorInner({
   // Short confirmation messages disappear on their own.
   useEffect(() => {
     if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(""), 3500);
+    const timer = window.setTimeout(() => setNotice(null), 3500);
     return () => window.clearTimeout(timer);
   }, [notice]);
 
@@ -1063,7 +1065,7 @@ function DiagramEditorInner({
     setViewpointFilterId(diagram.viewpointId ?? "");
     setValidationResult(null);
     setError("");
-    setNotice("");
+    setNotice(null);
     // Anderes Diagramm: keine Auswahl mitnehmen (gleiche Komponente kann in beiden liegen), nur das Panel-Element.
     setSelection(selectionForPanelElement(EMPTY_SELECTION, selectedElementIdRef.current, visibleIdsRef.current));
   }, [diagram.id, diagram.viewpointId]);
@@ -1106,6 +1108,16 @@ function DiagramEditorInner({
     return () => window.removeEventListener("pointerdown", handler);
   }, [contextMenu.visible]);
 
+  // #122: keep the menu inside the window; runs before paint, so it never shows cut off.
+  useLayoutEffect(() => {
+    if (!contextMenu.visible || !menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    const { x, y } = fitMenuInViewport(contextMenu, rect, { width: window.innerWidth, height: window.innerHeight });
+    if (x !== contextMenu.x || y !== contextMenu.y) {
+      setContextMenu((current) => ({ ...current, x, y }));
+    }
+  }, [contextMenu]);
+
   // ── Shared connection creation ──────────────────────────────────────────────
 
   const createConnectionBetween = useCallback(
@@ -1141,13 +1153,13 @@ function DiagramEditorInner({
         onDiagramChange(result.diagram);
         setError("");
         const label = `„${connType.name}“ von ${srcComp.name} zu ${tgtComp.name}`;
-        setNotice(
-          result.created
+        setNotice({
+          text: result.created
             ? `Verbindung ${label} erstellt.`
             : wasInDiagram
               ? `Diese Verbindung ${label} gibt es bereits – es wurde keine neue angelegt.`
               : `Bestehende Verbindung ${label} zum Diagramm hinzugefügt.`
-        );
+        });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Verbindung konnte nicht erstellt werden.");
       }
@@ -1213,7 +1225,7 @@ function DiagramEditorInner({
       onComponentDeleted(nodeId);
       setValidationResult(null);
       setError("");
-      setNotice("Aus dem Repository gelöscht (auch aus allen anderen Diagrammen entfernt).");
+      setNotice({ text: `„${component.name}“ endgültig aus dem Repository gelöscht (auch aus allen anderen Diagrammen entfernt).`, tone: "danger" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Element konnte nicht aus dem Repository gelöscht werden.");
     }
@@ -1240,7 +1252,7 @@ function DiagramEditorInner({
       onDiagramChange(updated);
       setValidationResult(null);
       setError("");
-      setNotice(nodeIds.length === 1 ? "Aus dem Diagramm entfernt (bleibt im Modell erhalten)." : `${nodeIds.length} Elemente aus dem Diagramm entfernt (bleiben im Modell erhalten).`);
+      setNotice({ text: nodeIds.length === 1 ? "Aus dem Diagramm entfernt (bleibt im Modell erhalten)." : `${nodeIds.length} Elemente aus dem Diagramm entfernt (bleiben im Modell erhalten).` });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Element konnte nicht aus dem Diagramm entfernt werden.");
     } finally {
@@ -1273,7 +1285,7 @@ function DiagramEditorInner({
       setSelection(EMPTY_SELECTION);
       setValidationResult(null);
       setError("");
-      setNotice(removalNotice(target.nodeIds.length, target.edgeIds.length));
+      setNotice({ text: removalNotice(target.nodeIds.length, target.edgeIds.length) });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Auswahl konnte nicht aus dem Diagramm entfernt werden.");
     } finally {
@@ -1397,7 +1409,7 @@ function DiagramEditorInner({
       onDiagramChange(result.value.diagram);
       setPendingCreate(null);
       setError("");
-      setNotice(`Komponente „${name}“ angelegt und im Diagramm platziert.`);
+      setNotice({ text: `Komponente „${name}“ angelegt und im Diagramm platziert.` });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Komponente konnte nicht erstellt werden.");
     }
@@ -1472,7 +1484,7 @@ function DiagramEditorInner({
     if (!updated) return;
     onDiagramChange(updated);
     setError("");
-    setNotice(`${components.find((item) => item.id === compId)?.name ?? "Komponente"} zum Diagramm hinzugefügt.`);
+    setNotice({ text: `${components.find((item) => item.id === compId)?.name ?? "Komponente"} zum Diagramm hinzugefügt.` });
   }
 
   async function confirmAdd() {
@@ -1588,7 +1600,7 @@ function DiagramEditorInner({
   async function copyElementLink(elementId: string, name: string) {
     setContextMenu((m) => ({ ...m, visible: false }));
     const url = diagramLink(elementId);
-    if (await copyText(url)) setNotice(`Link zu „${name}“ kopiert`);
+    if (await copyText(url)) setNotice({ text: `Link zu „${name}“ kopiert` });
     else setError(`Kopieren nicht möglich – bitte manuell kopieren: ${url}`);
   }
 
@@ -1626,7 +1638,7 @@ function DiagramEditorInner({
       const { scale: safeScale } = clampPngScale(size, scale);
       downloadBlob(await svgToPngBlob(svg, size, safeScale), fileName);
     }
-    setNotice(`Exportiert als ${fileName}`);
+    setNotice({ text: `Exportiert als ${fileName}` });
   }
 
   const visibleComponentTypeIds = new Set(visibleComponentTypes.map((type) => type.id));
@@ -1730,8 +1742,8 @@ function DiagramEditorInner({
         </div>
       )}
       {notice && !error && (
-        <div className="diagram-notice" role="status">
-          <CircleCheck size={14} /> {notice}
+        <div className={`diagram-notice${notice.tone === "danger" ? " diagram-notice--danger" : ""}`} role="status">
+          {notice.tone === "danger" ? <Trash2 size={14} /> : <CircleCheck size={14} />} {notice.text}
         </div>
       )}
 

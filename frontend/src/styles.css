@@ -1574,6 +1574,52 @@ tr.attention td {
   cursor: not-allowed;
 }
 
+/* #117: the button confirms the save itself, briefly */
+.sb-save-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.sb-save-btn--saved,
+.sb-save-btn--saved:disabled {
+  opacity: 1;
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #ffffff;
+  cursor: default;
+}
+.sb-save-spin { animation: sb-save-spin 1s linear infinite; }
+@keyframes sb-save-spin { to { transform: rotate(360deg); } }
+/* Creating or renaming in the sidebar is confirmed in the sidebar: row highlight and a short message */
+.sb-row.sb-row--saved {
+  background: #dcfce7;
+  color: #166534;
+  transition: background 0.4s;
+}
+.sb-row-saved-mark { flex: none; color: #16a34a; }
+.sb-sidebar-notice {
+  position: sticky;
+  bottom: 8px;
+  z-index: 5;
+  margin: auto 8px 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  background: #f0fdf4;
+  color: #166534;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 8px 20px rgb(15 23 42 / 14%);
+  line-height: 1.35;
+  animation: sb-saved-in 160ms ease-out;
+}
+.sb-sidebar-notice > svg { flex: none; }
+.sb-sidebar-notice--danger { border-color: #fecaca; background: #fef2f2; color: #b91c1c; }
+@keyframes sb-saved-in { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) {
+  .sb-save-spin, .sb-sidebar-notice { animation: none; }
+}
+.sb-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
 .sb-open-btn {
   width: 100%;
   margin-top: 8px;
@@ -2181,7 +2227,11 @@ tr.attention td {
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
   min-width: 196px;
   z-index: 9999;
-  overflow: hidden;
+  /* #122: in a very small window the menu scrolls instead of cutting off entries (margin 8px per side). */
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .diagram-context-label {
@@ -3911,6 +3961,16 @@ tr.attention td {
 .account-role-info summary::-webkit-details-marker { display: none; }
 .account-role-info > div { position: absolute; z-index: 50; top: calc(100% + 8px); right: 0; width: min(300px, 80vw); padding: 12px 14px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; box-shadow: 0 12px 28px rgb(15 23 42 / 18%); color: #334155; font-size: 13px; line-height: 1.4; }
 .account-role-info p { margin: 7px 0 0; }
+
+/* #117: failure banner (feedback for successful saves sits at the save button, see .sb-save-btn--saved) */
+/* Above every dialog (highest: .conflict-backdrop, 10000), because a dialog may wait for the failed write. */
+.save-failure { position: fixed; z-index: 10050; left: 50%; bottom: 20px; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border: 1px solid #fecaca; border-radius: 10px; background: #fef2f2; color: #991b1b; box-shadow: 0 12px 32px rgb(15 23 42 / 22%); }
+.save-failure > svg { flex: none; margin-top: 2px; }
+.save-failure-text { display: grid; gap: 3px; flex: 1; font-size: 13px; line-height: 1.4; }
+.save-failure-actions { display: flex; gap: 8px; flex: none; align-self: center; }
+.save-failure-actions button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid #fca5a5; border-radius: 7px; background: #fff; color: #991b1b; cursor: pointer; font-size: 13px; }
+.save-failure-actions button.primary { background: #b91c1c; border-color: #b91c1c; color: #fff; }
+.save-failure-close { flex: none; display: inline-flex; padding: 4px; border: 0; background: transparent; color: #991b1b; cursor: pointer; }
 .role-guide { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 16px 0 22px; }
 .role-guide-card { display: grid; gap: 5px; padding: 12px; border: 1px solid #d8dee8; border-radius: 8px; background: #f8fafc; }
 .role-guide-card span { color: #475569; font-size: 13px; line-height: 1.4; }
@@ -4192,6 +4252,12 @@ tr.attention td {
   border-bottom: 1px solid #a7f3d0;
   color: #047857;
   font-size: 13px;
+}
+
+.diagram-notice--danger {
+  background: #fef2f2;
+  border-bottom-color: #fecaca;
+  color: #b91c1c;
 }
 
 @media (max-width: 768px) {

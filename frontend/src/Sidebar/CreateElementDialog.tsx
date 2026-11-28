@@ -112,7 +112,7 @@ export default function CreateElementDialog({
           <div className="diagram-suggestion-actions">
             <button type="button" onClick={onCancel}>Abbrechen</button>
             <button type="submit" className="sb-save-btn" style={{ margin: 0 }} disabled={saving || !!showNameError}>
-              {submitLabel}
+              {saving ? "Wird angelegt …" : submitLabel}
             </button>
           </div>
         </form>

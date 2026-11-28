@@ -13,10 +13,15 @@ import type {
 } from "./sidebarTypes";
 import type { DiagramValidationResult } from "./metamodelRules";
 import { apiRequest } from "../authApi";
+import { saveTracker } from "../saveTracker";
 
 const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? "/api/sidebar";
 
-const request = apiRequest;
+/** #117: every write goes through the save tracker, reads do not. */
+function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const isWrite = (init?.method ?? "GET").toUpperCase() !== "GET";
+  return isWrite ? saveTracker.track(() => apiRequest<T>(url, init)) : apiRequest<T>(url, init);
+}
 
 type WithWarnings<T> = T & { warnings?: unknown[] };
 /** Confirmation flags: they only steer server checks and are never stored. */
